@@ -1,0 +1,16 @@
+services:
+  - type: web
+    name: ppc-asistan
+    runtime: python
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: STRATEGY_MODEL
+        value: claude-sonnet-4-6
+      - key: SUPERVISOR_MODEL
+        value: claude-fable-5
+      - key: PYTHON_VERSION
+        value: 3.11.9
