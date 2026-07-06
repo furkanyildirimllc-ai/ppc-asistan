@@ -1,0 +1,1379 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PPC Asistan</title>
+<style>
+  :root{
+    --bg:#0d1117; --panel:#161b22; --panel2:#1c2330; --border:#2d3646;
+    --text:#e6edf3; --muted:#8b98a9; --accent:#f59e0b; --green:#34d399;
+    --red:#f87171; --blue:#60a5fa; --purple:#c084fc;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:var(--bg);color:var(--text);font-family:-apple-system,'Segoe UI',sans-serif;font-size:14px}
+  header{display:flex;align-items:center;gap:14px;padding:14px 24px;border-bottom:1px solid var(--border);background:var(--panel)}
+  header h1{font-size:17px;font-weight:700;display:flex;align-items:baseline;gap:8px}
+  header h1 span{color:var(--accent)}
+  header h1 .ver{font-size:10px;color:var(--muted);font-weight:500;letter-spacing:.5px}
+  .wrap{max-width:1280px;margin:0 auto;padding:20px 24px}
+  .row{display:flex;gap:16px;flex-wrap:wrap}
+  .card{background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:16px}
+  select,input,button{font:inherit;color:var(--text)}
+  select,input{background:var(--panel2);border:1px solid var(--border);border-radius:7px;padding:7px 10px;outline:none}
+  select:focus,input:focus{border-color:var(--accent)}
+  button{background:var(--panel2);border:1px solid var(--border);border-radius:7px;padding:7px 14px;cursor:pointer;transition:.12s}
+  button:hover{border-color:var(--accent);color:var(--accent)}
+  button.primary{background:var(--accent);border-color:var(--accent);color:#111;font-weight:600}
+  button.primary:hover{filter:brightness(1.1);color:#111}
+  button.ok{color:var(--green)} button.no{color:var(--red)}
+  .muted{color:var(--muted)} .small{font-size:12px}
+  /* stat cards */
+  .stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin:16px 0}
+  .stat{background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:14px}
+  .stat .v{font-size:22px;font-weight:700;margin-top:4px}
+  /* dropzone */
+  #drop{border:2px dashed var(--border);border-radius:10px;padding:26px;text-align:center;color:var(--muted);cursor:pointer;transition:.15s;margin:16px 0}
+  #drop.over{border-color:var(--accent);color:var(--accent);background:rgba(245,158,11,.06)}
+  /* tabs */
+  .tabs{display:flex;gap:8px;margin:18px 0 12px;flex-wrap:wrap}
+  .tab{padding:7px 14px;border-radius:20px;border:1px solid var(--border);cursor:pointer;color:var(--muted)}
+  .tab.active{border-color:var(--accent);color:var(--accent);font-weight:600}
+  .tab .n{background:var(--panel2);border-radius:10px;padding:1px 8px;margin-left:6px;font-size:12px}
+  /* table */
+  table{width:100%;border-collapse:collapse}
+  th{color:var(--muted);font-weight:600;text-align:left;font-size:12px;padding:8px;border-bottom:1px solid var(--border)}
+  td{padding:8px;border-bottom:1px solid #1e2634;vertical-align:top}
+  tr:hover td{background:rgba(255,255,255,.02)}
+  .kw{font-weight:600}
+  .badge{display:inline-block;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:600}
+  .b-harvest{background:rgba(52,211,153,.15);color:var(--green)}
+  .b-harvest_pt{background:rgba(192,132,252,.15);color:var(--purple)}
+  .b-negative{background:rgba(248,113,113,.15);color:var(--red)}
+  .b-bid_down{background:rgba(96,165,250,.15);color:var(--blue)}
+  .b-bid_up{background:rgba(245,158,11,.15);color:var(--accent)}
+  .b-placement{background:rgba(96,165,250,.15);color:var(--blue)}
+  .guide{background:var(--panel2);border-left:3px solid var(--accent);border-radius:8px;padding:12px 14px;margin-bottom:12px;font-size:13px;line-height:1.65;color:#c9d4e0}
+  .guide b{color:var(--text)}
+  #helpDlg{max-width:640px;line-height:1.7}
+  #helpDlg h4{margin:14px 0 6px;color:var(--accent)}
+  #helpDlg ol{padding-left:20px}
+  #helpDlg li{margin:4px 0}
+  .bidin{width:70px;text-align:right}
+  dialog{background:var(--panel);color:var(--text);border:1px solid var(--border);border-radius:12px;padding:22px;min-width:340px}
+  dialog::backdrop{background:rgba(0,0,0,.6)}
+  dialog label{display:block;margin:10px 0 4px;color:var(--muted);font-size:12px}
+  dialog input{width:100%}
+  .actions{display:flex;gap:10px;margin-top:16px;justify-content:flex-end}
+  #toast{position:fixed;bottom:22px;right:22px;background:var(--panel2);border:1px solid var(--accent);border-radius:9px;padding:12px 18px;display:none;z-index:50}
+  .topcamps td{font-size:12.5px}
+  /* copy button */
+  .cpy{background:transparent;border:1px solid var(--border);border-radius:5px;padding:3px 7px;font-size:11px;color:var(--muted);cursor:pointer}
+  .cpy:hover{border-color:var(--accent);color:var(--accent)}
+  .bulkbar{display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap}
+  /* AI panel */
+  #aiPanel{margin-top:16px;display:none}
+  .ai-section{background:var(--panel2);border:1px solid var(--border);border-radius:8px;padding:12px;margin-top:12px}
+  .ai-section h4{color:var(--accent);margin-bottom:8px;font-size:13px;text-transform:uppercase;letter-spacing:.5px}
+  .ai-item{padding:8px 0;border-bottom:1px solid var(--border)}
+  .ai-item:last-child{border-bottom:0}
+  .ai-item .k{font-weight:600;color:var(--text)}
+  .ai-item .why{color:var(--muted);font-size:12.5px;margin-top:3px;line-height:1.5}
+  .rev-badge{display:inline-block;padding:3px 10px;border-radius:12px;font-weight:600;font-size:12px}
+  .rev-ok{background:rgba(52,211,153,.15);color:var(--green)}
+  .rev-warn{background:rgba(245,158,11,.15);color:var(--accent)}
+  .rev-bad{background:rgba(248,113,113,.15);color:var(--red)}
+  .rev-issue{padding:6px 8px;border-radius:6px;margin:4px 0;font-size:12.5px;line-height:1.5}
+  .sev-critical{background:rgba(248,113,113,.1);border-left:3px solid var(--red)}
+  .sev-warning{background:rgba(245,158,11,.1);border-left:3px solid var(--accent)}
+  .sev-info{background:rgba(96,165,250,.1);border-left:3px solid var(--blue)}
+  .exec{background:rgba(96,165,250,.08);border-left:3px solid var(--blue);padding:10px 14px;border-radius:8px;line-height:1.6;font-size:13.5px}
+  #aiLoad{display:none;padding:20px;text-align:center;color:var(--muted)}
+  .spin{display:inline-block;width:14px;height:14px;border:2px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin 1s linear infinite;vertical-align:middle;margin-right:6px}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  /* Dashboard hero */
+  .hero{display:grid;grid-template-columns:280px 1fr 1fr 1fr;gap:14px;margin:16px 0}
+  @media(max-width:1000px){.hero{grid-template-columns:1fr 1fr}}
+  .hero-card{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:16px;position:relative;overflow:hidden;transition:transform .2s, border-color .2s}
+  .hero-card:hover{transform:translateY(-2px);border-color:rgba(245,158,11,.3)}
+  .hero-card::after{content:'';position:absolute;left:0;top:0;bottom:0;width:3px;opacity:.7}
+  .hc-red::after{background:var(--red)}
+  .hc-green::after{background:var(--green)}
+  .hc-orange::after{background:var(--accent)}
+  .hc-blue::after{background:var(--blue)}
+  .hc-purple::after{background:var(--purple)}
+  /* KPI Ribbon - üst çubuk (4x2 sabit, geniş ekranda 8x1) */
+  .kpi-ribbon{background:linear-gradient(180deg,var(--panel) 0%,var(--panel2) 100%);border:1px solid var(--border);border-radius:12px;padding:0;margin:16px 0;display:grid;grid-template-columns:repeat(4,1fr);gap:0;position:relative;overflow:hidden}
+  @media(min-width:1400px){.kpi-ribbon{grid-template-columns:repeat(8,1fr)}}
+  @media(max-width:720px){.kpi-ribbon{grid-template-columns:repeat(2,1fr)}}
+  .kpi{padding:14px 16px;min-width:0;display:flex;flex-direction:column;justify-content:center;border-right:1px solid var(--border);border-bottom:1px solid var(--border);min-height:76px}
+  /* geniş ekranda tek satır - alt border yok */
+  @media(min-width:1400px){.kpi{border-bottom:0}}
+  /* 4 sütunlu 2 satırda alt satırın alt border'ı olmasın */
+  @media(min-width:721px) and (max-width:1399px){
+    .kpi:nth-child(n+5){border-bottom:0}
+    .kpi:nth-child(4n){border-right:0}
+  }
+  @media(max-width:720px){
+    .kpi:nth-child(2n){border-right:0}
+    .kpi:nth-last-child(-n+2){border-bottom:0}
+  }
+  @media(min-width:1400px){.kpi:last-child{border-right:0}}
+  .kpi .l{color:var(--muted);font-size:10.5px;text-transform:uppercase;letter-spacing:.7px;font-weight:700;margin-bottom:6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .kpi .v{font-size:20px;font-weight:800;letter-spacing:-.3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:1.15;color:var(--text)}
+  .kpi .s{color:var(--muted);font-size:11.5px;margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-weight:500}
+  .kpi{transition:background .15s}
+  .kpi:hover{background:rgba(255,255,255,.02)}
+  .kpi.pos .v{color:var(--green)}
+  .kpi.neg .v{color:var(--red)}
+  .kpi.warn .v{color:var(--accent)}
+  /* Metrik gruplari */
+  .metric-groups{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin:16px 0}
+  @media(max-width:1100px){.metric-groups{grid-template-columns:repeat(2,1fr)}}
+  .mg{background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:14px;transition:.2s}
+  .mg:hover{border-color:rgba(245,158,11,.25)}
+  .mg h6{color:var(--muted);font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.7px;margin-bottom:10px;padding-bottom:8px;border-bottom:1px solid var(--border)}
+  .mg .m{display:flex;justify-content:space-between;align-items:baseline;padding:5px 0;font-size:12.5px}
+  .mg .m .k{color:var(--muted)}
+  .mg .m .v{font-weight:700;color:var(--text)}
+  .mg .m .v.hi{color:var(--green)}
+  .mg .m .v.lo{color:var(--red)}
+  .mg .m .v.mid{color:var(--accent)}
+  .mg .mini{display:flex;gap:6px;margin-top:8px;flex-wrap:wrap}
+  .mg .chip{background:var(--panel2);border-radius:12px;padding:3px 9px;font-size:11px;color:var(--muted)}
+  .mg .chip b{color:var(--text)}
+  /* Rank table (best/worst) */
+  .rank-mini{margin-top:6px;font-size:12px}
+  .rank-mini .r{padding:6px 0;border-top:1px solid var(--border);display:flex;justify-content:space-between;align-items:baseline;gap:8px}
+  .rank-mini .name{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--text)}
+  .rank-mini .val{font-weight:700}
+  .rank-mini .val.hi{color:var(--green)} .rank-mini .val.lo{color:var(--red)}
+  /* Placement bar */
+  .pbar{display:flex;height:22px;border-radius:5px;overflow:hidden;margin-top:6px;background:var(--panel2)}
+  .pbar div{display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:600;color:#111;transition:.2s}
+  .pbar-tos{background:var(--green)} .pbar-pp{background:var(--blue)} .pbar-rest{background:var(--muted)}
+  /* Section header - profesyonel divider */
+  .sec-h{display:flex;align-items:center;gap:10px;margin:22px 0 12px}
+  .sec-h b{font-size:13px;letter-spacing:.3px;color:var(--text);text-transform:uppercase;font-weight:700}
+  .sec-h::before{content:'';display:inline-block;width:4px;height:14px;background:var(--accent);border-radius:2px;margin-right:4px}
+  .sec-h .line{flex:1;height:1px;background:var(--border)}
+  .sec-h .sub{color:var(--muted);font-size:11px;font-weight:500}
+  /* Brand banner + upload */
+  .brand-banner{display:grid;grid-template-columns:220px 1fr;gap:14px;margin:14px 0 18px}
+  @media(max-width:900px){.brand-banner{grid-template-columns:1fr}}
+  .bb-left{background:linear-gradient(135deg,var(--panel) 0%,rgba(245,158,11,.08) 100%);border:1px solid var(--accent);border-radius:12px;padding:14px 18px;display:flex;flex-direction:column;justify-content:center}
+  .bb-lbl{color:var(--accent);font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.8px}
+  .bb-name{font-size:22px;font-weight:800;margin-top:2px;color:var(--text)}
+  .drop-top{background:var(--panel);border:2px dashed var(--border);border-radius:12px;padding:16px 22px;text-align:center;cursor:pointer;transition:.15s;display:flex;flex-direction:column;justify-content:center;min-height:80px}
+  .drop-top:hover,.drop-top.over{border-color:var(--accent);background:rgba(245,158,11,.05)}
+  .drop-top b{color:var(--text)}
+  .hero-card h5{color:var(--muted);font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.6px;margin-bottom:6px}
+  .hero-card .num{font-size:28px;font-weight:800;line-height:1.1}
+  .hero-card .num.big{font-size:38px}
+  .hero-card .sub{color:var(--muted);font-size:12px;margin-top:5px}
+  .hero-card .list{margin-top:8px;font-size:12px;line-height:1.55;color:#b9c4d3}
+  .hero-card .list b{color:var(--text)}
+  /* Health gauge */
+  .gauge{position:relative;width:200px;height:110px;margin:0 auto}
+  .gauge svg{width:100%;height:100%}
+  .gauge .val{position:absolute;bottom:-4px;left:0;right:0;text-align:center;font-size:32px;font-weight:800}
+  .gauge .lbl{position:absolute;bottom:-32px;left:0;right:0;text-align:center;font-size:12px;font-weight:600;letter-spacing:.5px;text-transform:uppercase}
+  .breakdown{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:38px;font-size:11.5px}
+  .breakdown div{background:var(--panel2);border-radius:5px;padding:5px 8px;display:flex;justify-content:space-between}
+  .breakdown b{color:var(--accent)}
+  /* Priority list */
+  .prio-list{margin-top:10px}
+  .prio{display:flex;gap:10px;padding:10px 12px;border-radius:8px;background:var(--panel2);margin-bottom:6px;align-items:flex-start;border-left:3px solid transparent;transition:.15s;cursor:default}
+  .prio:hover{transform:translateX(2px)}
+  .prio-critical{border-left-color:var(--red)}
+  .prio-high{border-left-color:var(--accent)}
+  .prio-medium{border-left-color:var(--blue)}
+  .prio-info{border-left-color:var(--muted)}
+  .prio .icon{font-size:22px;line-height:1}
+  .prio .t{font-weight:600;font-size:13.5px}
+  .prio .d{color:var(--muted);font-size:12px;margin-top:2px;line-height:1.5}
+  .prio-group-head{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;padding:8px 12px;border-radius:6px;margin-bottom:8px;display:inline-block}
+  .prio-group-urgent{background:rgba(248,113,113,.13);color:var(--red);border-left:3px solid var(--red)}
+  .prio-group-later{background:rgba(96,165,250,.13);color:var(--blue);border-left:3px solid var(--blue)}
+  /* Müdür rozeti */
+  .mgr-badge{display:inline-flex;align-items:center;gap:6px;padding:6px 12px;border-radius:20px;font-size:12px;font-weight:600;border:1px solid var(--border);background:var(--panel2);color:var(--muted);cursor:help;transition:.2s}
+  .mgr-standby{color:var(--muted)}
+  .mgr-review{color:var(--accent);border-color:var(--accent);background:rgba(245,158,11,.1);animation:pulse 1.4s infinite}
+  .mgr-ok{color:var(--green);border-color:var(--green);background:rgba(52,211,153,.1)}
+  .mgr-warn{color:var(--accent);border-color:var(--accent);background:rgba(245,158,11,.1)}
+  .mgr-block{color:var(--red);border-color:var(--red);background:rgba(248,113,113,.1)}
+  @keyframes pulse{0%,100%{opacity:1}50%{opacity:.5}}
+  /* Müdür raporu */
+  .mgr-report{background:linear-gradient(135deg,var(--panel2) 0%,rgba(139,152,169,.05) 100%);border:1px solid var(--border);border-radius:10px;padding:14px 16px;margin-top:14px;position:relative}
+  .mgr-report.ok{border-color:var(--green);background:linear-gradient(135deg,var(--panel2) 0%,rgba(52,211,153,.06) 100%)}
+  .mgr-report.warn{border-color:var(--accent);background:linear-gradient(135deg,var(--panel2) 0%,rgba(245,158,11,.06) 100%)}
+  .mgr-report.block{border-color:var(--red);background:linear-gradient(135deg,var(--panel2) 0%,rgba(248,113,113,.06) 100%)}
+  .mgr-report h4{font-size:14px;margin-bottom:8px;display:flex;align-items:center;gap:8px}
+  .mgr-report .summary{color:var(--text);font-size:13px;line-height:1.6;margin-bottom:10px}
+  .mgr-report .meta{color:var(--muted);font-size:11px;letter-spacing:.3px}
+  /* Chart grid */
+  .charts{display:grid;grid-template-columns:2fr 1fr 1fr;gap:14px;margin-top:16px}
+  @media(max-width:1000px){.charts{grid-template-columns:1fr}}
+  .chart-card{background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:14px}
+  .chart-card h5{color:var(--accent);font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;margin-bottom:10px}
+  .chart-wrap{position:relative;height:220px}
+  /* Overview strip - sakin */
+  .overview{background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:14px 18px;margin-bottom:14px;display:flex;gap:20px;align-items:center;flex-wrap:wrap}
+  .overview .big{font-size:22px;opacity:.9}
+  .overview .num{font-weight:700;font-size:18px}
+  .overview .lbl{color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:.5px}
+  /* Pro insights */
+  .pro-card{background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:14px;margin-top:16px}
+  .pro-card h5{color:var(--purple);font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;margin-bottom:10px}
+  .pro-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+  @media(max-width:900px){.pro-grid{grid-template-columns:1fr}}
+  .pro-block{background:var(--panel2);border-radius:8px;padding:10px 12px}
+  .pro-block .title{font-weight:600;color:var(--text);margin-bottom:4px;font-size:13px}
+  .pro-block .desc{color:var(--muted);font-size:12px;line-height:1.5;margin-bottom:6px}
+  .pro-block .row{padding:4px 0;font-size:12.5px;border-top:1px solid var(--border)}
+  /* Hint sistemi */
+  .hint{display:inline-flex;align-items:center;gap:3px;cursor:help;position:relative}
+  .hint .i{display:inline-block;width:14px;height:14px;line-height:14px;text-align:center;border:1px solid var(--muted);color:var(--muted);border-radius:50%;font-size:9px;font-weight:600;font-style:normal;transition:.15s;vertical-align:middle}
+  .hint:hover .i{border-color:var(--accent);color:var(--accent);background:rgba(245,158,11,.08)}
+  .hint .tip{position:absolute;bottom:calc(100% + 8px);left:50%;transform:translateX(-50%);background:#0a0f16;border:1px solid var(--accent);border-radius:8px;padding:10px 12px;width:290px;font-size:12px;font-weight:normal;line-height:1.55;color:var(--text);z-index:100;box-shadow:0 6px 20px rgba(0,0,0,.5);opacity:0;visibility:hidden;pointer-events:none;transition:opacity .15s,visibility .15s;text-transform:none;letter-spacing:normal}
+  .hint .tip b{color:var(--accent)}
+  .hint .tip::after{content:'';position:absolute;top:100%;left:50%;transform:translateX(-50%);border:6px solid transparent;border-top-color:var(--accent)}
+  .hint:hover .tip{opacity:1;visibility:visible;pointer-events:auto}
+  /* alt sagda tas ki taşmasın */
+  .hint.right .tip{left:auto;right:0;transform:none}
+  .hint.right .tip::after{left:auto;right:10px;transform:none}
+  /* Chat drawer */
+  #chatBtn{position:fixed;bottom:22px;right:22px;background:var(--accent);color:#111;border:0;border-radius:50%;width:56px;height:56px;font-size:24px;cursor:pointer;box-shadow:0 4px 14px rgba(0,0,0,.4);z-index:40}
+  #chatDrawer{position:fixed;top:0;right:-460px;width:440px;height:100vh;background:var(--panel);border-left:1px solid var(--border);z-index:60;display:flex;flex-direction:column;transition:right .3s}
+  #chatDrawer.open{right:0}
+  #chatDrawer header{padding:14px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px}
+  #chatMsgs{flex:1;overflow-y:auto;padding:14px 16px;display:flex;flex-direction:column;gap:10px}
+  .msg{padding:10px 12px;border-radius:10px;max-width:88%;font-size:13.5px;line-height:1.55;white-space:pre-wrap}
+  .msg.user{background:var(--accent);color:#111;align-self:flex-end;border-bottom-right-radius:2px}
+  .msg.assistant{background:var(--panel2);align-self:flex-start;border-bottom-left-radius:2px}
+  .msg.typing{color:var(--muted);font-style:italic}
+  #chatForm{padding:12px 14px;border-top:1px solid var(--border);display:flex;gap:8px}
+  #chatIn{flex:1;background:var(--panel2);border:1px solid var(--border);border-radius:20px;padding:9px 14px;color:var(--text);font:inherit}
+  #chatIn:focus{border-color:var(--accent);outline:none}
+  /* history dialog */
+  .hist-list{max-height:400px;overflow-y:auto;margin-top:10px}
+  .hist-item{padding:8px 10px;border-bottom:1px solid var(--border);font-size:12.5px;display:flex;gap:10px;align-items:center}
+  .hist-item .st{padding:2px 8px;border-radius:10px;font-size:11px;font-weight:600}
+  .st-approved{background:rgba(52,211,153,.15);color:var(--green)}
+  .st-rejected{background:rgba(248,113,113,.15);color:var(--red)}
+  .st-pending{background:rgba(139,152,169,.15);color:var(--muted)}
+  /* profit banner */
+  .profit-banner{background:linear-gradient(90deg,rgba(52,211,153,.12),rgba(96,165,250,.08));border:1px solid rgba(52,211,153,.3);border-radius:8px;padding:10px 14px;margin:12px 0;font-size:13px;display:flex;gap:16px;flex-wrap:wrap;align-items:center}
+  .profit-banner b{color:var(--green)}
+</style>
+</head>
+<body>
+<header>
+  <h1>PPC <span>Asistan</span> <span class="ver">v1.3 · pro</span></h1>
+  <select id="brandSel" onchange="selectBrand(this.value)"></select>
+  <button onclick="openBrandDialog()">+ Marka</button>
+  <button onclick="openBrandDialog(true)" id="editBtn" style="display:none">⚙ Ayarlar</button>
+  <button onclick="helpDlg.showModal()">📖 Rehber</button>
+  <div style="flex:1"></div>
+  <div id="mgrBadge" class="mgr-badge" style="display:none" title="Denetçi Müdür — her AI çıktısını kontrol eder">🛡 Müdür: Standby</div>
+  <button id="histBtn" style="display:none" onclick="openHistory()">⟲ Geçmiş</button>
+  <button id="aiBtn" style="display:none" onclick="runAI()">🤖 AI Strateji</button>
+  <button id="bulkBtn" style="display:none" onclick="exportBulksheet()">📦 Bulksheet</button>
+  <button id="applyBtn" style="display:none" onclick="openApplyDlg()">📋 Uygulama Rehberi</button>
+  <button class="primary" id="exportBtn" style="display:none" onclick="exportFile()">⬇ Excel</button>
+</header>
+
+<dialog id="applyDlg" style="max-width:640px">
+  <h3>📋 Onaylıları Amazon'da Nasıl Uygularım?</h3>
+  <p class="muted small" style="margin-top:4px">Adım adım kılavuz. Her adımdan sonra tik at.</p>
+  <div id="applySteps" style="line-height:1.7;font-size:13.5px;margin-top:14px"></div>
+  <div class="actions">
+    <button onclick="applyDlg.close()">Kapat</button>
+    <button class="primary" onclick="applyDlg.close();exportFile()">⬇ Excel'i indir → başla</button>
+    <button onclick="applyDlg.close();exportBulksheet()">📦 Bulksheet indir (tek tık uygula)</button>
+  </div>
+</dialog>
+
+<div class="wrap" id="main" style="display:none">
+
+  <!-- BRAND BANNER + UPLOAD (ÜST) -->
+  <div class="brand-banner">
+    <div class="bb-left">
+      <div class="bb-lbl">SEÇİLİ MARKA</div>
+      <div class="bb-name" id="bbName">—</div>
+    </div>
+    <div id="dropTop" class="drop-top">
+      <div>📂 <b>Raporları buraya sürükle</b> veya tıkla — Search Term / Targeting / Placement / Campaign</div>
+      <div class="muted small" style="margin-top:3px">CSV veya XLSX · <b id="bbNameInline">—</b> markasına yüklenecek</div>
+      <input type="file" id="fileInTop" multiple accept=".csv,.xlsx" style="display:none">
+    </div>
+  </div>
+
+  <div id="uploadInfo" class="small muted" style="margin-bottom:8px"></div>
+
+  <!-- Overview strip -->
+  <div id="alarmStrip"></div>
+
+  <!-- KPI Ribbon -->
+  <div id="kpiRibbon"></div>
+
+  <!-- Section: sağlık & öne çıkanlar -->
+  <div class="sec-h"><b>Performans Özeti</b><span class="sub">sağlık skoru ve kritik alanlar</span><span class="line"></span></div>
+  <div class="hero" id="hero"></div>
+
+  <!-- Kâr banner -->
+  <div id="profitBanner"></div>
+
+  <!-- Section: derinlemesine metrikler -->
+  <div class="sec-h"><b>Portföy Metrikleri</b><span class="sub">yapı, dağılım, en iyi / en kötü</span><span class="line"></span></div>
+  <div class="metric-groups" id="metricGroups"></div>
+
+  <!-- Section: grafikler -->
+  <div class="sec-h"><b>Görsel Analiz</b><span class="sub">trend, dağılım, kampanya karşılaştırma</span><span class="line"></span></div>
+  <div class="charts" id="charts">
+    <div class="chart-card"><h5>📈 Trend (Yükleme Bazında)</h5><div class="chart-wrap"><canvas id="chTrend"></canvas></div></div>
+    <div class="chart-card"><h5>🎯 Match Type Dağılımı</h5><div class="chart-wrap"><canvas id="chMatch"></canvas></div></div>
+    <div class="chart-card"><h5>🏆 En Yüksek Harcama Kampanyaları</h5><div class="chart-wrap"><canvas id="chCamp"></canvas></div></div>
+  </div>
+
+
+  <div class="tabs" id="tabs"></div>
+
+  <div class="card" id="recPanel">
+    <div style="display:flex;gap:10px;margin-bottom:10px;align-items:center;flex-wrap:wrap">
+      <b id="recTitle"></b>
+      <div style="flex:1"></div>
+      <button class="cpy" onclick="copyAllKeywords()">📋 Kelimeleri Kopyala</button>
+      <button class="cpy" onclick="copyTSV()">📋 Tablo (TSV) Kopyala</button>
+      <button class="ok" onclick="bulkAction('approved')">✓ Tümünü Onayla</button>
+      <button class="no" onclick="bulkAction('rejected')">✗ Tümünü Reddet</button>
+    </div>
+    <div class="guide" id="tabGuide"></div>
+    <div style="overflow-x:auto"><table id="recTable"></table></div>
+  </div>
+
+  <div id="aiPanel" class="card">
+    <div style="display:flex;align-items:center;gap:12px;margin-bottom:10px">
+      <b style="font-size:15px">🤖 AI Strateji Raporu</b>
+      <span id="revBadge"></span>
+      <div style="flex:1"></div>
+      <span class="muted small" id="aiMeta"></span>
+    </div>
+    <div id="aiLoad"><span class="spin"></span> AI stratejisi üretiliyor + denetçi kontrol ediyor... (30-90 sn)</div>
+    <div id="aiBody"></div>
+  </div>
+
+  <div class="card" style="margin-top:16px" id="campCard">
+    <b>En Çok Harcayan Kampanyalar</b>
+    <div style="overflow-x:auto"><table class="topcamps" id="campTable"></table></div>
+  </div>
+</div>
+
+<div class="wrap" id="empty">
+  <div class="card" style="text-align:center;padding:50px">
+    <h2 style="margin-bottom:10px">Hoş geldin 👋</h2>
+    <p class="muted">Başlamak için sağ üstten bir marka ekle, sonra Amazon'dan indirdiğin<br>
+    <b>Search Term Report</b> ve <b>Targeting Report</b> dosyalarını sürükleyip bırak.</p>
+  </div>
+</div>
+
+<dialog id="brandDlg">
+  <h3 id="dlgTitle">Yeni Marka</h3>
+  <label>Marka adı</label><input id="bName">
+  <label>Hedef ACOS % (örn. 30)</label><input id="bAcos" type="number" step="1" value="30">
+  <label>Negatif için min. tıklama (satışsız)</label><input id="bClicks" type="number" value="8">
+  <label>Kelime taşıma için min. sipariş</label><input id="bOrders" type="number" value="2">
+  <div class="muted small" style="margin-top:12px;padding:8px 12px;background:var(--panel2);border-radius:6px;line-height:1.55">
+    ℹ️ Kâr marjı ayarları sadeleştirildi. Reklamlar birden çok ürün için ortak çalıştığı için ürün-bazlı hesaplama karmaşıklaştırıyordu. Hedef ACOS'unu (üstte) kâr hesabına göre kendin belirle: <b>Hedef ACOS = (1 − COGS/fiyat − Amazon fee) × 0.7</b>. Belirsizse %25-35 arası başla.
+  </div>
+  <input type="hidden" id="bPrice" value="0">
+  <input type="hidden" id="bCogs" value="0">
+  <input type="hidden" id="bFee" value="15">
+  <input type="hidden" id="bFba" value="0">
+  <div class="actions">
+    <button id="delBrandBtn" class="no" style="margin-right:auto;display:none" onclick="deleteBrand()">Markayı Sil</button>
+    <button onclick="brandDlg.close()">Vazgeç</button>
+    <button class="primary" onclick="saveBrand()">Kaydet</button>
+  </div>
+</dialog>
+
+<dialog id="helpDlg">
+  <h3>📖 Haftalık PPC Rutini — Adım Adım</h3>
+  <h4>1. Raporları indir (haftada 1, Pazartesi önerilir)</h4>
+  <ol>
+    <li>Amazon Ads konsolu → <b>Measurement & Reporting → Sponsored ads reports</b></li>
+    <li><b>Create report</b> → Sponsored Products → <b>Search term</b> → son 30 gün → xlsx indir</li>
+    <li>Aynı şekilde <b>Targeting</b> raporu indir (bid önerileri için şart)</li>
+    <li>İsteğe bağlı: <b>Campaign</b> (özet panel) ve <b>Placement</b> (yer bazlı öneriler) raporları</li>
+  </ol>
+  <h4>2. Yükle & incele</h4>
+  <ol>
+    <li>Markayı seç, dosyaları sürükle-bırak — araç tipini otomatik tanır</li>
+    <li>Sekmeleri sırayla gez: önce <b>Negatifler</b> (kanamayı durdur), sonra <b>Kelime Avcısı</b> (kazananları büyüt), sonra <b>Bid</b> sekmeleri</li>
+    <li>Her önerinin "Neden" kolonunda formül ve gerekçe yazar — katılmadığını ✗ ile reddet</li>
+  </ol>
+  <h4>3. Uygula</h4>
+  <ol>
+    <li>Onayladıklarını <b>Excel'e Aktar</b> ile indir</li>
+    <li>Amazon konsolunda sekme rehberlerindeki adımları izle (her sekmenin üstünde yazıyor)</li>
+    <li>Taşıdığın her kelimeyi kaynak kampanyada <b>mutlaka negatifle</b></li>
+  </ol>
+  <h4>Bütçe dağılımı (Furkan metodu — Acos Academy)</h4>
+  <ol>
+    <li>Reklam türleri: <b>Sponsored Products %50-60</b> (temel), Sponsored Brands %20-30 (marka bilinirliği), Sponsored Display %10-20 (retargeting). Yeni ürüne her zaman SP ile başla.</li>
+    <li>Oto kampanya eşleme dağılımı: <b>Close match %40-50</b>, Loose match %20-30, Complements %10-20, Substitutes %10-15 (rakipten pay almak için)</li>
+    <li>İyi performans gösteren kampanyaya bütçeyi kaydır; test kampanyalarına küçük bütçe ayır</li>
+    <li>Sezonluk dönemlerde (BF, tatil) bütçeyi artır ve negatif listeyi güncelle — sezonda alakasız trafik değişir</li>
+  </ol>
+  <h4>💡 Uzman Terimler Sözlüğü</h4>
+  <div style="background:var(--panel2);padding:12px;border-radius:8px;font-size:12.5px;line-height:1.6">
+    <div><b>SKAG</b> — Tek exact kelime = tek adgroup. Kazanan kelimede bid kontrolü tekleşir.</div>
+    <div><b>Traffic Sculpting</b> — Kelime exact'e taşındı mı? Kaynakta negative exact yap. Yoksa iki kampanyan senin paranla auction'a girer.</div>
+    <div><b>TOS IS</b> (Top of Search Impression Share) — Arama üstünde sana düşen fırsat yüzdesi. %30 = %70 rakibe gidiyor.</div>
+    <div><b>Placement Multiplier</b> — TOS/PP/RoS bid çarpanı. CVR farkına göre uygula.</div>
+    <div><b>Bid Stacking</b> — Final CPC = base × dynamic × placement. $0.80 × Up&Down × TOS(+75%) = $2.10.</div>
+    <div><b>Dayparting</b> — Peak (09-12, 19-23) yükselt, dip (02-08) kısla. %7-12 ACOS düşüşü.</div>
+    <div><b>Ranking Juice</b> — İlk 30 gün agresif PPC = organik ranking pompa.</div>
+    <div><b>Break-even ACOS</b> — Kâr sıfırlandığı ACOS. Hedef bunun altında olmalı.</div>
+    <div><b>Learning Period</b> — Yeni bid/kampanya 7-14 gün. Bu sürede dokunma.</div>
+    <div><b>Bid Change Cap</b> — Tek seferde max ±%25. Aksi algoritmayı konfüze eder.</div>
+    <div><b>Down Only</b> — Amazon sadece düşürsün (olgun/riskli kampanya).</div>
+    <div><b>Up & Down</b> — Amazon +%100'e kadar artırabilir (yeni kampanya, ranking).</div>
+    <div><b>Brand Defense</b> — Kendi sayfanı kendi reklamınla işgal et — rakip çalamasın.</div>
+    <div><b>SD Retargeting</b> — Ürünü gören müşteriyi 30-90 gün sonra yeniden hedefle. Ucuz CPC, yüksek CVR.</div>
+    <div><b>Match Funnel</b> — Broad (keşif) → Phrase (kalifiye) → Exact (kazanan).</div>
+    <div><b>RPC</b> — Satış ÷ tıklama. Bid formülünün tabanı: <i>Bid = RPC × hedef ACOS</i>.</div>
+    <div><b>CPA</b> — Bir sipariş için ödenen ortalama. Hedef CPA = AOV × hedef ACOS.</div>
+    <div><b>AOV</b> — Ortalama sepet tutarı = satış ÷ sipariş.</div>
+  </div>
+
+  <h4>Altın kurallar</h4>
+  <ol>
+    <li>Bid değişikliklerinin etkisini görmek için <b>en az 7 gün</b> bekle — her gün ellersen neyin işe yaradığını bilemezsin</li>
+    <li>Attribution gecikmesi: son 2-3 günün satış verisi eksik gelir, raporu dünle bitir</li>
+    <li>Hedef ACOS'un kâr marjının altında olmalı; launch döneminde %30-50 normal, olgun üründe %15-25 hedefle</li>
+    <li>Sağlıklı hesapta negatif kelime sayısı hedef kelimenin 3-5 katıdır — negatiflemekten çekinme</li>
+  </ol>
+  <div class="actions"><button class="primary" onclick="helpDlg.close()">Anladım</button></div>
+</dialog>
+
+<!-- Chat drawer -->
+<button id="chatBtn" onclick="toggleChat()" title="AI Asistan">💬</button>
+<div id="chatDrawer">
+  <header>
+    <b style="flex:1">💬 AI Asistan <span class="muted small" id="chatBrand"></span></b>
+    <button class="cpy" onclick="clearChat()">temizle</button>
+    <button class="cpy" onclick="toggleChat()">✕</button>
+  </header>
+  <div id="chatMsgs"></div>
+  <form id="chatForm" onsubmit="sendChat(event)">
+    <input id="chatIn" placeholder="Sor: 'SKAG mantıklı mı?', 'Dayparting nasıl kurulur?'">
+    <button class="primary" type="submit">Gönder</button>
+  </form>
+</div>
+
+<!-- History dialog -->
+<dialog id="histDlg">
+  <h3>⟲ Onay Geçmişi & Geri Al</h3>
+  <p class="muted small">Son 50 karar. "Geri Al" ile öneriyi eski durumuna döndürür.</p>
+  <div class="hist-list" id="histList"></div>
+  <div class="actions"><button class="primary" onclick="histDlg.close()">Kapat</button></div>
+</dialog>
+
+<div id="toast"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script>
+const $=id=>document.getElementById(id);
+
+/* --- Uzman Hint Sözlüğü — mini "aha" patlatmaları --- */
+const HINTS={
+  'SKAG':'<b>Single Keyword Ad Group.</b> Bir ad group\'ta tek bir exact kelime. Neden? 50 kelime tek adgroup\'ta olursa hepsine ortak bid uyguluyorsun — kazananı büyütemiyorsun, kaybedeni durduramıyorsun. Tek kelimede bid + placement multiplier tek kontrol noktasında.',
+  'traffic_sculpting':'<b>Traffic Sculpting.</b> Kazanan kelimeyi exact\'e taşıdıktan sonra kaynak (broad/phrase/auto) kampanyada MUTLAKA negative exact ekle. Neden? İki kampanya senin paranla birbirine karşı auction\'a girer — bid\'i kendine karşı yükseltirsin.',
+  'TOS_IS':'<b>Top of Search Impression Share.</b> Amazon aramanın en üstünde toplam gösterim fırsatının kaçının senin olduğu. %30 = fırsatın %70\'ini rakip alıyor. Satış geliyorsa bid artırılmalı — para masada kalıyor.',
+  'placement_multiplier':'<b>Placement Multiplier.</b> Kampanya ayarlarında "Adjust bids by placement" — TOS için bid\'i +% kadar artır. TOS %8 CVR, Product Pages %4 CVR ise +%100 çarpan uygular — TOS\'ta agresif ol, ürün sayfalarında normal.',
+  'bid_stacking':'<b>Bid Stacking.</b> Efektif CPC = base bid × dynamic bidding × placement multiplier. $0.80 × Up&Down (+50%) × TOS (+75%) = güçlü auction\'da $2.10 öderiz. Bunu bilmezsen "neden bu kadar ödedim" dersin.',
+  'dayparting':'<b>Dayparting.</b> Amazon\'un doğrudan sunmadığı taktik. Peak saatler (09-12 ve 19-23) yüksek CVR, gece 02-08 ise para çöpe. Pro\'lar bu saatlerde bütçe kısar — tek başına %7-12 ACOS düşüşü sağlar.',
+  'harvest':'<b>Harvest / Kelime Avcılığı.</b> Broad/auto kampanyada satış getiren arama terimini bulup exact kampanyaya taşımak. Neden? Broad genişletmesi Amazon\'un — sen kontrol etmiyorsun. Exact\'te siparişi ispatlanmış kelimede bid\'i sen belirlersin.',
+  'ranking_juice':'<b>Ranking Juice / Organik Halo.</b> Yeni ürünün ilk 14-30 günü agresif PPC = Amazon "bu ürün popüler" der, organik ranking\'i pompalar. İlk ayda ACOS %30-50 kabul edilebilir — sonra normalleştirir. PPC organik satışını da büyütür.',
+  'break_even_acos':'<b>Break-even ACOS.</b> Reklamdan sonra 0 kâr edeceğin ACOS eşiği. Formül: (Satış fiyatı - COGS - Amazon fee - FBA fee) ÷ Satış fiyatı. Bu eşikte reklam yapmak "sadece hacim" — kâr yok. Hedef ACOS\'un bunun altında olmalı.',
+  'attribution':'<b>Attribution Window.</b> Amazon 7-14 gün geriye dönük satışı reklama atfeder. Son 2-3 günün verisi eksik gelir — tam sonuç için bir hafta bekle. Dünkü kararı bugün ölçme.',
+  'brand_defense':'<b>Brand Defense.</b> Kendi ASIN\'ini kendi ASIN\'inle target etmek. Neden? Yoksa rakip senin ürün sayfanda reklam yapıp müşterini kapıyor. SP + SD ile kendi sayfanı işgal et, çapraz satış da yaparsın.',
+  'sd_retargeting':'<b>Sponsored Display Views Retargeting.</b> Ürününü görüp almayan müşteriye 30-90 gün sonra tekrar göster. CVR yüksek (müşteri zaten ilgilendi), CPC SP\'den ~%40 daha ucuz (az kullanılıyor). Az bilinen altın madeni.',
+  'learning_period':'<b>Öğrenme Dönemi.</b> Yeni kampanya veya bid değişikliğinden sonra Amazon 7-14 gün "araştırma" moduna girer. Bu sürede karar verme, değişiklik yapma — algoritmayı konfüze edersin. Sabır.',
+  'bid_change_cap':'<b>Bid Change Cap %25.</b> Tek seferde bid\'i %25\'ten fazla değiştirme. Sert değişim algoritmayı sıfırlar, 3-7 gün performans kaybı yaşarsın. Kademeli git — %25, bekle, gerekirse %25 daha.',
+  'down_only':'<b>Down Only Bidding.</b> Amazon otomatik bid\'i düşürebilir ama artıramaz. ACOS yüksek/olgun kampanyada güvenli — risk minimize. Yeni ürün veya ranking için değil (fırsatları kaçırır).',
+  'up_and_down':'<b>Up & Down Bidding.</b> Amazon otomatik bid\'i +%100 arttırabilir/düşürebilir. Yüksek CVR sinyali gördüğünde agresif olur. Yeni kampanyada ideal — Amazon öğrensin. Kanıtlanmış exact\'te kullanma, kontrolü kaybedersin.',
+  'negative_phrase':'<b>Negative Phrase vs Exact.</b> Negative EXACT sadece o kesin ibareyi bloke eder — GÜVENLİ. Negative PHRASE o ibareyi içeren TÜM sorguları keser — TEHLİKELİ. "shoes" phrase negative yaparsan "running shoes" da kesilir. Sadece kesin alakasız kökler için (ör. "erkek").',
+  'auto_neg_own_asin':'<b>Kendi ASIN\'ini Auto\'da Negatifle.</b> Auto kampanyada kendi ürününü kendine reklam ediyorsun — kanibalizm. Kendi ASIN\'ini <i>Negative Product Targeting</i> yap. Rakip zayıf ASIN\'i de negatifle + ayrı PT kampanyada agresif hedefle.',
+  'RPC':'<b>RPC — Revenue Per Click.</b> Satış ÷ tıklama. Bir tıklamanın gerçek gelir gücü. Hedef ACOS\'un uygulanacağı taban: <b>Bid = RPC × Hedef ACOS</b>. Bu formülle bid\'ler duyguyla değil matematikle çıkar.',
+  'CPA':'<b>CPA — Cost Per Acquisition.</b> Bir sipariş için ödediğin ortalama. Hedef CPA = AOV × Hedef ACOS. Bunu aşmışsan ve satış yoksa net israf — bid düşür veya negatifle.',
+  'AOV':'<b>AOV — Average Order Value.</b> Ortalama sepet tutarı = toplam satış ÷ sipariş. Bid hesabında lazım: 0 siparişli terimin yeni bid\'i = (AOV ÷ tıklama) × hedef ACOS.',
+  'match_funnel':'<b>Match Type Funnel.</b> Broad (keşif, düşük bid) → Phrase (kalifiye, orta bid) → Exact (kazanan, yüksek bid + placement multiplier). Kelime yukarı katmana çıktıkça bid ve kontrol artar. Tek başına %23 ACOS düşüşü sağlar.',
+  'wasted_spend':'<b>Dönmeyen Harcama.</b> 0 sipariş getiren arama terimlerinin toplam harcaması. Negatifle keserek doğrudan bütçeye iade edersin — sonra bu para kazanan kelimelere akar.',
+  'health_score':'<b>Sağlık Skoru.</b> 4 boyut: verim (ACOS/hedef, 40p) + israf kontrolü (25p) + fırsat yakalama (20p) + görünürlük (15p). 75+ sağlıklı. Tek metrik ama katmanlı — bir alan çökerse hemen görürsün.',
+  'placement':'<b>Placement.</b> Reklamın nerede gösterildiği: <b>Top of Search</b> (arama üstü, en pahalı en yüksek CVR), <b>Product Pages</b> (rakip ürün sayfaları), <b>Rest of Search</b> (arama içi diğer). Her biri farklı CVR — farklı stratejiyle yönet.',
+  'aci_search_query':'<b>Search Query Report.</b> Amazon\'un sana müşterinin gerçekten ne yazdığını gösteren rapor. "Match Type" ne olursa olsun (broad), müşteri kelime kelime ne yazdı — burada altın var. Haftada 1 mutlaka aç.',
+};
+
+function h(key){
+  const t=HINTS[key];
+  if(!t) return '';
+  return `<span class="hint"><i class="i">?</i><span class="tip">${t}</span></span>`;
+}
+
+let brands=[], brandId=null, recs=[], activeTab='harvest', editing=false;
+const TABS=[
+  ['harvest','🌱 Kelime Avcısı'],
+  ['harvest_pt','🎯 Ürün Hedefleri'],
+  ['negative','🚫 Negatifler'],
+  ['bid_down','📉 Bid Düşür'],
+  ['bid_up','📈 Bid Artır'],
+  ['placement','📍 Placement'],
+];
+const GUIDES={
+  harvest:`<b>Ne yapıyor?</b> Oto/broad/phrase kampanyalarında satış getiren arama terimlerini bulur (min. sipariş eşiğini geçen + ACOS hedefin altında). Bu işleme <b>harvest ${h('harvest')}</b>, funnel'ın son katmanına taşımaya <b>match funnel ${h('match_funnel')}</b> denir. Önerilen bid = <b>RPC ${h('RPC')} × hedef ACOS</b> — yani hedefini tutturacak maksimum tık maliyeti.<br>
+  <b>Nasıl uygularsın?</b> ① Onayla → Excel'e aktar. ② Amazon konsolunda exact match kampanyana (yoksa aç: "MarkaAdı - Exact - Kazananlar") kelimeyi önerilen bidle ekle. ③ <b>ÇOK ÖNEMLİ:</b> Aynı kelimeyi kaynak kampanyada <b>negatif exact</b> olarak ekle — buna <b>traffic sculpting ${h('traffic_sculpting')}</b> denir.`,
+  harvest_pt:`<b>Ne yapıyor?</b> Oto kampanyanın ürün sayfalarında satış getirdiği rakip ASIN'leri bulur.<br>
+  <b>Nasıl uygularsın?</b> ① Manuel bir <b>Product Targeting</b> kampanyası aç (yoksa: "MarkaAdı - PT - Kazananlar"). ② ASIN'i önerilen bidle hedefle. ③ Kaynak oto kampanyada bu ASIN'i <b>negatif product targeting</b> olarak ekle.<br>
+  <b>Rakip sniping (Furkan metodu):</b> Bu ASIN'leri Amazon'da aç ve kontrol et — <i>düşük puanlı, yüksek fiyatlı veya stok sorunu yaşayan</i> rakipler en iyi hedeflerdir. Reklam metninde/görselde avantajını net vurgula ("daha uygun fiyat, daha yüksek kalite"). Rakibin şikayet edilen zayıf noktasına çözüm sunduğunu göster.`,
+  negative:`<b>Ne yapıyor?</b> İki tetikten biriyle israfı yakalar: <b>eşik üstü tıklama + 0 sipariş</b> (varsayılan 15 tık ≈ istatistiksel anlam sınırı) veya <b>harcama > hedef CPA ${h('CPA')} × 1.5</b> (pahalı tıklarda daha erken keser).<br>
+  <b>Nasıl uygularsın?</b> Amazon konsolunda ilgili kampanya → Negative targeting → kelimeyi <b>negatif exact</b> ekle. ASIN ise Negative product targeting'e ekle. <b>Dikkat:</b> Negatif phrase ${h('negative_phrase')} EKLEME — sadece emin olduğun ilgisiz kelime köklerinde kullan.<br>
+  <b>Proaktif negatifler (Furkan metodu):</b> Raporu beklemeden yeni kampanyaya baştan ekle → alakasız aramalar: <i>free, cheap, used, second hand</i>; premium üründe fiyat segmentasyonu: <i>ucuz/budget/economy</i> terimleri; yanlış kategori ve farklı model/versiyon numaraları.`,
+  bid_down:`<b>Ne yapıyor?</b> İki formül: <b>①</b> ACOS > hedef×1.15 → yeni bid = <b>RPC ${h('RPC')} × hedef ACOS</b> (satırın gerçek gelir gücüne göre). <b>②</b> Hedef CPA kadar harcayıp 0 satış → yeni bid = <b>(AOV ${h('AOV')} ÷ tıklama) × hedef ACOS</b>. Tek seferde max %25 düşürülür — bid change cap ${h('bid_change_cap')}.<br>
+  <b>Nasıl uygularsın?</b> Kampanya → Targeting sekmesi → kelimeyi bul → bid kolonuna önerilen değeri yaz. <b>Not:</b> "Mevcut CPC" senin gerçek bid'in değil, ödediğin ortalama tık ücretidir; bid genelde CPC'nin biraz üstündedir.`,
+  bid_up:`<b>Ne yapıyor?</b> ACOS hedefin <b>%20+ altında</b> ve satışı olan kelimelerde ölçekleme fırsatı. %20 tampon bilinçli: hedefe yakın kelimeyi artırırsan hedefi aşarsın. Artış +%5 (hedefe yakınsa) veya +%10 (çok altındaysa).<br>
+  <b>Nasıl uygularsın?</b> Bid'i güncelle, <b>1 hafta bekle</b> (öğrenme dönemi ${h('learning_period')}), ACOS hâlâ düşükse tekrar artır. Kademeli git — bir anda %50 artırma.`,
+  placement:`<b>Ne yapıyor?</b> Placement ${h('placement')} raporundan yer bazlı performansı okur. Top of Search genelde en yüksek dönüşümü verir — orada ACOS hedefin çok altındaysa placement multiplier ${h('placement_multiplier')} artırmak toplam satışı büyütür. Nihai bid stacking ${h('bid_stacking')} formülünü etkiler.<br>
+  <b>Nasıl uygularsın?</b> Kampanya → Settings → <b>Adjust bids by placement</b>. Önerilen yönde çarpanı değiştir (ör. Top of search +%25). Kademeli git: +%25 → 1 hafta izle → gerekirse +%25 daha.`,
+};
+const fmt$=v=>v==null?'—':'$'+Number(v).toFixed(2);
+
+function toast(msg){const t=$('toast');t.textContent=msg;t.style.display='block';
+  clearTimeout(t._h);t._h=setTimeout(()=>t.style.display='none',3500);}
+
+async function api(url,opts){
+  const r=await fetch(url,opts);
+  if(!r.ok){const e=await r.json().catch(()=>({detail:r.statusText}));
+    toast('⚠ '+(e.detail||'Hata'));throw new Error(e.detail);}
+  return r;
+}
+
+async function loadBrands(keep){
+  brands=await(await api('/api/brands')).json();
+  const sel=$('brandSel');
+  sel.innerHTML=brands.length?'':'<option>marka yok</option>';
+  for(const b of brands){
+    const o=document.createElement('option');o.value=b.id;o.textContent=b.name;
+    sel.appendChild(o);
+  }
+  if(keep&&brands.some(b=>b.id==brandId)){sel.value=brandId;}
+  else if(brands.length){brandId=brands[0].id;sel.value=brandId;}
+  else brandId=null;
+  await selectBrand(brandId);
+}
+
+async function selectBrand(id){
+  brandId=id?Number(id):null;
+  $('main').style.display=brandId?'block':'none';
+  $('empty').style.display=brandId?'none':'block';
+  $('editBtn').style.display=brandId?'inline-block':'none';
+  $('exportBtn').style.display=brandId?'inline-block':'none';
+  $('aiBtn').style.display=brandId?'inline-block':'none';
+  $('bulkBtn').style.display=brandId?'inline-block':'none';
+  $('histBtn').style.display=brandId?'inline-block':'none';
+  $('mgrBadge').style.display=brandId?'inline-flex':'none';
+  $('applyBtn').style.display=brandId?'inline-block':'none';
+  setMgr('standby','🛡 Müdür: Standby');
+  if(!brandId){$('aiPanel').style.display='none';$('hero').innerHTML='';return;}
+  const b=brands.find(x=>x.id==brandId)||{};
+  $('bbName').textContent=b.name||'—';
+  $('bbNameInline').textContent=b.name||'—';
+  await Promise.all([loadSummary(),loadRecs(),loadAILatest(),loadInsights()]);
+}
+
+let charts={};
+async function loadInsights(){
+  const errBox=(name,e)=>`<div class="hero-card hc-red" style="grid-column:1/-1"><h5>⚠ ${name} render hatasi</h5><pre style="font-size:11px;color:var(--muted);white-space:pre-wrap;margin-top:6px">${esc(String(e&&e.stack||e))}</pre></div>`;
+  try{
+    const r=await fetch(`/api/brands/${brandId}/insights`);
+    if(!r.ok){$('hero').innerHTML=errBox('insights fetch',await r.text());return;}
+    const d=await r.json();
+    if(d.empty){
+      $('kpiRibbon').innerHTML='';$('metricGroups').innerHTML='';
+      $('hero').innerHTML='<div class="hero-card hc-blue" style="grid-column:1/-1"><h5>Bilgi</h5><div class="sub">Rapor yükle, dashboard oluşsun.</div></div>';return;
+    }
+    const safe=(name,fn,target)=>{
+      try{fn();}
+      catch(e){
+        console.error(name,'render hatasi:',e);
+        if(target){const el=$(target);if(el)el.innerHTML=errBox(name,e);}
+      }
+    };
+    safe('KPI',()=>renderKPI(d.kpi, d.profit),'kpiRibbon');
+    safe('Grup',()=>renderMetricGroups(d),'metricGroups');
+    safe('Hero',()=>renderHero(d),'hero');
+    safe('Chart',()=>renderCharts(d),'charts');
+    safe('Profit',()=>renderProfitBanner(d.profit));
+    safe('Alarm',()=>renderAlarm(d),'alarmStrip');
+  }catch(e){
+    console.error('loadInsights fatal:',e);
+    $('hero').innerHTML=errBox('loadInsights',e);
+  }
+}
+
+function renderAlarm(d){
+  const w=d.wasted_spend, o=d.opportunities, l=d.lost_impressions;
+  const items=[];
+  if(w && w.total > 30) items.push(`<div><span class="lbl">Verimsiz harcama</span><br><span class="num">$${w.total.toFixed(2)}</span> · ${w.count} terim</div>`);
+  if(o && (o.harvest_count+o.bidup_count) > 0) items.push(`<div><span class="lbl">Değerlendirilebilir fırsat</span><br><span class="num">${o.harvest_count+o.bidup_count}</span> öneri${o.estimated_monthly_upside_usd?` · ~$${o.estimated_monthly_upside_usd}/ay potansiyel`:''}</div>`);
+  if(l && l.count > 0) items.push(`<div><span class="lbl">Görünürlük kaybı</span><br><span class="num">${l.count}</span> kelime · TOS düşük</div>`);
+  if(!items.length){$('alarmStrip').innerHTML='';return;}
+  $('alarmStrip').innerHTML=`<div class="overview">
+    <div class="big">📊</div>
+    <div><span class="lbl">Bu haftaki tablo</span><br><b>${(brands.find(x=>x.id==brandId)||{}).name||''}</b></div>
+    ${items.join('')}
+    <div style="flex:1"></div>
+    <button onclick="document.getElementById('recPanel').scrollIntoView({behavior:'smooth'})">Öneri listesine git →</button>
+  </div>`;
+}
+
+function num(v){return v==null?'—':(typeof v==='number'?v.toLocaleString('en-US',{maximumFractionDigits:2}):v);}
+
+function setMgr(state, text){
+  const el=$('mgrBadge');
+  if(!el)return;
+  el.className='mgr-badge mgr-'+state;
+  el.textContent=text;
+}
+
+function renderKPI(k, profit){
+  if(!k){$('kpiRibbon').innerHTML='';return;}
+  const b=brands.find(x=>x.id==brandId)||{};
+  const tacos=(b.target_acos||0.3)*100;
+  const acosCls=k.acos_pct==null?'':k.acos_pct>tacos?'neg':k.acos_pct<tacos*0.85?'pos':'warn';
+  const roasCls=k.roas>=3?'pos':k.roas>=1.5?'warn':'neg';
+  const cvrCls=k.cvr_pct>=10?'pos':k.cvr_pct>=5?'warn':k.cvr_pct>0?'neg':'';
+  const ctrCls=k.ctr_pct>=0.5?'pos':k.ctr_pct>0?'warn':'';
+  $('kpiRibbon').innerHTML=`
+    <div class="kpi"><div class="l">Harcama</div><div class="v">$${num(k.spend)}</div><div class="s">${num(k.clicks)} tık</div></div>
+    <div class="kpi pos"><div class="l">Satış</div><div class="v">$${num(k.sales)}</div><div class="s">${num(k.orders)} sipariş</div></div>
+    <div class="kpi ${acosCls}"><div class="l">ACOS</div><div class="v">${k.acos_pct==null?'—':k.acos_pct+'%'}</div><div class="s">hedef %${tacos.toFixed(0)}</div></div>
+    <div class="kpi ${roasCls}"><div class="l">RoAS</div><div class="v">${k.roas}x</div><div class="s">1 $ → $${k.roas.toFixed(2)}</div></div>
+    <div class="kpi"><div class="l">Impression</div><div class="v">${num(k.impressions)}</div><div class="s">CTR ${k.ctr_pct}%</div></div>
+    <div class="kpi ${cvrCls}"><div class="l">CVR</div><div class="v">${k.cvr_pct}%</div><div class="s">tık→sipariş</div></div>
+    <div class="kpi"><div class="l">Ort. CPC</div><div class="v">$${num(k.avg_cpc)}</div><div class="s">tık başı</div></div>
+    <div class="kpi"><div class="l">AOV</div><div class="v">$${num(k.avg_order_value)}</div><div class="s">sepet ort.</div></div>
+  `;
+}
+
+function renderMetricGroups(d){
+  const p=d.portfolio||{}, bw=d.best_worst||{}, ps=d.placement_split, tt=d.top_search_terms||[];
+  const md=p.match_distribution||{};
+  const b=brands.find(x=>x.id==brandId)||{};
+  const tacos=(b.target_acos||0.3)*100;
+
+  // Match dist chips
+  const matchOrder=['EXACT','PHRASE','BROAD','-','OTHER'];
+  const matchLabels={'EXACT':'Exact','PHRASE':'Phrase','BROAD':'Broad','-':'ASIN/PT','OTHER':'Diğer'};
+  const matchChips=matchOrder.filter(k=>md[k]).map(k=>{
+    const v=md[k];return `<span class="chip">${matchLabels[k]||k} <b>${v.count}</b> · $${num(v.spend)}</span>`;
+  }).join('');
+
+  // Placement bar
+  let pbarHtml='';
+  if(ps && ps.length){
+    const total=ps.reduce((s,x)=>s+x.share_pct,0)||100;
+    pbarHtml=`<div class="pbar">${ps.map(x=>{
+      const cls=x.placement==='Top of Search'?'pbar-tos':x.placement==='Product Pages'?'pbar-pp':'pbar-rest';
+      return `<div class="${cls}" style="flex:${x.share_pct}" title="${x.placement}: %${x.share_pct}">${x.share_pct>=8?'%'+x.share_pct.toFixed(0):''}</div>`;
+    }).join('')}</div>`;
+  }
+
+  const groups=[];
+  // Grup 1: Portföy yapısı
+  groups.push(`<div class="mg">
+    <h6>🏗️ Portföy Yapısı</h6>
+    <div class="m"><span class="k">Toplam kampanya</span><span class="v">${p.total_campaigns||0}</span></div>
+    <div class="m"><span class="k">Aktif</span><span class="v hi">${p.active_campaigns||0}</span></div>
+    <div class="m"><span class="k">Duraklatılmış</span><span class="v mid">${p.paused_campaigns||0}</span></div>
+    <div class="m"><span class="k">Toplam günlük bütçe</span><span class="v">$${num(p.total_daily_budget)}</span></div>
+    <div class="m"><span class="k">Ort. kampanya bütçesi</span><span class="v">$${num(p.avg_daily_budget)}</span></div>
+    <div class="m"><span class="k">Toplam hedef (kelime/ASIN)</span><span class="v">${num(p.total_targets)}</span></div>
+    <div class="mini">${matchChips}</div>
+  </div>`);
+
+  // Grup 2: Verim metrikleri
+  const kk=d.kpi||{};
+  groups.push(`<div class="mg">
+    <h6>⚡ Verim Metrikleri</h6>
+    <div class="m"><span class="k">RoAS ${h('RPC')}</span><span class="v ${kk.roas>=3?'hi':kk.roas>=1.5?'mid':'lo'}">${kk.roas||0}x</span></div>
+    <div class="m"><span class="k">Sipariş başı maliyet ${h('CPA')}</span><span class="v">$${num(kk.cost_per_order)}</span></div>
+    <div class="m"><span class="k">Ortalama sepet ${h('AOV')}</span><span class="v">$${num(kk.avg_order_value)}</span></div>
+    <div class="m"><span class="k">CTR</span><span class="v ${kk.ctr_pct>=0.5?'hi':'mid'}">${kk.ctr_pct||0}%</span></div>
+    <div class="m"><span class="k">CVR (tık→sipariş)</span><span class="v ${kk.cvr_pct>=10?'hi':kk.cvr_pct>=5?'mid':'lo'}">${kk.cvr_pct||0}%</span></div>
+    <div class="m"><span class="k">Ortalama CPC</span><span class="v">$${num(kk.avg_cpc)}</span></div>
+    <div class="m"><span class="k">Hedef ACOS'a göre</span><span class="v ${kk.acos_pct>tacos?'lo':'hi'}">${kk.acos_pct==null?'—':(kk.acos_pct>tacos?'+':'')+(kk.acos_pct-tacos).toFixed(1)+'p'}</span></div>
+  </div>`);
+
+  // Grup 3: En iyi/en kötü
+  const bestHtml=(bw.best||[]).map(x=>`<div class="r"><span class="name" title="${esc(x.campaign)}">${esc(x.campaign)}</span><span class="val hi">${x.acos_pct==null?'—':'%'+x.acos_pct}</span></div>`).join('');
+  const worstHtml=(bw.worst||[]).map(x=>`<div class="r"><span class="name" title="${esc(x.campaign)}">${esc(x.campaign)}</span><span class="val lo">${x.label||'—'}</span></div>`).join('');
+  groups.push(`<div class="mg">
+    <h6>🏆 En İyi / En Kötü Kampanya</h6>
+    <div style="color:var(--green);font-size:11px;font-weight:600;margin-top:4px">En verimli</div>
+    <div class="rank-mini">${bestHtml||'<div class="r"><span class="name muted">Yeterli veri yok</span></div>'}</div>
+    <div style="color:var(--red);font-size:11px;font-weight:600;margin-top:10px">Mühendislik gerekli</div>
+    <div class="rank-mini">${worstHtml||'<div class="r"><span class="name muted">Yeterli veri yok</span></div>'}</div>
+  </div>`);
+
+  // Grup 4: Placement + En çok satan arama terimleri
+  const psRows=(ps||[]).map(x=>`<div class="m"><span class="k">${x.placement}</span><span class="v">${x.share_pct}% · ${x.acos_pct==null?'—':'ACOS %'+x.acos_pct}</span></div>`).join('');
+  const ttRows=tt.slice(0,3).map(x=>`<div class="r"><span class="name" title="${esc(x.term)}">${esc(x.term)}</span><span class="val">${x.orders} sip · $${num(x.sales)}</span></div>`).join('');
+  groups.push(`<div class="mg">
+    <h6>📍 Yer & Kazanan Arama Terimleri</h6>
+    ${psRows}
+    ${pbarHtml}
+    <div style="color:var(--muted);font-size:11px;font-weight:600;margin-top:12px">En çok satan arama terimleri ${h('aci_search_query')}</div>
+    <div class="rank-mini">${ttRows||'<div class="r"><span class="name muted">Veri yok</span></div>'}</div>
+  </div>`);
+
+  $('metricGroups').innerHTML=groups.join('');
+}
+
+function renderProfitBanner(p){
+  const el=$('profitBanner');if(el)el.innerHTML='';
+}
+
+function renderHero(d){
+  const hs=d.health||{}, w=d.wasted_spend||{total:0,count:0,top:[]}, o=d.opportunities||{harvest_count:0,bidup_count:0,harvest_top:[]}, l=d.lost_impressions||{count:0,top:[]};
+  const gaugeColor=hs.color==='green'?'#34d399':hs.color==='orange'?'#f59e0b':'#f87171';
+  const pct=(hs.score||0)/100;
+  const r=90, cx=100, cy=100;
+  const start={x:cx-r,y:cy}, end={x:cx+r,y:cy};
+  const angle=Math.PI*(1-pct);
+  const px=cx-r*Math.cos(angle-Math.PI), py=cy-r*Math.sin(angle-Math.PI);
+  const largeArc=pct>0.5?1:0;
+  const gaugePath=`<path d="M ${start.x} ${start.y} A ${r} ${r} 0 ${largeArc} 1 ${px} ${py}" stroke="${gaugeColor}" stroke-width="14" fill="none" stroke-linecap="round"/>`;
+  const gaugeBg=`<path d="M ${start.x} ${start.y} A ${r} ${r} 0 1 1 ${end.x} ${end.y}" stroke="#2d3646" stroke-width="14" fill="none"/>`;
+  const bd=hs.breakdown||{verim:0,israf_kontrolu:0,firsat_yakalama:0,gorunurluk:0};
+  $('hero').innerHTML=`
+    <div class="hero-card hc-${hs.color||'blue'}">
+      <h5>🩺 Sağlık Skoru ${h('health_score')}</h5>
+      <div class="gauge">
+        <svg viewBox="0 0 200 110">${gaugeBg}${gaugePath}</svg>
+        <div class="val" style="color:${gaugeColor}">${hs.score||0}</div>
+        <div class="lbl" style="color:${gaugeColor}">${hs.label||'—'}</div>
+      </div>
+      <div class="breakdown">
+        <div>Verim <b>${bd.verim}/40</b></div>
+        <div>İsraf <b>${bd.israf_kontrolu}/25</b></div>
+        <div>Fırsat <b>${bd.firsat_yakalama}/20</b></div>
+        <div>Görünürlük <b>${bd.gorunurluk}/15</b></div>
+      </div>
+    </div>
+    <div class="hero-card hc-orange">
+      <h5>💸 Dönmeyen Harcama ${h('wasted_spend')}</h5>
+      <div class="num big">$${w.total.toFixed(2)}</div>
+      <div class="sub">${w.count} arama terimi · 0 sipariş getirdi</div>
+      <div class="list">${(w.top||[]).slice(0,4).map(t=>`<div>• <b>${esc(t.term)}</b> ${t.clicks} tık · $${t.spend}</div>`).join('')}</div>
+      ${w.count?`<button class="cpy" style="margin-top:8px" onclick="activeTab='negative';renderTabs();renderTable()">Negatif önerileri incele →</button>`:''}
+    </div>
+    <div class="hero-card hc-green">
+      <h5>🌱 Fırsatlar ${h('harvest')}</h5>
+      <div class="num big" style="color:var(--green)">${o.harvest_count+o.bidup_count}</div>
+      <div class="sub">${o.harvest_count} harvest + ${o.bidup_count} bid artır</div>
+      <div class="list">${(o.harvest_top||[]).slice(0,3).map(t=>`<div>• <b>${esc(t.term)}</b> — $${t.sales} satış / ACOS %${t.acos}</div>`).join('')}</div>
+      ${o.estimated_monthly_upside_usd?`<div class="sub" style="margin-top:6px;color:var(--green)"><b>~$${o.estimated_monthly_upside_usd}</b> aylık potansiyel katkı</div>`:''}
+    </div>
+    <div class="hero-card hc-orange">
+      <h5>👀 Kaybedilen Görünürlük ${h('TOS_IS')}</h5>
+      <div class="num big" style="color:var(--accent)">${l.count}</div>
+      <div class="sub">TOS'ta impression share düşük satan kelimeler</div>
+      <div class="list">${(l.top||[]).slice(0,3).map(t=>`<div>• <b>${esc(t.term)}</b> — TOS %${t.tos_is_pct} · CPC $${t.cpc}→$${t.suggested_bid}</div>`).join('')}</div>
+    </div>
+  `;
+  // Öncelikler - gruplu
+  const pg=d.priorities_grouped||{urgent:[],later:[]};
+  const renderPrio=(x)=>`<div class="prio prio-${x.priority}">
+    <div class="icon">${x.icon}</div>
+    <div><div class="t">${esc(x.title)}</div><div class="d">${esc(x.detail)}</div></div>
+  </div>`;
+  if(pg.urgent.length||pg.later.length){
+    const priHtml=`<div class="card" style="margin-top:16px"><b>📌 Yapılacaklar Planı</b>
+      <div class="muted small" style="margin-top:3px;margin-bottom:14px">Aciliyete göre gruplanmış — üstteki hafta içinde bit, alttakiler için 1 hafta veri toplama süresi ver.</div>
+      ${pg.urgent.length?`<div class="prio-group">
+        <div class="prio-group-head prio-group-urgent">🔥 Bu Hafta Yap · ${pg.urgent.length} aksiyon</div>
+        <div class="prio-list">${pg.urgent.map(renderPrio).join('')}</div>
+      </div>`:''}
+      ${pg.later.length?`<div class="prio-group" style="margin-top:14px">
+        <div class="prio-group-head prio-group-later">⏳ 1 Hafta Bekleyebilir · ${pg.later.length} aksiyon</div>
+        <div class="prio-list">${pg.later.map(renderPrio).join('')}</div>
+      </div>`:''}
+    </div>`;
+    let holder=$('priorityHolder');
+    if(!holder){holder=document.createElement('div');holder.id='priorityHolder';$('hero').after(holder);}
+    holder.innerHTML=priHtml;
+  }
+  // Pro insights
+  renderProInsights(d.pro_insights);
+}
+
+function renderProInsights(pi){
+  let holder=$('proHolder');
+  if(!pi){if(holder)holder.innerHTML='';return;}
+  if(!holder){holder=document.createElement('div');holder.id='proHolder';$('priorityHolder')?.after(holder)||$('hero').after(holder);}
+  const blocks=[];
+  const s=pi.skag_candidates;
+  if(s && s.count){
+    blocks.push(`<div class="pro-block">
+      <div class="title">🎯 SKAG ${h('SKAG')} Adayları (${s.count})</div>
+      <div class="desc">Kanıtlanmış exact kelimeler için tek-kelime ad group aç — bid ve placement multiplier tek kontrol noktasında.</div>
+      ${s.top.map(x=>`<div class="row"><b>${esc(x.keyword)}</b> · ${x.orders} sip · ACOS %${x.acos_pct} · CPC $${x.cpc}
+        <button class="cpy" style="float:right" onclick="copyText('${esc(x.keyword).replace(/'/g,"\\'")}')">📋</button></div>`).join('')}
+    </div>`);
+  }
+  const t=pi.tos_multiplier;
+  if(t && t.count){
+    blocks.push(`<div class="pro-block">
+      <div class="title">⬆ TOS ${h('placement_multiplier')} Multiplier Fırsatı (${t.count})</div>
+      <div class="desc">Top of Search ACOS hedefinin altında — kampanya ayarlarından placement bid +% carpanı ekle, ROAS büyür.</div>
+      ${t.top.map(x=>`<div class="row"><b>${esc(x.campaign)}</b> · TOS ACOS %${x.tos_acos_pct} · <b>+%${x.suggested_multiplier_pct}</b> öner</div>`).join('')}
+    </div>`);
+  }
+  const bd=pi.brand_defense;
+  if(bd && bd.recommendation){
+    blocks.push(`<div class="pro-block">
+      <div class="title">🛡 Brand Defense ${h('brand_defense')}</div>
+      <div class="desc">${esc(bd.recommendation)}</div>
+    </div>`);
+  }
+  const m=pi.campaign_momentum;
+  if(m && (m.scale_up.length || m.scale_down.length)){
+    blocks.push(`<div class="pro-block">
+      <div class="title">📈 Kampanya Momentum</div>
+      ${m.scale_up.length?`<div class="desc" style="color:var(--green)">Büyütülebilir (bütçe artır):</div>`+
+        m.scale_up.map(x=>`<div class="row"><b>${esc(x.campaign)}</b> · ACOS %${x.acos_pct} · $${x.current_budget} → $${x.suggested_budget}/gün</div>`).join(''):''}
+      ${m.scale_down.length?`<div class="desc" style="color:var(--accent);margin-top:6px">Kısılabilir / gözden geçir:</div>`+
+        m.scale_down.map(x=>`<div class="row"><b>${esc(x.campaign)}</b> · ${esc(x.reason)}</div>`).join(''):''}
+    </div>`);
+  }
+  if(!blocks.length){holder.innerHTML='';return;}
+  holder.innerHTML=`<div class="pro-card"><h5>🧠 Uzman Analizler</h5><div class="pro-grid">${blocks.join('')}</div></div>`;
+}
+
+function destroyChart(k){if(charts[k]){charts[k].destroy();delete charts[k];}}
+
+function renderCharts(d){
+  if(!window.Chart){
+    // Chart.js henuz yuklenmedi - 500ms sonra tekrar dene, max 6 kere
+    if(!renderCharts._retries) renderCharts._retries=0;
+    if(renderCharts._retries++ < 6){
+      setTimeout(()=>renderCharts(d), 500);
+    } else {
+      $('charts').innerHTML='<div class="chart-card" style="grid-column:1/-1;text-align:center;color:var(--muted)">Grafik kutuphanesi yuklenemedi (internet baglantisi kontrol).</div>';
+    }
+    return;
+  }
+  Chart.defaults.color='#8b98a9';
+  Chart.defaults.borderColor='#2d3646';
+  // Trend - yükleme geçmişinden basit rows bar
+  const trend=(d.upload_trend||[]).slice(-10);
+  destroyChart('trend');
+  charts.trend=new Chart($('chTrend'),{type:'line',data:{
+    labels:trend.map(t=>t.date),
+    datasets:[{label:'Satır sayısı',data:trend.map(t=>t.rows),borderColor:'#f59e0b',backgroundColor:'rgba(245,158,11,.15)',tension:.3,fill:true}]
+  },options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}}}});
+  // Match type dagilimi
+  const mt=d.match_type_distribution||[];
+  destroyChart('match');
+  charts.match=new Chart($('chMatch'),{type:'doughnut',data:{
+    labels:mt.map(m=>m.match_type),
+    datasets:[{data:mt.map(m=>m.spend),backgroundColor:['#f59e0b','#60a5fa','#34d399','#c084fc','#f87171','#8b98a9']}]
+  },options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'bottom',labels:{font:{size:11}}}}}});
+  // Kampanya harcama
+  const cd=(d.campaign_distribution||[]).slice(0,8);
+  destroyChart('camp');
+  charts.camp=new Chart($('chCamp'),{type:'bar',data:{
+    labels:cd.map(c=>c.campaign.length>18?c.campaign.slice(0,18)+'…':c.campaign),
+    datasets:[{label:'Harcama $',data:cd.map(c=>c.spend),backgroundColor:cd.map(c=>c.acos_pct==null?'#f87171':c.acos_pct>((brands.find(x=>x.id==brandId)||{}).target_acos*100)?'#f59e0b':'#34d399')}]
+  },options:{indexAxis:'y',responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}}}});
+}
+
+/* --- Chat --- */
+let chatOpen=false, chatLoading=false;
+function toggleChat(){
+  chatOpen=!chatOpen;
+  $('chatDrawer').classList.toggle('open',chatOpen);
+  if(chatOpen){
+    const b=brands.find(x=>x.id==brandId);
+    $('chatBrand').textContent=b?`— ${b.name}`:'';
+    loadChatHistory();
+  }
+}
+async function loadChatHistory(){
+  if(!brandId)return;
+  const [msgs,ds]=await Promise.all([
+    fetch(`/api/brands/${brandId}/chat`).then(r=>r.json()),
+    fetch(`/api/brands/${brandId}/data-summary`).then(r=>r.ok?r.json():null),
+  ]);
+  const box=$('chatMsgs');
+  let head='';
+  if(ds){
+    head=`<div class="msg assistant" style="border:1px dashed var(--accent);background:rgba(245,158,11,.05)">
+      <b>📂 Elimdeki veri:</b><br>
+      • ${num(ds.campaigns)} kampanya<br>
+      • ${num(ds.targets)} hedef (bid uygulanan)<br>
+      • ${num(ds.search_terms)} arama terimi<br>
+      • Toplam harcama: <b>$${num(ds.total_spend)}</b> / satış: <b>$${num(ds.total_sales)}</b>${ds.acos_pct!=null?' / ACOS <b>%'+ds.acos_pct+'</b>':''}
+    </div>`;
+  }
+  box.innerHTML=head+(msgs.length?msgs.map(m=>`<div class="msg ${m.role}">${esc(m.content)}</div>`).join(''):
+    `<div class="msg assistant">Verini gördüm — üst kutuda özet. Uzman seviye sorabilirsin:<br>• "Hangi kampanyada placement multiplier ekleyeyim?"<br>• "Bu hesapta dayparting başlatmalı mıyım?"<br>• "En büyük 3 israfım hangi kelimeler?"<br>• "Break-even ACOS'um ne, bidleri buna göre yeniden yaz."<br>• "Şu kampanyayı büyütmeli miyim?"</div>`);
+  box.scrollTop=box.scrollHeight;
+}
+async function sendChat(e){
+  e.preventDefault();
+  if(chatLoading||!brandId)return;
+  const inp=$('chatIn');const msg=inp.value.trim();if(!msg)return;
+  const box=$('chatMsgs');
+  box.innerHTML+=`<div class="msg user">${esc(msg)}</div><div class="msg assistant typing" id="typing"><span class="spin"></span> düşünüyor...</div>`;
+  box.scrollTop=box.scrollHeight;
+  inp.value='';chatLoading=true;
+  try{
+    const r=await api(`/api/brands/${brandId}/chat`,{method:'POST',
+      headers:{'Content-Type':'application/json'},body:JSON.stringify({message:msg})});
+    const d=await r.json();
+    $('typing').remove();
+    box.innerHTML+=`<div class="msg assistant">${esc(d.reply)}</div>`;
+    box.scrollTop=box.scrollHeight;
+  }catch(err){
+    $('typing').remove();
+    box.innerHTML+=`<div class="msg assistant" style="color:var(--red)">Hata: ${err.message}</div>`;
+  }finally{chatLoading=false;}
+}
+async function clearChat(){
+  if(!confirm('Konuşma geçmişi silinsin mi?'))return;
+  await fetch(`/api/brands/${brandId}/chat`,{method:'DELETE'});
+  loadChatHistory();
+}
+
+/* --- History / Undo --- */
+async function openHistory(){
+  const r=await fetch(`/api/brands/${brandId}/history`);
+  const items=await r.json();
+  $('histList').innerHTML=items.length?items.map(h=>{
+    const s=h.rec_snapshot||{};
+    return `<div class="hist-item">
+      <span class="st st-${h.new_status}">${h.new_status}</span>
+      <div style="flex:1"><b>${esc(s.keyword||'')}</b> <span class="muted small">[${esc(s.type||'')}]</span><br>
+        <span class="muted small">${esc(s.campaign||'')} · ${h.acted_at}</span></div>
+      <button class="cpy" onclick="undoAction(${h.id})">↺ Geri Al</button>
+    </div>`;
+  }).join(''):'<div class="muted small">Henüz karar geçmişi yok.</div>';
+  $('histDlg').showModal();
+}
+async function undoAction(hid){
+  await api(`/api/brands/${brandId}/history/undo`,{method:'POST',
+    headers:{'Content-Type':'application/json'},body:JSON.stringify({history_id:hid})});
+  toast('Geri alındı');
+  await Promise.all([loadRecs(),openHistory()]);
+}
+
+function exportBulksheet(){window.location=`/api/brands/${brandId}/export-bulksheet`;}
+
+async function openApplyDlg(){
+  // Onayli önerileri sayarak grupla ve kişiselleştir
+  const r=await fetch(`/api/brands/${brandId}/recommendations?status=approved`);
+  const recs=r.ok?await r.json():[];
+  const cnt={};recs.forEach(x=>cnt[x.type]=(cnt[x.type]||0)+1);
+  const total=recs.length;
+  const negTerms=recs.filter(x=>x.type==='negative').slice(0,5).map(x=>x.keyword);
+  const harvestTerms=recs.filter(x=>x.type==='harvest').slice(0,5).map(x=>({k:x.keyword,b:x.suggested_value}));
+  const bidDown=recs.filter(x=>x.type==='bid_down').slice(0,3).map(x=>({k:x.keyword,c:x.current_value,n:x.suggested_value}));
+
+  const steps=[];
+  if(total===0){
+    steps.push(`<div style="text-align:center;padding:20px;color:var(--muted)">Henüz onaylı öneri yok. Önce sekmelerdeki önerileri ✓ ile onayla.</div>`);
+  } else {
+    steps.push(`<div class="prio prio-info"><div class="icon">📊</div><div><div class="t">Onaylı ${total} değişikliğin var</div><div class="d">${Object.entries(cnt).map(([k,v])=>`${v} ${({harvest:'kelime',harvest_pt:'ASIN hedef',negative:'negatif',bid_down:'bid düşür',bid_up:'bid artır',placement:'placement'}[k]||k)}`).join(' · ')}</div></div></div>`);
+    if(cnt.negative){
+      steps.push(`<div class="prio prio-critical"><div class="icon">🚫</div><div>
+        <div class="t">Adım 1 — Negatifleri Ekle (${cnt.negative} adet)</div>
+        <div class="d">Amazon Ads Console → ilgili kampanya → <b>Negative targeting</b> → kelime için <b>Negative exact</b>, ASIN için <b>Negative product targeting</b>.<br>
+        Örnek: <code>${negTerms.slice(0,3).map(esc).join(', ')}</code></div>
+      </div></div>`);
+    }
+    if(cnt.harvest){
+      steps.push(`<div class="prio prio-high"><div class="icon">🌱</div><div>
+        <div class="t">Adım 2 — Kelimeleri Exact Kampanyaya Taşı (${cnt.harvest} adet)</div>
+        <div class="d">Amazon → Exact kampanyana (yoksa "MarkaAdı - Exact - Kazananlar" aç) → <b>Add keywords</b> → önerilen bidle ekle.<br>
+        <b>ÖNEMLİ:</b> Aynı kelimeyi kaynak kampanyada <b>negative exact</b> yap — traffic sculpting.<br>
+        Örnek: ${harvestTerms.slice(0,2).map(t=>`<code>${esc(t.k)}</code> bid $${t.b}`).join(' · ')}</div>
+      </div></div>`);
+    }
+    if(cnt.harvest_pt){
+      steps.push(`<div class="prio prio-high"><div class="icon">🎯</div><div>
+        <div class="t">Adım 3 — ASIN Hedefleri Ekle (${cnt.harvest_pt} adet)</div>
+        <div class="d">Product Targeting kampanyana ASIN'leri ekle. Kaynak Auto kampanyada bu ASIN'leri <b>negative product</b> yap.</div>
+      </div></div>`);
+    }
+    if(cnt.bid_down||cnt.bid_up){
+      steps.push(`<div class="prio prio-medium"><div class="icon">💰</div><div>
+        <div class="t">Adım 4 — Bid Güncelle (${(cnt.bid_down||0)+(cnt.bid_up||0)} adet)</div>
+        <div class="d">İlgili kampanya → Targeting sekmesi → kelimeyi bul → yeni bid'i yaz.<br>
+        Tek seferde max %25 değişim - fazlası algoritmayı konfüze eder.<br>
+        ${bidDown.length?`Örnek düşüş: ${bidDown.slice(0,2).map(b=>`<code>${esc(b.k)}</code> $${b.c}→$${b.n}`).join(' · ')}`:''}</div>
+      </div></div>`);
+    }
+    if(cnt.placement){
+      steps.push(`<div class="prio prio-medium"><div class="icon">📍</div><div>
+        <div class="t">Adım 5 — Placement Multiplier (${cnt.placement} adet)</div>
+        <div class="d">Kampanya → Settings → <b>Adjust bids by placement</b>. TOS / Product Pages / Rest için çarpan yaz.</div>
+      </div></div>`);
+    }
+    steps.push(`<div class="prio prio-info" style="margin-top:8px"><div class="icon">⏱</div><div>
+      <div class="t">Adım 6 — 7 gün bekle, tekrar rapor al</div>
+      <div class="d">Amazon attribution 2-3 gün geç. Değişikliğin etkisi 7 günde belli olur. Bir sonraki hafta raporunu yükle, süreci tekrar et.</div>
+    </div></div>`);
+  }
+  $('applySteps').innerHTML=steps.join('');
+  $('applyDlg').showModal();
+}
+
+
+async function loadSummary(){
+  const s=await(await api(`/api/brands/${brandId}/summary`)).json();
+  const b=brands.find(x=>x.id==brandId)||{};
+  const ct=$('campTable');
+  if(s.top_campaigns&&s.top_campaigns.length){
+    $('campCard').style.display='block';
+    ct.innerHTML='<tr><th>Kampanya</th><th>Tip</th><th>Harcama</th><th>Satış</th><th>ACOS</th><th>Sipariş</th></tr>'+
+      s.top_campaigns.map(c=>{
+        const acos=c.sales>0?(c.spend/c.sales*100):null;
+        return`<tr><td>${c.campaign}</td><td class="muted">${c.targeting_type||''}</td>
+        <td>${fmt$(c.spend)}</td><td>${fmt$(c.sales)}</td>
+        <td style="color:${acos==null?'var(--red)':acos>((brands.find(x=>x.id==brandId)||{}).target_acos*100)?'var(--red)':'var(--green)'}">${acos==null?(c.spend>0?'satış yok':'—'):acos.toFixed(1)+'%'}</td>
+        <td>${c.orders||0}</td></tr>`}).join('');
+  } else $('campCard').style.display='none';
+}
+
+async function loadRecs(){
+  recs=await(await api(`/api/brands/${brandId}/recommendations`)).json();
+  renderTabs();renderTable();
+}
+
+function renderTabs(){
+  $('tabs').innerHTML=TABS.map(([k,label])=>{
+    const n=recs.filter(r=>r.type==k).length;
+    return`<div class="tab ${k==activeTab?'active':''}" onclick="activeTab='${k}';renderTabs();renderTable()">${label}<span class="n">${n}</span></div>`;
+  }).join('');
+}
+
+function renderTable(){
+  const rows=recs.filter(r=>r.type==activeTab);
+  const t=$('recTable');
+  $('tabGuide').innerHTML=GUIDES[activeTab]||'';
+  $('recTitle').textContent=(TABS.find(x=>x[0]==activeTab)||[])[1]+` — ${rows.length} öneri`;
+  if(!rows.length){t.innerHTML='<tr><td class="muted">Bu kategoride bekleyen öneri yok. Rapor yükledin mi?</td></tr>';return;}
+  const isBid=activeTab.startsWith('bid_');
+  t.innerHTML=`<tr><th>Kelime/Hedef</th><th>Kampanya</th><th>Match</th>
+    ${isBid?'<th>CPC</th>':''}<th>${activeTab=='negative'?'':'Önerilen Bid'}</th>
+    <th>Tık</th><th>Harcama</th><th>Satış</th><th>Sip.</th><th>ACOS</th><th>Neden</th><th></th></tr>`+
+    rows.map(r=>{
+      const m=r.metrics||{};
+      return`<tr>
+      <td class="kw">${r.keyword}</td>
+      <td class="small muted" style="max-width:220px">${r.campaign}${r.ad_group?'<br>'+r.ad_group:''}</td>
+      <td><span class="badge b-${r.type}">${r.match_type}</span></td>
+      ${isBid?`<td>${fmt$(r.current_value)}</td>`:''}
+      <td>${r.suggested_value==null?'':`<input class="bidin" type="number" step="0.01" value="${r.suggested_value}" onchange="editBid(${r.id},this.value)">`}</td>
+      <td>${m.clicks??''}</td><td>${fmt$(m.spend)}</td><td>${fmt$(m.sales)}</td>
+      <td>${m.orders??''}</td><td>${m.acos==null?'—':m.acos+'%'}</td>
+      <td class="small muted" style="max-width:260px">${r.reason}</td>
+      <td style="white-space:nowrap">
+        <button class="cpy" title="Kelimeyi kopyala" onclick="copyText('${r.keyword.replace(/'/g,"\\'")}')">📋</button>
+        <button class="ok" onclick="action([${r.id}],'approved')">✓</button>
+        <button class="no" onclick="action([${r.id}],'rejected')">✗</button>
+      </td></tr>`;}).join('');
+}
+
+async function editBid(id,val){
+  await api(`/api/recommendations/${id}/bid`,{method:'PUT',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({suggested_value:Number(val)})});
+  toast('Bid güncellendi');
+}
+
+async function action(ids,status){
+  await api(`/api/brands/${brandId}/recommendations/action`,{method:'POST',
+    headers:{'Content-Type':'application/json'},body:JSON.stringify({ids,status})});
+  recs=recs.filter(r=>!ids.includes(r.id));
+  renderTabs();renderTable();
+  loadInsights();
+}
+
+function bulkAction(status){
+  const ids=recs.filter(r=>r.type==activeTab).map(r=>r.id);
+  if(!ids.length)return;
+  if(!confirm(`${ids.length} öneri ${status=='approved'?'onaylanacak':'reddedilecek'}. Emin misin?`))return;
+  action(ids,status);
+}
+
+function exportFile(){window.location=`/api/brands/${brandId}/export`;}
+
+/* --- upload --- */
+const dropTop=$('dropTop');
+dropTop.onclick=()=>$('fileInTop').click();
+dropTop.ondragover=e=>{e.preventDefault();dropTop.classList.add('over')};
+dropTop.ondragleave=()=>dropTop.classList.remove('over');
+dropTop.ondrop=e=>{e.preventDefault();dropTop.classList.remove('over');uploadFiles(e.dataTransfer.files)};
+$('fileInTop').onchange=e=>uploadFiles(e.target.files);
+
+async function uploadFiles(files){
+  if(!brandId){toast('Önce marka seç');return;}
+  const b=brands.find(x=>x.id==brandId)||{};
+  if(!confirm(`Dosyalar "${b.name}" markasına yüklenecek. Doğru marka mı?`))return;
+  const targetBrand=brandId;
+  const fd=new FormData();
+  for(const f of files)fd.append('files',f);
+  $('uploadInfo').innerHTML=`⏳ <b>${b.name}</b> markasına yükleniyor ve analiz ediliyor...`;
+  const res=await(await api(`/api/brands/${targetBrand}/upload`,{method:'POST',body:fd})).json();
+  $('uploadInfo').innerHTML=`<b>→ ${b.name}:</b><br>`+res.map(r=>r.ok
+    ?`✅ ${r.file} → <b>${r.type}</b> (${r.rows} satır)`
+    :`❌ ${r.file}: ${r.error}`).join('<br>');
+  if(brandId!=targetBrand){toast('Yükleme sırasında marka değişti — hedef marka korundu');brandId=targetBrand;$('brandSel').value=brandId;}
+  await Promise.all([loadSummary(),loadRecs(),loadInsights(),loadAILatest()]);
+  toast(`✅ Analiz tamamlandı → ${b.name}`);
+}
+
+/* --- brand dialog --- */
+let editingProducts=[];
+function openBrandDialog(edit){
+  editing=!!edit;
+  const b=editing?brands.find(x=>x.id==brandId):null;
+  $('dlgTitle').textContent=editing?'Marka Ayarları':'Yeni Marka';
+  $('bName').value=b?b.name:'';
+  $('bAcos').value=b?(b.target_acos*100).toFixed(0):30;
+  $('bClicks').value=b?b.min_clicks_neg:8;
+  $('bOrders').value=b?b.min_orders_harvest:2;
+  $('bPrice').value=b?(b.sell_price||0):0;
+  $('bCogs').value=b?(b.cogs||0):0;
+  $('bFee').value=b?((b.amazon_fee_pct||0.15)*100).toFixed(1):15;
+  $('bFba').value=b?(b.fba_fee||0):0;
+  $('delBrandBtn').style.display=editing?'inline-block':'none';
+  editingProducts=b&&b.products?JSON.parse(JSON.stringify(b.products)):[];
+  renderProductsList();
+  updateCalcPreview();
+  $('brandDlg').showModal();
+}
+
+function renderProductsList(){/* removed - profit UI kaldırıldı */}
+function addProductRow(){}
+function updateCalcPreview(){/* removed */}
+
+
+async function saveBrand(){
+  const body=JSON.stringify({
+    name:$('bName').value.trim(),
+    target_acos:Number($('bAcos').value)/100,
+    min_clicks_neg:Number($('bClicks').value),
+    min_orders_harvest:Number($('bOrders').value),
+    sell_price:Number($('bPrice').value)||0,
+    cogs:Number($('bCogs').value)||0,
+    amazon_fee_pct:(Number($('bFee').value)||0)/100,
+    fba_fee:Number($('bFba').value)||0});
+  if(!$('bName').value.trim()){toast('Marka adı gerekli');return;}
+  const url=editing?`/api/brands/${brandId}`:'/api/brands';
+  const r=await api(url,{method:editing?'PUT':'POST',
+    headers:{'Content-Type':'application/json'},body});
+  if(!editing){brandId=(await r.json()).id;}
+  $('brandDlg').close();
+  await loadBrands(true);
+  toast(editing?'Ayarlar kaydedildi':'Marka eklendi');
+}
+
+async function deleteBrand(){
+  if(!confirm('Marka ve tüm verileri silinecek. Emin misin?'))return;
+  await api(`/api/brands/${brandId}`,{method:'DELETE'});
+  $('brandDlg').close();brandId=null;
+  await loadBrands();
+}
+
+/* --- kopyalama --- */
+function copyText(txt){
+  navigator.clipboard.writeText(txt).then(()=>toast('Kopyalandı: '+txt.slice(0,40)));
+}
+function copyAllKeywords(){
+  const kws=recs.filter(r=>r.type==activeTab).map(r=>r.keyword);
+  if(!kws.length){toast('Kelime yok');return;}
+  navigator.clipboard.writeText(kws.join('\n'));
+  toast(kws.length+' kelime kopyalandı (her satıra 1)');
+}
+function copyTSV(){
+  const rows=recs.filter(r=>r.type==activeTab);
+  if(!rows.length){toast('Satır yok');return;}
+  const head=['Kampanya','AdGroup','Kelime','Match','MevcutCPC','ÖnerilenBid','Tık','Harcama','Satış','Sipariş','ACOS%','Neden'];
+  const lines=[head.join('\t')];
+  for(const r of rows){
+    const m=r.metrics||{};
+    lines.push([r.campaign,r.ad_group,r.keyword,r.match_type,r.current_value??'',r.suggested_value??'',
+      m.clicks??'',m.spend??'',m.sales??'',m.orders??'',m.acos??'',
+      (r.reason||'').replace(/\t/g,' ').replace(/\n/g,' ')].join('\t'));
+  }
+  navigator.clipboard.writeText(lines.join('\n'));
+  toast(rows.length+' satır TSV kopyalandı (Excel/Sheets\'e yapıştır)');
+}
+
+/* --- AI --- */
+async function runAI(){
+  if(!brandId)return;
+  if(!confirm('AI stratejisi üretilecek (Claude API kullanılır, ~30-90 sn).\nSonra denetçi müdür kontrol edecek.\nDevam?'))return;
+  $('aiPanel').style.display='block';
+  $('aiLoad').style.display='block';
+  $('aiBody').innerHTML='';
+  $('revBadge').innerHTML='';
+  $('aiMeta').textContent='';
+  setMgr('review','🛡 Müdür: Kontrol ediyor...');
+  try{
+    const r=await api(`/api/brands/${brandId}/ai-strategy`,{method:'POST'});
+    const data=await r.json();
+    renderAI(data);
+    // Header rozeti güncelle
+    const rev=data.review||{};
+    if(rev.safe_to_send_to_user===false){setMgr('block','🛡 Müdür: Gönderme! Sorun var');}
+    else if((rev.issues||[]).some(i=>i.severity==='warning')){setMgr('warn','🛡 Müdür: Uyarılarla onaylandı');}
+    else{setMgr('ok','🛡 Müdür: Onayladı ✓');}
+  }catch(e){
+    $('aiBody').innerHTML=`<div class="rev-issue sev-critical">Hata: ${e.message||e}</div>`;
+    setMgr('block','🛡 Müdür: Hata');
+  }finally{
+    $('aiLoad').style.display='none';
+  }
+}
+
+async function loadAILatest(){
+  try{
+    const r=await fetch(`/api/brands/${brandId}/ai-strategy/latest`);
+    const d=await r.json();
+    if(d.exists){
+      $('aiPanel').style.display='block';
+      renderAI(d);
+      $('aiMeta').textContent='son üretim: '+d.created_at;
+    }else{
+      $('aiPanel').style.display='none';
+    }
+  }catch(e){}
+}
+
+function esc(s){return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+
+function renderAI(data){
+  const s=data.strategy||{}, rev=data.review||{};
+  // rozet
+  let badge='';
+  if(rev.safe_to_send_to_user===false||rev.approved===false){
+    badge=`<span class="rev-badge rev-bad">🛑 Müdür: gönderilmesi güvenli DEĞİL</span>`;
+  }else if((rev.issues||[]).some(i=>i.severity==='warning')){
+    badge=`<span class="rev-badge rev-warn">⚠ Uyarılarla onaylandı</span>`;
+  }else{
+    badge=`<span class="rev-badge rev-ok">✓ Müdür onayladı</span>`;
+  }
+  $('revBadge').innerHTML=badge;
+
+  // Müdür raporu - en üstte
+  const mgrCls=rev.safe_to_send_to_user===false?'block':(rev.issues||[]).some(i=>i.severity==='warning')?'warn':'ok';
+  const mgrIcon=mgrCls==='ok'?'✅':mgrCls==='warn'?'⚠️':'🛑';
+  const mgrLbl=mgrCls==='ok'?'Onaylandı':mgrCls==='warn'?'Uyarılarla Onaylandı':'ENGELLENDİ';
+  const mgrMeta=rev._meta||{};
+  let html=`<div class="mgr-report ${mgrCls}">
+    <h4>🛡 Müdür Denetim Raporu <span class="rev-badge rev-${mgrCls==='ok'?'ok':mgrCls==='warn'?'warn':'bad'}">${mgrIcon} ${mgrLbl}</span></h4>
+    <div class="summary">${esc(rev.summary||'—')}</div>
+    <div class="meta">Risk seviyesi: <b>${esc(rev.risk_level||'—').toUpperCase()}</b> · Model: ${esc(mgrMeta.model||'—')} · Kontrol: ${mgrMeta.ai_called?'AI + heuristik':'sadece heuristik'} · Bulgu: ${(rev.issues||[]).length}</div>
+  </div>`;
+  if(s.error){
+    html+=`<div class="rev-issue sev-critical"><b>AI parse hatası:</b> ${esc(s.error)}<br><pre style="white-space:pre-wrap;margin-top:8px;font-size:11px">${esc(s.raw_output||'')}</pre></div>`;
+  }
+  if(s.executive_summary){
+    html+=`<div class="exec"><b>Yönetici Özeti:</b><br>${esc(s.executive_summary)}</div>`;
+  }
+  const ds=s.data_sufficiency;
+  if(ds){
+    const cls=ds.overall==='sufficient'?'rev-ok':(ds.overall==='insufficient'?'rev-bad':'rev-warn');
+    html+=`<div class="ai-section"><h4>📊 Veri Yeterliliği</h4>
+      <span class="rev-badge ${cls}">${esc(ds.overall||'—')}</span>
+      <div style="margin-top:6px;color:var(--muted)">${esc(ds.notes||'')}</div></div>`;
+  }
+  // denetçi issue'ları
+  if((rev.issues||[]).length){
+    html+=`<div class="ai-section"><h4>🔍 Denetçi Notları</h4>`+
+      rev.issues.map(i=>`<div class="rev-issue sev-${esc(i.severity||'info')}">
+        <b>[${esc(i.severity||'')}]</b> <span class="muted">${esc(i.location||'')}</span><br>
+        ${esc(i.problem||'')}<br>
+        <span style="color:var(--green)">→ ${esc(i.fix||'')}</span></div>`).join('')+`</div>`;
+  }
+  // yeni kampanyalar
+  if((s.new_campaigns||[]).length){
+    html+=`<div class="ai-section"><h4>🚀 Yeni Kampanya Önerileri</h4>`+
+      s.new_campaigns.map(c=>`<div class="ai-item">
+        <div class="k">${esc(c.name)} <span class="muted">[${esc(c.type)}]</span>
+        <button class="cpy" onclick="copyText('${esc(c.name).replace(/'/g,"\\'")}')">📋 isim</button></div>
+        <div class="why">${esc(c.why||'')}</div>
+        <div class="small muted" style="margin-top:4px">
+          Bütçe: $${esc(c.suggested_daily_budget_usd)} · Başlangıç bid: $${esc(c.starting_bid_usd)} · Öncelik: ${esc(c.priority||'')}
+        </div>
+        <div class="small" style="margin-top:4px">Seed: <code>${esc((c.seed_keywords_or_asins||[]).join(', '))}</code>
+        <button class="cpy" onclick="copyText('${(c.seed_keywords_or_asins||[]).join('\\n').replace(/'/g,"\\'")}')">📋 seed'leri kopyala</button></div>
+      </div>`).join('')+`</div>`;
+  }
+  // keyword groups
+  if((s.keyword_groups||[]).length){
+    html+=`<div class="ai-section"><h4>🗂 Kelime Grupları (AdGroup önerisi)</h4>`+
+      s.keyword_groups.map(g=>`<div class="ai-item">
+        <div class="k">${esc(g.ad_group_name)} <span class="muted">→ ${esc(g.target_campaign||'')}</span>
+        <button class="cpy" onclick="copyText('${(g.keywords||[]).join('\\n').replace(/'/g,"\\'")}')">📋 kelimeleri kopyala</button></div>
+        <div class="small" style="margin-top:4px">${(g.keywords||[]).map(k=>`<code style="margin-right:6px">${esc(k)}</code>`).join('')}</div>
+      </div>`).join('')+`</div>`;
+  }
+  // ekstra negatifler
+  if((s.extra_negatives||[]).length){
+    const allNegs=s.extra_negatives.map(n=>n.keyword).join('\n');
+    html+=`<div class="ai-section"><h4>🚫 Ekstra (Semantik) Negatif Öneriler
+      <button class="cpy" onclick="copyText(\`${allNegs.replace(/`/g,'\\`')}\`)">📋 tümünü kopyala</button></h4>`+
+      s.extra_negatives.map(n=>`<div class="ai-item">
+        <span class="k">${esc(n.keyword)}</span> <span class="muted">[${esc(n.match_type)}] · scope: ${esc(n.scope||'')}</span>
+        <div class="why">${esc(n.reason||'')}</div>
+      </div>`).join('')+`</div>`;
+  }
+  // bid commentary
+  if((s.bid_commentary||[]).length){
+    html+=`<div class="ai-section"><h4>💡 Bid Yorumları</h4>`+
+      s.bid_commentary.map(b=>`<div class="ai-item">
+        <span class="k">${esc(b.keyword)}</span> <span class="muted small">güven: ${esc(b.confidence||'')}</span>
+        <div class="why">${esc(b.commentary||'')}</div>
+      </div>`).join('')+`</div>`;
+  }
+  // butce dagilimi
+  const ba=s.budget_allocation;
+  if(ba&&(ba.notes||(ba.distribution||[]).length)){
+    html+=`<div class="ai-section"><h4>💰 Bütçe Dağılımı</h4>
+      <div class="why">${esc(ba.notes||'')}</div>`+
+      (ba.distribution||[]).map(d=>`<div class="ai-item">
+        <span class="k">${esc(d.campaign_or_type)}</span> — <b>%${esc(d.percent)}</b>
+        <div class="why">${esc(d.reason||'')}</div>
+      </div>`).join('')+`</div>`;
+  }
+  if(s.web_findings){
+    html+=`<div class="ai-section"><h4>🌐 Web Araştırması</h4><div class="why">${esc(s.web_findings)}</div></div>`;
+  }
+  const meta=s._meta||{};
+  if(meta.model){
+    $('aiMeta').textContent=`${meta.model}${meta.web_search_used?' + web':''} · ${meta.input_tokens||0}→${meta.output_tokens||0} tok`;
+  }
+  $('aiBody').innerHTML=html||'<div class="muted">Boş çıktı.</div>';
+}
+
+loadBrands();
+</script>
+</body>
+</html>
