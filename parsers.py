@@ -112,8 +112,29 @@ def _base_metrics(r):
     }
 
 
+def _id(v):
+    """Amazon ID kolonlarini normalize et (float/int/str)."""
+    if v is None or v == "":
+        return ""
+    if isinstance(v, float) and v.is_integer():
+        return str(int(v))
+    return str(v).strip()
+
+
+def _ids(r):
+    """Amazon rapor kolonlarindan Campaign/AdGroup/Portfolio/Keyword/Target ID'lerini yakala."""
+    return {
+        "campaign_id": _id(r.get("Campaign ID")),
+        "ad_group_id": _id(r.get("Ad Group ID")),
+        "portfolio_id": _id(r.get("Portfolio ID")),
+        "keyword_id": _id(r.get("Keyword ID") or r.get("Keyword or Product Targeting ID")),
+        "targeting_id": _id(r.get("Product Targeting ID")),
+    }
+
+
 def _norm_search_term(r):
     d = _base_metrics(r)
+    d.update(_ids(r))
     d.update({
         "campaign": str(r.get("Campaign Name") or "").strip(),
         "ad_group": str(r.get("Ad Group Name") or "").strip(),
@@ -127,6 +148,7 @@ def _norm_search_term(r):
 
 def _norm_targeting(r):
     d = _base_metrics(r)
+    d.update(_ids(r))
     d.update({
         "campaign": str(r.get("Campaign Name") or "").strip(),
         "ad_group": str(r.get("Ad Group Name") or "").strip(),
@@ -139,6 +161,7 @@ def _norm_targeting(r):
 
 def _norm_placement(r):
     d = _base_metrics(r)
+    d.update(_ids(r))
     d.update({
         "campaign": str(r.get("Campaign Name") or "").strip(),
         "placement": str(r.get("Placement") or "").strip(),
@@ -149,6 +172,7 @@ def _norm_placement(r):
 
 def _norm_campaign(r):
     d = _base_metrics(r)
+    d.update(_ids(r))
     d.update({
         "campaign": str(r.get("Campaign Name") or "").strip(),
         "status": str(r.get("Status") or "").strip(),

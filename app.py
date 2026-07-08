@@ -673,7 +673,12 @@ def export_bulksheet(brand_id: int):
         d = dict(r)
         d["metrics"] = json.loads(d["metrics"] or "{}")
         recs.append(d)
-    buf = bulksheet.build(recs, brand["name"], dict(brand))
+    # Raw report rows'i ID map icin gec
+    with db() as c:
+        all_rows = []
+        for rtype in ("search_term", "targeting", "campaign", "placement"):
+            all_rows.extend(_load_rows(c, brand_id, rtype))
+    buf = bulksheet.build(recs, brand["name"], dict(brand), report_rows=all_rows)
     fname = f"{brand['name']}_amazon_bulksheet_{datetime.now():%Y%m%d}.xlsx"
     return StreamingResponse(
         buf, media_type="application/vnd.openxmlformats-officedocument"
