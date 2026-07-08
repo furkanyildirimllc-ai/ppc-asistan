@@ -14,3 +14,9 @@ services:
         value: claude-fable-5
       - key: PYTHON_VERSION
         value: 3.11.9
+      - key: PYTHONIOENCODING
+        value: utf-8
+      - key: LC_ALL
+        value: C.UTF-8
+      - key: LANG
+        value: C.UTF-8

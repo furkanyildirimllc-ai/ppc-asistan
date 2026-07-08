@@ -195,6 +195,36 @@
   .prio-group-head{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;padding:8px 12px;border-radius:6px;margin-bottom:8px;display:inline-block}
   .prio-group-urgent{background:rgba(248,113,113,.13);color:var(--red);border-left:3px solid var(--red)}
   .prio-group-later{background:rgba(96,165,250,.13);color:var(--blue);border-left:3px solid var(--blue)}
+  /* Kampanya Advisor kartları */
+  .camp-card{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:16px;margin-bottom:12px;transition:.2s;position:relative;overflow:hidden}
+  .camp-card:hover{border-color:rgba(245,158,11,.4)}
+  .camp-card.urgency-high::before{content:'';position:absolute;left:0;top:0;bottom:0;width:4px;background:var(--red)}
+  .camp-card.urgency-med::before{content:'';position:absolute;left:0;top:0;bottom:0;width:4px;background:var(--accent)}
+  .camp-card.urgency-low::before{content:'';position:absolute;left:0;top:0;bottom:0;width:4px;background:var(--green)}
+  .camp-head{display:flex;align-items:center;gap:12px;padding-bottom:10px;border-bottom:1px solid var(--border);margin-bottom:10px;flex-wrap:wrap}
+  .camp-head .name{font-size:15px;font-weight:700;flex:1;min-width:220px}
+  .camp-head .tt{color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:.4px;background:var(--panel2);padding:2px 8px;border-radius:10px;font-weight:600}
+  .camp-metrics{display:flex;gap:16px;flex-wrap:wrap;font-size:12.5px}
+  .camp-metrics .m{color:var(--muted)}
+  .camp-metrics .m b{color:var(--text);font-weight:700;margin-right:2px}
+  .camp-metrics .m.acos-over b{color:var(--red)}
+  .camp-metrics .m.acos-under b{color:var(--green)}
+  .camp-actions{margin-top:10px}
+  .camp-action{display:flex;gap:12px;padding:10px 12px;border-radius:8px;background:var(--panel2);margin-bottom:6px;align-items:flex-start;border-left:3px solid var(--border)}
+  .camp-action.sev-critical{border-left-color:var(--red);background:rgba(248,113,113,.06)}
+  .camp-action.sev-high{border-left-color:var(--accent);background:rgba(245,158,11,.06)}
+  .camp-action.sev-medium{border-left-color:var(--blue);background:rgba(96,165,250,.06)}
+  .camp-action .icon{font-size:20px;line-height:1;flex-shrink:0}
+  .camp-action .body{flex:1;min-width:0}
+  .camp-action .title{font-weight:600;font-size:13px;margin-bottom:2px}
+  .camp-action .detail{color:var(--muted);font-size:12px;line-height:1.5;margin-bottom:4px}
+  .camp-action .step{color:var(--green);font-size:11.5px;background:rgba(52,211,153,.06);padding:4px 8px;border-radius:5px;display:inline-block;margin-top:3px}
+  .camp-action .cpy{margin-left:6px}
+  .camp-no-issue{padding:10px 12px;color:var(--green);font-size:12.5px;background:rgba(52,211,153,.08);border-radius:6px}
+  .urgency-badge{padding:3px 10px;border-radius:10px;font-size:11px;font-weight:700;letter-spacing:.3px}
+  .u-high{background:rgba(248,113,113,.15);color:var(--red)}
+  .u-med{background:rgba(245,158,11,.15);color:var(--accent)}
+  .u-low{background:rgba(52,211,153,.15);color:var(--green)}
   /* Müdür rozeti */
   .mgr-badge{display:inline-flex;align-items:center;gap:6px;padding:6px 12px;border-radius:20px;font-size:12px;font-weight:600;border:1px solid var(--border);background:var(--panel2);color:var(--muted);cursor:help;transition:.2s}
   .mgr-standby{color:var(--muted)}
@@ -327,6 +357,10 @@
   <!-- Section: derinlemesine metrikler -->
   <div class="sec-h"><b>Portföy Metrikleri</b><span class="sub">yapı, dağılım, en iyi / en kötü</span><span class="line"></span></div>
   <div class="metric-groups" id="metricGroups"></div>
+
+  <!-- Section: kampanya bazlı öneriler -->
+  <div class="sec-h"><b>🎯 Kampanya Bazlı Öneriler</b><span class="sub">yüksek harcamalı ve acil olanlar önce — her kampanyaya spesifik aksiyonlar</span><span class="line"></span></div>
+  <div id="campAdvisor"></div>
 
   <!-- Section: grafikler -->
   <div class="sec-h"><b>Görsel Analiz</b><span class="sub">trend, dağılım, kampanya karşılaştırma</span><span class="line"></span></div>
@@ -616,6 +650,7 @@ async function loadInsights(){
     safe('Chart',()=>renderCharts(d),'charts');
     safe('Profit',()=>renderProfitBanner(d.profit));
     safe('Alarm',()=>renderAlarm(d),'alarmStrip');
+    safe('CampAdvisor',()=>renderCampAdvisor(d.campaign_advisor||[]),'campAdvisor');
   }catch(e){
     console.error('loadInsights fatal:',e);
     $('hero').innerHTML=errBox('loadInsights',e);
@@ -743,6 +778,54 @@ function renderMetricGroups(d){
 
 function renderProfitBanner(p){
   const el=$('profitBanner');if(el)el.innerHTML='';
+}
+
+function renderCampAdvisor(camps){
+  const box=$('campAdvisor');
+  if(!box)return;
+  if(!camps.length){
+    box.innerHTML='<div class="muted small" style="padding:12px;background:var(--panel);border:1px solid var(--border);border-radius:8px">Kampanya raporu yükleyince buraya kampanya bazlı öneriler gelecek.</div>';
+    return;
+  }
+  const b=brands.find(x=>x.id==brandId)||{};
+  const tacos=(b.target_acos||0.3)*100;
+  const html=camps.map(c=>{
+    const urgClass=c.action_count>=3?'urgency-high':c.action_count>=1?'urgency-med':'urgency-low';
+    const urgBadge=c.action_count>=3?'<span class="urgency-badge u-high">🔥 ACİL</span>':
+                   c.action_count>=1?'<span class="urgency-badge u-med">⚠ İnceleme</span>':
+                   '<span class="urgency-badge u-low">✓ İyi</span>';
+    const acosCls=c.acos_status==='over'?'acos-over':c.acos_status==='under'?'acos-under':'';
+    const acosTxt=c.acos_pct==null?'—':'%'+c.acos_pct;
+    const actionsHtml=c.actions.length?c.actions.map((a,i)=>{
+      const copyBtn=a.copy_list&&a.copy_list.length?
+        `<button class="cpy" onclick='copyText(${JSON.stringify(a.copy_list.join("\\n"))})'>📋 kelimeleri kopyala (${a.copy_list.length})</button>`:'';
+      return `<div class="camp-action sev-${a.severity}">
+        <div class="icon">${a.icon}</div>
+        <div class="body">
+          <div class="title">${esc(a.action)}</div>
+          <div class="detail">${esc(a.detail||'')}</div>
+          <div class="step">→ ${esc(a.amazon_step||'')}</div>
+          ${copyBtn}
+        </div>
+      </div>`;
+    }).join(''):`<div class="camp-no-issue">✓ Bu kampanyada acil aksiyon önerisi yok. Sağlıklı çalışıyor.</div>`;
+    return `<div class="camp-card ${urgClass}">
+      <div class="camp-head">
+        <div class="name">${esc(c.campaign)} ${c.targeting_type?`<span class="tt">${esc(c.targeting_type)}</span>`:''}</div>
+        ${urgBadge}
+      </div>
+      <div class="camp-metrics">
+        <div class="m"><b>$${num(c.spend)}</b> harcama</div>
+        <div class="m"><b>$${num(c.sales)}</b> satış</div>
+        <div class="m"><b>${c.orders}</b> sipariş</div>
+        <div class="m"><b>${num(c.clicks)}</b> tık</div>
+        <div class="m ${acosCls}">ACOS <b>${acosTxt}</b> (hedef %${tacos.toFixed(0)})</div>
+        ${c.action_count?`<div class="m"><b>${c.action_count}</b> aksiyon</div>`:''}
+      </div>
+      <div class="camp-actions">${actionsHtml}</div>
+    </div>`;
+  }).join('');
+  box.innerHTML=html;
 }
 
 function renderHero(d){

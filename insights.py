@@ -495,6 +495,264 @@ def top_search_terms(search_terms, limit=5):
     } for t, v in ranked if v["sales"] > 0]
 
 
+def campaign_advisor(brand, search_terms, targets, placements, campaigns,
+                     top_n=8):
+    """Her aktif kampanya icin spesifik aksiyon listesi uretir.
+    Yuksek harcamali ve/veya acil sorunlu kampanyalar oncelikli.
+    """
+    tacos = brand["target_acos"]
+    aov_default = 30.0
+    total_sales = sum(t.get("sales", 0) for t in search_terms)
+    total_orders = sum(t.get("orders", 0) for t in search_terms)
+    aov = (total_sales / total_orders) if total_orders else aov_default
+
+    # Kannibalizm haritasi - hangi kelime hangi kampanyalarda
+    kw_map = defaultdict(list)
+    for t in targets:
+        if t["clicks"] < 3:
+            continue
+        kw_map[t["targeting"].lower()].append(t)
+
+    # Kampanya bazli agregasyon
+    campaign_data = {}
+    for st in search_terms:
+        camp = st["campaign"]
+        if not camp:
+            continue
+        cd = campaign_data.setdefault(camp, {
+            "spend": 0, "sales": 0, "orders": 0, "clicks": 0,
+            "wasted_terms": [], "harvest_terms": [], "total_term_count": 0,
+        })
+        cd["spend"] += st["spend"]
+        cd["sales"] += st["sales"]
+        cd["orders"] += st["orders"]
+        cd["clicks"] += st["clicks"]
+
+    # Wasted terms per campaign
+    term_agg = defaultdict(lambda: defaultdict(lambda: {"clicks": 0, "spend": 0, "orders": 0, "sales": 0, "is_asin": False}))
+    for st in search_terms:
+        camp = st["campaign"]
+        if not camp:
+            continue
+        a = term_agg[camp][st["term"]]
+        a["clicks"] += st["clicks"]
+        a["spend"] += st["spend"]
+        a["orders"] += st["orders"]
+        a["sales"] += st["sales"]
+        a["is_asin"] = st.get("is_asin", False)
+
+    existing_exact = {t["targeting"].lower() for t in targets if t["match_type"] == "EXACT"}
+
+    for camp, terms in term_agg.items():
+        if camp not in campaign_data:
+            continue
+        cd = campaign_data[camp]
+        cd["total_term_count"] = len(terms)
+        for term, m in terms.items():
+            if m["orders"] == 0 and (m["clicks"] >= 8 or m["spend"] >= tacos * aov * 1.5):
+                cd["wasted_terms"].append({
+                    "term": term, "clicks": int(m["clicks"]),
+                    "spend": round(m["spend"], 2),
+                    "is_asin": m["is_asin"],
+                })
+            elif m["orders"] >= 2 and m["sales"] > 0:
+                acos = m["spend"] / m["sales"]
+                if acos <= tacos and term not in existing_exact:
+                    rpc = m["sales"] / m["clicks"] if m["clicks"] else 0
+                    bid = max(0.15, round(rpc * tacos, 2))
+                    cd["harvest_terms"].append({
+                        "term": term, "orders": int(m["orders"]),
+                        "sales": round(m["sales"], 2),
+                        "acos_pct": round(acos * 100, 1),
+                        "suggested_bid": bid,
+                        "is_asin": m["is_asin"],
+                    })
+
+    # Targeting kampanya bazli bid onerileri
+    targeting_by_camp = defaultdict(list)
+    for t in targets:
+        if t["campaign"]:
+            targeting_by_camp[t["campaign"]].append(t)
+
+    # TOS placement per campaign
+    tos_by_camp = {}
+    for p in placements or []:
+        if "Top of Search" in p.get("placement", ""):
+            tos_by_camp[p["campaign"]] = p
+
+    # Kampanya bazli aksiyon uretimi
+    results = []
+    for camp_row in campaigns:
+        camp = camp_row["campaign"]
+        if not camp:
+            continue
+        agg = campaign_data.get(camp) or {"spend": camp_row.get("spend", 0),
+                                          "sales": camp_row.get("sales", 0),
+                                          "orders": camp_row.get("orders", 0),
+                                          "clicks": camp_row.get("clicks", 0),
+                                          "wasted_terms": [], "harvest_terms": [],
+                                          "total_term_count": 0}
+        spend = agg["spend"] or camp_row.get("spend", 0)
+        sales = agg["sales"] or camp_row.get("sales", 0)
+        orders = agg["orders"] or camp_row.get("orders", 0)
+        clicks = agg["clicks"] or camp_row.get("clicks", 0)
+        if clicks < 5:
+            continue
+        acos = (spend / sales) if sales > 0 else None
+        actions = []
+
+        # 1. Wasted spend - negatifle
+        if agg["wasted_terms"]:
+            waste_total = sum(w["spend"] for w in agg["wasted_terms"])
+            top_wasted = sorted(agg["wasted_terms"], key=lambda w: -w["spend"])[:3]
+            actions.append({
+                "severity": "critical",
+                "icon": "🚫",
+                "action": f"{len(agg['wasted_terms'])} arama terimi negatifle "
+                          f"(${waste_total:.0f} israf)",
+                "detail": ", ".join(f"'{w['term']}' (${w['spend']:.0f})"
+                                    for w in top_wasted),
+                "amazon_step": "Bu kampanya → Negative targeting → Add → "
+                               "her biri Negative Exact",
+                "copy_list": [w["term"] for w in agg["wasted_terms"][:20]],
+            })
+
+        # 2. Harvest - exact'e tasi
+        if agg["harvest_terms"]:
+            top_h = sorted(agg["harvest_terms"], key=lambda h: -h["sales"])[:3]
+            harvest_sales = sum(h["sales"] for h in agg["harvest_terms"])
+            actions.append({
+                "severity": "high",
+                "icon": "🌱",
+                "action": f"{len(agg['harvest_terms'])} kelime exact kampanyaya "
+                          f"tasi (${harvest_sales:.0f} kazanan)",
+                "detail": " · ".join(f"'{h['term']}' ({h['orders']} sip, "
+                                     f"bid ${h['suggested_bid']})" for h in top_h),
+                "amazon_step": "Exact kampanyana ekle + BURADA negative exact yap "
+                               "(traffic sculpting)",
+                "copy_list": [f"{h['term']}\t{h['suggested_bid']}"
+                              for h in agg["harvest_terms"][:20]],
+            })
+
+        # 3. Bid down/up onerileri bu kampanya icin
+        bid_down = []
+        bid_up = []
+        for t in targeting_by_camp.get(camp, []):
+            if t["clicks"] < 5:
+                continue
+            if t["match_type"] not in ("EXACT", "PHRASE", "BROAD") and \
+               not t["targeting"].lower().startswith("asin"):
+                continue
+            if t["sales"] <= 0 and t["spend"] > tacos * aov:
+                bid_down.append(t)
+            elif t["sales"] > 0:
+                ac = t["spend"] / t["sales"]
+                if ac > tacos * 1.15:
+                    bid_down.append(t)
+                elif ac < tacos * 0.7 and t["orders"] >= 1:
+                    bid_up.append(t)
+        if len(bid_down) >= 3:
+            top_bd = sorted(bid_down, key=lambda t: -t["spend"])[:3]
+            actions.append({
+                "severity": "high",
+                "icon": "📉",
+                "action": f"{len(bid_down)} kelimede bid dusur "
+                          f"(ACOS hedef ustunde)",
+                "detail": " · ".join(f"'{t['targeting']}' CPC ${t['cpc']:.2f}"
+                                     for t in top_bd),
+                "amazon_step": "Bu kampanya → Targeting → kelimeye tikla → bid guncelle",
+            })
+        if len(bid_up) >= 2:
+            top_bu = sorted(bid_up, key=lambda t: -t["sales"])[:3]
+            actions.append({
+                "severity": "medium",
+                "icon": "📈",
+                "action": f"{len(bid_up)} kelimede bid artir "
+                          f"(ACOS cok dusuk, olcek firsati)",
+                "detail": " · ".join(f"'{t['targeting']}' "
+                                     f"ACOS %{t['spend']/t['sales']*100:.0f}"
+                                     for t in top_bu),
+                "amazon_step": "Targeting → bid +%5-10 · 1 hafta bekle · gerekirse tekrar",
+            })
+
+        # 4. TOS placement multiplier fırsati
+        tos = tos_by_camp.get(camp)
+        if tos and tos["orders"] >= 2 and tos["sales"] > 0:
+            tos_acos = tos["spend"] / tos["sales"]
+            if tos_acos < tacos * 0.7:
+                mult = 50 if tos_acos < tacos * 0.5 else 25
+                actions.append({
+                    "severity": "high",
+                    "icon": "⬆",
+                    "action": f"TOS placement +%{mult} çarpan ekle",
+                    "detail": f"TOS ACOS %{tos_acos*100:.1f} hedefin cok altinda "
+                              f"({int(tos['orders'])} siparis) - kaldirac firsati",
+                    "amazon_step": "Kampanya → Settings → Adjust bids by "
+                                   f"placement → Top of search: +{mult}%",
+                })
+
+        # 5. Kannibalizm tespiti
+        cannibals = []
+        for t in targeting_by_camp.get(camp, []):
+            kw = t["targeting"].lower()
+            others = [o for o in kw_map.get(kw, [])
+                      if o["campaign"] != camp and o["clicks"] >= 3]
+            if not others:
+                continue
+            # Ayni kelimenin baska kampanyada varlığı - hangisi kazaniyor?
+            my_acos = (t["spend"] / t["sales"]) if t["sales"] > 0 else 999
+            for o in others:
+                o_acos = (o["spend"] / o["sales"]) if o["sales"] > 0 else 999
+                if o_acos < my_acos:  # digeri daha iyi
+                    cannibals.append({
+                        "term": t["targeting"],
+                        "winner_camp": o["campaign"],
+                        "my_cpc": round(t["cpc"], 2),
+                        "winner_cpc": round(o["cpc"], 2),
+                    })
+                    break
+        if cannibals:
+            top_c = cannibals[:3]
+            actions.append({
+                "severity": "medium",
+                "icon": "⚔️",
+                "action": f"{len(cannibals)} kelime baska kampanyayla "
+                          f"kannibalizm - burada negatifle",
+                "detail": " · ".join(f"'{c['term']}' → '{c['winner_camp']}' kazaniyor"
+                                     for c in top_c),
+                "amazon_step": "Bu kampanya → Negative → Negative exact "
+                               "(kelimeler asagida kopyalanabilir)",
+                "copy_list": [c["term"] for c in cannibals[:20]],
+            })
+
+        # Urgency skoru - harcama × sorun sayisi × (acos delta)
+        acos_penalty = 1.0
+        if acos is not None:
+            acos_penalty = max(0.5, min(3.0, acos / tacos))
+        urgency = spend * (1 + len(actions) * 0.3) * acos_penalty
+        if not actions:
+            urgency *= 0.2  # sorunsuz kampanyalar sona
+
+        results.append({
+            "campaign": camp,
+            "targeting_type": camp_row.get("targeting_type", ""),
+            "spend": round(spend, 2),
+            "sales": round(sales, 2),
+            "orders": int(orders),
+            "clicks": int(clicks),
+            "acos_pct": round(acos * 100, 1) if acos is not None else None,
+            "acos_status": "over" if acos is not None and acos > tacos else
+                           ("under" if acos is not None else "no_sales"),
+            "term_count": agg["total_term_count"],
+            "actions": actions,
+            "action_count": len(actions),
+            "urgency_score": round(urgency, 1),
+        })
+
+    results.sort(key=lambda r: -r["urgency_score"])
+    return results[:top_n]
+
+
 def dashboard(brand, search_terms, targets, placements, campaigns,
               det_recs, uploads):
     """Tum insights'lari toplu dondurur."""
@@ -529,6 +787,8 @@ def dashboard(brand, search_terms, targets, placements, campaigns,
         "bid_conflicts": conflicts,
         "priorities": prio,
         "priorities_grouped": prio_grouped,
+        "campaign_advisor": campaign_advisor(brand, search_terms, targets,
+                                             placements, campaigns),
         "pro_insights": {
             "skag_candidates": skag,
             "tos_multiplier": tos_mult,
