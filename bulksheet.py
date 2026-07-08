@@ -1,31 +1,26 @@
 """Amazon Sponsored Products Bulk Operations Excel formatinda export.
 
-Amazon Ads Console -> Bulk Operations sayfasinda direkt yuklenebilir.
+Cıkış: TEK sheet "Sponsored Products Campaigns" - Amazon'un canonical formatı.
+Satırlar dogru hierarchical sirada:
+  1. Campaign (Create) - yeni harvest kampanyasi
+  2. Ad Group (Create) - yeni ad group
+  3. Bidding Adjustment (Create) - placement multiplier (opsiyonel)
+  4. Keyword (Update) - mevcut kelimede bid guncelleme
+  5. Keyword (Create) - yeni exact kelime (harvest)
+  6. Product Targeting (Create) - yeni ASIN hedefi
+  7. Campaign Negative Keyword (Create) - negatif kelime
+  8. Traffic sculpting negatifleri
 
-GUVENLIK KURALI (kritik): Bulk'a SADECE hedef Campaign Name + Ad Group Name
-KESIN OLARAK bilinen satirlar yazilir. Bilinmeyen/belirsiz durumda satir bulk
-sheet'e YAZILMAZ; onun yerine ayri bir "manuel ekle" listesine dusurulur ve
-kullanici Amazon konsolunda normal (guvenli) UI akisiyla ekler. Amac: yanlis
-kampanya adi ya da uydurma ad group adiyla bulk satiri yukleyip yanlis yere
-harcama baglatmamak.
-
-Neden bu kurala ihtiyac var:
-- 'harvest' (yeni exact kelime) ve 'harvest_pt' (yeni urun hedefleme) onerileri
-  BIRDEN FAZLA kaynak (auto/broad/phrase) kampanyadan gelir; kelimenin GIDECEGI
-  hedef exact kampanya farkli bir kampanyadir ve sistemin bunu bilmesinin tek
-  yolu marka ayarlarindaki harvest_campaign/harvest_ad_group alanlaridir.
-  Bu alanlar bos ise hedef kesin degildir -> bulk'a yazilmaz.
-- Negatif KELIME'ler campaign-level 'Campaign Negative Keyword' entity'siyle
-  eklenebilir (ad group gerektirmez) -> bunlar HER ZAMAN guvenle bulk'a yazilir.
-- Negatif ASIN (product targeting) Amazon'da sadece ad-group seviyesinde var;
-  ad group bilinmedigi icin bunlar da manuel listeye duser.
-- Bid guncellemeleri (bid_down/bid_up) targeting raporundan gelir; kampanya VE
-  ad group ADI GERCEK ve TEKIL'dir (Amazon'un kendi raporundan) -> her zaman
-  guvenle bulk'a yazilir.
+Parent-ID hatalari icin:
+- Kampanya adi ozel karakter icermiyor (parantez yok)
+- Ad Group Name'ler bire bir tutarli
+- Tum required field'lar dolduruldu
+- Ayni upload icinde parent oluşturulup child satırında referans veriliyor
 """
 import io
 import openpyxl
 from openpyxl.styles import Alignment, Font, PatternFill
+from datetime import datetime
 
 BULK_HEADERS = [
     "Product", "Entity", "Operation", "Campaign ID", "Ad Group ID",
@@ -34,7 +29,8 @@ BULK_HEADERS = [
     "Campaign Name (Informational only)", "Ad Group Name (Informational only)",
     "Portfolio Name (Informational only)", "Start Date", "End Date",
     "Targeting Type", "State", "Daily Budget", "SKU", "ASIN (Informational only)",
-    "Eligibility Status (Informational only)", "Reason for Ineligibility (Informational only)",
+    "Eligibility Status (Informational only)",
+    "Reason for Ineligibility (Informational only)",
     "Ad Group Default Bid", "Ad Group Default Bid (Informational only)",
     "Bid", "Keyword Text", "Native Language Keyword", "Native Language Locale",
     "Match Type", "Bidding Strategy",
@@ -45,250 +41,365 @@ BULK_HEADERS = [
     "Orders", "Units", "Conversion Rate", "ACOS", "CPC", "ROAS",
 ]
 
+# Amazon placement API adlari (Bidding Adjustment entity icin)
+PLACEMENT_API = {
+    "top of search": "Placement Top",
+    "top": "Placement Top",
+    "product pages": "Placement Product Page",
+    "detail page": "Placement Product Page",
+    "product page": "Placement Product Page",
+    "rest of search": "Placement Rest Of Search",
+    "rest": "Placement Rest Of Search",
+}
 
-def _row(campaign, ad_group, entity, operation, extra):
-    r = {h: "" for h in BULK_HEADERS}
-    r["Product"] = "Sponsored Products"
-    r["Entity"] = entity
-    r["Operation"] = operation
-    r["Campaign Name"] = campaign
-    r["Ad Group Name"] = ad_group
-    r["State"] = "enabled"
-    r.update(extra)
-    return r
+
+def _sanitize_name(s):
+    """Kampanya/adgroup adindan Amazon'un anlayamayacagi karakterleri temizle."""
+    if not s:
+        return s
+    s = str(s).strip()
+    # Amazon'da parentez, tab, cift bosluk sorun cikarabiliyor
+    s = s.replace("(", "").replace(")", "").replace("\t", " ")
+    while "  " in s:
+        s = s.replace("  ", " ")
+    return s.strip()
+
+
+def _empty_row():
+    return {h: "" for h in BULK_HEADERS}
 
 
 def build(recs, brand_name, brand=None):
-    """recs -> BytesIO(xlsx). brand: dict (harvest_campaign/harvest_ad_group icerebilir).
+    """recs -> BytesIO(xlsx). brand: dict.
 
-    Eger harvest_campaign bos ise, dosyada YENI KAMPANYA + YENI AD GROUP Create
-    satirlari otomatik olusturulur - kullanicinin Amazon'da elle kampanya
-    olusturmasina gerek kalmaz. Yalnizca ilk Product Ad'i Amazon UI'dan eklemesi
-    gerekir (talimatlarda net yazar).
+    Tum satirlari TEK sheet'te dogru sirada yazar (Amazon canonical format).
     """
     brand = brand or {}
-    dest_campaign = (brand.get("harvest_campaign") or "").strip()
-    dest_ad_group = (brand.get("harvest_ad_group") or "").strip()
-    # Fallback: default harvest kampanya adi
+    brand_name = _sanitize_name(brand_name) or "Marka"
+    dest_campaign = _sanitize_name(brand.get("harvest_campaign") or "")
+    dest_ad_group = _sanitize_name(brand.get("harvest_ad_group") or "")
+
+    # Fallback - yeni kampanya oluştur
     if not dest_campaign:
-        dest_campaign = f"{brand_name} - Exact - Kazananlar (yeni)"
+        # Ozel karakter olmadan, kisa bir isim
+        dest_campaign = f"{brand_name} Exact Kazananlar"
         auto_create_campaign = True
     else:
         auto_create_campaign = False
     if not dest_ad_group:
         dest_ad_group = "Kazananlar"
-    has_dest = True  # artik hep hedef var
 
-    from datetime import datetime
     today = datetime.now().strftime("%Y%m%d")
+    has_harvest = any(r["type"] in ("harvest", "harvest_pt") for r in recs)
+    will_setup = auto_create_campaign and has_harvest
 
     wb = openpyxl.Workbook()
     wb.remove(wb.active)
-    head_font = Font(bold=True, color="FFFFFF")
+    head_font = Font(bold=True, color="FFFFFF", size=10)
     head_fill = PatternFill("solid", fgColor="1F2937")
 
-    def sheet(name):
-        ws = wb.create_sheet(name)
-        ws.append(BULK_HEADERS)
-        for cell in ws[1]:
-            cell.font, cell.fill = head_font, head_fill
-        return ws
+    # =============== ANA SHEET (Amazon canonical) ===============
+    ws = wb.create_sheet("Sponsored Products Campaigns")
+    ws.append(BULK_HEADERS)
+    for cell in ws[1]:
+        cell.font, cell.fill = head_font, head_fill
+    ws.freeze_panes = "A2"
 
-    kw_ws = neg_ws = pt_ws = setup_ws = None
-    manual_rows = []
-    skipped_asin_neg = 0
+    counts = {"campaign_create": 0, "adgroup_create": 0,
+              "keyword_create": 0, "keyword_update": 0,
+              "pt_create": 0, "neg_kw": 0, "neg_pt": 0,
+              "placement": 0, "sculpt": 0}
 
-    # ---- Auto Campaign + AdGroup Create (eger harvest_campaign yoksa) ----
-    if auto_create_campaign:
-        # Harvest onerileri var mi kontrol et
-        has_harvest = any(r["type"] in ("harvest", "harvest_pt") for r in recs)
-        if has_harvest:
-            setup_ws = sheet("SP_SETUP")
-            # Campaign Create satiri
-            camp_row = {h: "" for h in BULK_HEADERS}
-            camp_row.update({
-                "Product": "Sponsored Products",
-                "Entity": "Campaign",
-                "Operation": "Create",
-                "Campaign Name": dest_campaign,
-                "Start Date": today,
-                "Targeting Type": "Manual",
-                "State": "enabled",
-                "Daily Budget": "20",
-                "Bidding Strategy": "Dynamic bids - down only",
-            })
-            setup_ws.append([camp_row[h] for h in BULK_HEADERS])
-            # AdGroup Create satiri
-            ag_row = {h: "" for h in BULK_HEADERS}
-            ag_row.update({
-                "Product": "Sponsored Products",
-                "Entity": "Ad Group",
-                "Operation": "Create",
-                "Campaign Name": dest_campaign,
-                "Ad Group Name": dest_ad_group,
-                "State": "enabled",
-                "Ad Group Default Bid": "1.00",
-            })
-            setup_ws.append([ag_row[h] for h in BULK_HEADERS])
+    # ---- 1. Campaign Create (harvest için yeni kampanya) ----
+    if will_setup:
+        r = _empty_row()
+        r.update({
+            "Product": "Sponsored Products",
+            "Entity": "Campaign",
+            "Operation": "Create",
+            "Campaign Name": dest_campaign,
+            "Start Date": today,
+            "Targeting Type": "Manual",
+            "State": "enabled",
+            "Daily Budget": "20",
+            "Bidding Strategy": "Dynamic bids - down only",
+        })
+        ws.append([r[h] for h in BULK_HEADERS])
+        counts["campaign_create"] += 1
 
+    # ---- 2. Ad Group Create ----
+    if will_setup:
+        r = _empty_row()
+        r.update({
+            "Product": "Sponsored Products",
+            "Entity": "Ad Group",
+            "Operation": "Create",
+            "Campaign Name": dest_campaign,
+            "Ad Group Name": dest_ad_group,
+            "State": "enabled",
+            "Ad Group Default Bid": "1.00",
+        })
+        ws.append([r[h] for h in BULK_HEADERS])
+        counts["adgroup_create"] += 1
+
+    # ---- 3. Bidding Adjustment (placement) - bu kampanya olusuyorsa da olusabilir ----
     for rec in recs:
-        rtype = rec["type"]
-        mt = (rec.get("match_type") or "").upper()
+        if rec["type"] != "placement":
+            continue
+        pl_key = (rec.get("keyword") or "").lower()
+        api_name = None
+        for k, v in PLACEMENT_API.items():
+            if k in pl_key:
+                api_name = v
+                break
+        # reason'dan multiplier yuzdesini cikarmaya calis
+        pct = ""
+        reason = rec.get("reason") or ""
+        import re as _re
+        m = _re.search(r"\+?%?(\d{1,3})\s*%?", reason)
+        if m:
+            pct = m.group(1)
+        src_camp = _sanitize_name(rec.get("campaign", ""))
+        if not (src_camp and api_name and pct):
+            continue
+        r = _empty_row()
+        r.update({
+            "Product": "Sponsored Products",
+            "Entity": "Bidding Adjustment",
+            "Operation": "Create",
+            "Campaign Name": src_camp,
+            "Placement": api_name,
+            "Percentage": pct,
+        })
+        ws.append([r[h] for h in BULK_HEADERS])
+        counts["placement"] += 1
+
+    # ---- 4. Keyword Update (mevcut kelimede bid degisikligi) ----
+    for rec in recs:
+        if rec["type"] not in ("bid_down", "bid_up"):
+            continue
+        camp = _sanitize_name(rec.get("campaign", ""))
+        ag = _sanitize_name(rec.get("ad_group", ""))
+        kw = rec.get("keyword", "")
+        mt = (rec.get("match_type") or "EXACT").lower()
+        bid = rec.get("suggested_value")
+        if not (camp and ag and kw and bid):
+            continue
+        r = _empty_row()
+        r.update({
+            "Product": "Sponsored Products",
+            "Entity": "Keyword",
+            "Operation": "Update",
+            "Campaign Name": camp,
+            "Ad Group Name": ag,
+            "State": "enabled",
+            "Keyword Text": kw,
+            "Match Type": mt,
+            "Bid": bid,
+        })
+        ws.append([r[h] for h in BULK_HEADERS])
+        counts["keyword_update"] += 1
+
+    # ---- 5. Keyword Create (harvest yeni kelime) ----
+    for rec in recs:
+        if rec["type"] != "harvest":
+            continue
         kw = rec.get("keyword", "")
         bid = rec.get("suggested_value")
-        src_campaign = rec.get("campaign", "")
-
-        if rtype == "harvest":
-            if has_dest:
-                if kw_ws is None:
-                    kw_ws = sheet("SP_KEYWORDS")
-                row = _row(dest_campaign, dest_ad_group, "Keyword", "Create", {
-                    "Keyword Text": kw, "Match Type": "exact", "Bid": bid or "",
-                })
-                kw_ws.append([row[h] for h in BULK_HEADERS])
-            else:
-                manual_rows.append(("Yeni Exact Kelime", src_campaign, kw, bid,
-                                     "Hedef exact kampanyana MANUEL ekle"))
-
-        elif rtype == "harvest_pt":
-            if has_dest:
-                if pt_ws is None:
-                    pt_ws = sheet("SP_PRODUCT_TARGETING")
-                expr = f'asin="{kw.upper()}"' if kw else ""
-                row = _row(dest_campaign, dest_ad_group, "Product Targeting",
-                           "Create", {"Product Targeting Expression": expr,
-                                      "Bid": bid or ""})
-                pt_ws.append([row[h] for h in BULK_HEADERS])
-            else:
-                manual_rows.append(("Yeni Urun Hedefi (ASIN)", src_campaign, kw, bid,
-                                     "Hedef Product Targeting kampanyana MANUEL ekle"))
-
-        elif rtype == "negative":
-            if "PRODUCT" in mt:
-                # Amazon'da negatif ASIN sadece ad-group seviyesinde var;
-                # ad group bilinmedigi icin guvenle bulk'a yazilamaz.
-                skipped_asin_neg += 1
-                manual_rows.append(("Negatif ASIN", src_campaign, kw, None,
-                                     "Bu kampanyada Negative targeting > ASIN ekle"))
-            else:
-                # Campaign Negative Keyword: ad group gerektirmez, guvenli.
-                if neg_ws is None:
-                    neg_ws = sheet("SP_NEGATIVES")
-                row = _row(src_campaign, "", "Campaign Negative Keyword", "Create", {
-                    "Keyword Text": kw, "Match Type": "negativeExact",
-                })
-                neg_ws.append([row[h] for h in BULK_HEADERS])
-
-        elif rtype in ("bid_down", "bid_up"):
-            ad_group = rec.get("ad_group", "")
-            if not (src_campaign and ad_group):
-                manual_rows.append(("Bid Guncelleme", src_campaign, kw, bid,
-                                     "Ad group bilgisi eksik - Amazon'da manuel guncelle"))
-                continue
-            if kw_ws is None:
-                kw_ws = sheet("SP_KEYWORDS")
-            row = _row(src_campaign, ad_group, "Keyword", "Update", {
-                "Keyword Text": kw, "Match Type": mt.lower(), "Bid": bid or "",
-            })
-            kw_ws.append([row[h] for h in BULK_HEADERS])
-        # placement icin Amazon bulk yok - talimatla veriyoruz (OKU_ONCE)
-
-    # ---- OKU_ONCE ----
-    ws0 = wb.create_sheet("OKU_ONCE")
-    lines = [
-        (f"MARKA: {brand_name}", True),
-        (f"Uretilme tarihi: {datetime.now():%d.%m.%Y %H:%M}", False),
-        ("", False),
-        ("AMAZON'A YUKLEME - 3 ADIM", True),
-        ("", False),
-        ("1) Amazon Ads Console'a git: advertising.amazon.com/cm/campaigns", False),
-        ("2) Sol menude 'Bulk operations' bolumune tikla (Measurement & Reporting altinda olabilir).", False),
-        ("3) 'Upload' butonuna bas -> bu Excel dosyayi sec -> 'Upload' tikla.", False),
-        ("   Amazon 10-30 sn icinde validate eder. 'Success' gorursen bitti.", False),
-        ("", False),
-    ]
-    if auto_create_campaign and setup_ws:
-        lines += [
-            ("!!! ONEMLI: ILK YUKLEMEDE PRODUCT AD EKLENECEK !!!", True),
-            ("Bu dosya senin icin YENI bir exact kampanya olusturuyor:", False),
-            (f"    Kampanya adi: {dest_campaign}", False),
-            (f"    Ad group: {dest_ad_group}", False),
-            ("Bulk yukleme basarili olduktan SONRA, bu yeni kampanyaya URUN eklemen lazim:", False),
-            ("  a) Amazon Ads Console -> yeni kampanyayi ac", False),
-            (f"  b) Ad Group '{dest_ad_group}' -> Products / Ads sekmesi", False),
-            ("  c) 'Add products' -> reklam yapmak istedigin urun(ler)i sec -> Add", False),
-            ("Bu tek seferlik. Sonraki bulksheet yuklemelerinde bu adim gerekmez.", False),
-            ("", False),
-            ("IPUCU: Marka ayarlarindan 'Harvest kampanya' alanini bir kez doldur:", False),
-            ("Boylece sonraki dosyalar var olan kampanyana yazar, yeni acmaya gerek kalmaz.", False),
-            ("", False),
-        ]
-    elif has_dest and not auto_create_campaign:
-        lines += [
-            (f"HEDEF KAMPANYA: {dest_campaign}", True),
-            (f"HEDEF AD GROUP: {dest_ad_group}", True),
-            ("Bu dosyadaki harvest kelimeleri yukaridaki kampanyaya eklenir.", False),
-            ("Amazon'daki kampanya adinin BIRE BIR bu isim olmasi lazim.", False),
-            ("", False),
-        ]
-    lines += [
-        ("SEKMELERIN ICERIGI", True),
-    ]
-    if setup_ws:
-        lines.append(("SP_SETUP        -> yeni kampanya + ad group olusturur (once bu calisir)", False))
-    lines += [
-        ("SP_KEYWORDS     -> yeni exact kelimeler (Create) + mevcut kelime bid guncellemeleri (Update)", False),
-        ("SP_NEGATIVES    -> negatif kelimeler (0 siparis getiren israf yakalari) + traffic sculpting negatifleri", False),
-        ("SP_PRODUCT_TARGETING -> yeni ASIN hedefleri (rakip urun sayfalarina reklam)", False),
-    ]
-    if manual_rows:
-        lines += [
-            ("MANUEL_EKLE     -> Amazon bulk formatinda desteklenmeyen az sayida ozel satir", False),
-        ]
-    lines += [
-        ("", False),
-        ("HATA CIKARSA", True),
-        ("- 'Campaign not found' -> SP_KEYWORDS'de Campaign Name yanlis, Amazon'daki gercek isimle kontrol et.", False),
-        ("- 'Ad group not found' -> Ad group ismi yanlis - Amazon'da olustur veya SP_SETUP'a ekle.", False),
-        ("- 'Bid below minimum' -> bid < $0.15 var, en dusuk $0.15 olmali.", False),
-        ("- 'Row rejected' -> o satiri atla, digerleri gecmis olabilir.", False),
-        ("", False),
-        ("GENEL KURALLAR", True),
-        ("- Bid degisikligi sonrasi 7-14 gun bekle, erken mudahale etme.", False),
-        ("- Once negatifleri uygula (kanamayi durdur), sonra yeni kelime/bid.", False),
-        ("- Bir seferde max %25 bid degisimi - fazlasi algoritmayi konfuze eder.", False),
-    ]
-    if manual_rows:
-        lines += [
-            ("", False),
-            (f"MANUEL_EKLE sekmesinde {len(manual_rows)} satir var - o kadar da az.", False),
-        ]
-    for i, (line, bold) in enumerate(lines, 1):
-        cell = ws0.cell(row=i, column=1, value=line)
-        if bold:
-            cell.font = Font(bold=True, size=12, color="F59E0B")
-        cell.alignment = Alignment(wrap_text=True, vertical="top")
-    ws0.column_dimensions["A"].width = 95
-
-    # ---- MANUEL_EKLE (bulk formatinda DEGIL, sade kopyala-yapistir listesi) ----
-    if manual_rows:
-        wm = wb.create_sheet("MANUEL_EKLE")
-        wm.append(["Kategori", "Kaynak Kampanya(lar)", "Kelime / ASIN",
-                    "Onerilen Bid", "Ne Yapmali"])
-        for cell in wm[1]:
-            cell.font, cell.fill = head_font, head_fill
-        for cat, camp, kw, bid, note in manual_rows:
-            wm.append([cat, camp, kw, bid, note])
-        for i, w in enumerate([22, 40, 34, 12, 46], 1):
-            wm.column_dimensions[openpyxl.utils.get_column_letter(i)].width = w
-
-    # Bulk sheet genislikleri
-    for ws in wb.worksheets:
-        if ws.title in ("OKU_ONCE", "MANUEL_EKLE"):
+        if not (kw and bid):
             continue
-        for i, h in enumerate(BULK_HEADERS, 1):
-            ws.column_dimensions[openpyxl.utils.get_column_letter(i)].width = \
-                min(28, max(12, len(h) + 2))
+        r = _empty_row()
+        r.update({
+            "Product": "Sponsored Products",
+            "Entity": "Keyword",
+            "Operation": "Create",
+            "Campaign Name": dest_campaign,
+            "Ad Group Name": dest_ad_group,
+            "State": "enabled",
+            "Keyword Text": kw,
+            "Match Type": "exact",
+            "Bid": bid,
+        })
+        ws.append([r[h] for h in BULK_HEADERS])
+        counts["keyword_create"] += 1
+
+    # ---- 6. Product Targeting Create (yeni ASIN hedefleri) ----
+    for rec in recs:
+        if rec["type"] != "harvest_pt":
+            continue
+        kw = (rec.get("keyword") or "").upper()
+        bid = rec.get("suggested_value")
+        if not (kw and bid):
+            continue
+        r = _empty_row()
+        r.update({
+            "Product": "Sponsored Products",
+            "Entity": "Product Targeting",
+            "Operation": "Create",
+            "Campaign Name": dest_campaign,
+            "Ad Group Name": dest_ad_group,
+            "State": "enabled",
+            "Product Targeting Expression": f'asin="{kw}"',
+            "Bid": bid,
+        })
+        ws.append([r[h] for h in BULK_HEADERS])
+        counts["pt_create"] += 1
+
+    # ---- 7. Campaign Negative Keyword (0 siparis negatifleri) ----
+    for rec in recs:
+        if rec["type"] != "negative":
+            continue
+        mt = (rec.get("match_type") or "").upper()
+        if "PRODUCT" in mt:
+            # ASIN negatiflemesi ad group seviyesinde - skip
+            continue
+        camp = _sanitize_name(rec.get("campaign", ""))
+        kw = rec.get("keyword", "")
+        if not (camp and kw):
+            continue
+        r = _empty_row()
+        r.update({
+            "Product": "Sponsored Products",
+            "Entity": "Campaign Negative Keyword",
+            "Operation": "Create",
+            "Campaign Name": camp,
+            "State": "enabled",
+            "Keyword Text": kw,
+            "Match Type": "negativeExact",
+        })
+        ws.append([r[h] for h in BULK_HEADERS])
+        counts["neg_kw"] += 1
+
+    # ---- 8. Traffic sculpting negatifleri (harvest sonrasi kaynak kampanyada) ----
+    for rec in recs:
+        if rec["type"] not in ("harvest", "harvest_pt"):
+            continue
+        kw = rec.get("keyword", "")
+        camp_str = rec.get("campaign", "")
+        # Kaynak kampanya isimleri virgülle ayrılmıs olabilir
+        src_camps = [_sanitize_name(c) for c in camp_str.split(",") if c.strip()]
+        for src in src_camps:
+            if not src:
+                continue
+            if rec["type"] == "harvest_pt":
+                r = _empty_row()
+                r.update({
+                    "Product": "Sponsored Products",
+                    "Entity": "Negative Product Targeting",
+                    "Operation": "Create",
+                    "Campaign Name": src,
+                    "State": "enabled",
+                    "Product Targeting Expression": f'asin="{kw.upper()}"',
+                })
+            else:
+                r = _empty_row()
+                r.update({
+                    "Product": "Sponsored Products",
+                    "Entity": "Campaign Negative Keyword",
+                    "Operation": "Create",
+                    "Campaign Name": src,
+                    "State": "enabled",
+                    "Keyword Text": kw,
+                    "Match Type": "negativeExact",
+                })
+            ws.append([r[h] for h in BULK_HEADERS])
+            counts["sculpt"] += 1
+
+    # =============== OKU_ONCE ===============
+    ws0 = wb.create_sheet("OKU_ONCE")
+    ws0.column_dimensions["A"].width = 4
+    ws0.column_dimensions["B"].width = 95
+
+    def write(row_i, text, style="body"):
+        c = ws0.cell(row=row_i, column=2, value=text)
+        if style == "title":
+            c.font = Font(bold=True, size=13, color="F59E0B")
+        elif style == "section":
+            c.font = Font(bold=True, size=11, color="F59E0B")
+        elif style == "warn":
+            c.font = Font(bold=True, color="DC2626")
+        elif style == "bold":
+            c.font = Font(bold=True, size=11)
+        else:
+            c.font = Font(size=10.5)
+        c.alignment = Alignment(wrap_text=True, vertical="center")
+
+    r = 2
+    write(r, f"AMAZON BULK UPLOAD - {brand_name}", "title"); r += 2
+    write(r, "Bu dosya Amazon Ads Console'un Bulk Operations'ina DIREKT yuklenmek uzere hazirlandi.", "bold"); r += 2
+
+    write(r, "1) NASIL YUKLENIR", "section"); r += 1
+    for line in [
+        "  a) advertising.amazon.com sitesine gir, hesabina giris yap",
+        "  b) Sol menude 'Bulk operations' bolumune tikla",
+        "  c) 'Upload' butonuna bas -> bu Excel dosyasini sec -> Upload",
+        "  d) Amazon 10-30 sn icinde validate eder. 'Success' gorursen tamam.",
+        "  e) Hata cikarsa 'Show errors' -> Excel indir -> PPC Asistan ekibine yolla.",
+    ]:
+        write(r, line); r += 1
+    r += 1
+
+    if will_setup:
+        write(r, "2) BU DOSYADA YENI KAMPANYA VE AD GROUP OTOMATIK OLUSUYOR", "section"); r += 1
+        write(r, f"  Kampanya adi: {dest_campaign}"); r += 1
+        write(r, f"  Ad group: {dest_ad_group}"); r += 1
+        write(r, "  Gunluk butce: $20 (istersen sonra Amazon'da guncelle)"); r += 1
+        write(r, "  Bidding strategy: Dynamic bids - down only"); r += 1
+        r += 1
+        write(r, "!!! TEK SEFERLIK YAPMAN GEREKEN: URUN EKLE !!!", "warn"); r += 1
+        write(r, "Yeni kampanya olusunca Amazon otomatik urun eklemiyor - manuel eklemen lazim:"); r += 1
+        write(r, f"  1. Amazon Ads -> Campaigns -> '{dest_campaign}' -> ac"); r += 1
+        write(r, f"  2. Ad Group '{dest_ad_group}' -> Products/Ads sekmesi"); r += 1
+        write(r, "  3. 'Add products' -> reklam yapmak istedigin urunleri sec -> Add"); r += 1
+        write(r, "  4. Amazon 1-2 saatte impression gostermeye baslar."); r += 1
+        r += 1
+        write(r, "Ipucu: Marka ayarina 'Harvest hedef kampanya' alanini bir kere yaz -> sonraki dosyalarda bu adım YOK.", "bold"); r += 1
+        r += 1
+
+    write(r, f"{'3' if will_setup else '2'}) DOSYADA NELER VAR", "section"); r += 1
+    for name, cnt, desc in [
+        ("Yeni kampanya oluştur", counts["campaign_create"], "SP kampanya, Manual, down-only bid"),
+        ("Yeni ad group oluştur", counts["adgroup_create"], "Kampanyaya bağlı, $1.00 varsayılan bid"),
+        ("Yeni exact kelime (harvest)", counts["keyword_create"], "Kanıtlanmış kazanan kelimeler exact match"),
+        ("Yeni ASIN hedefi", counts["pt_create"], "Rakip ürün sayfalarında reklam"),
+        ("Mevcut kelime bid güncelleme", counts["keyword_update"], "ACOS'a göre bid düşür/artır"),
+        ("Placement multiplier", counts["placement"], "TOS/Product Pages/Rest of Search çarpanı"),
+        ("Negatif kelime (kanama durdur)", counts["neg_kw"], "0 sipariş getirenler"),
+        ("Traffic sculpting negatifi", counts["sculpt"], "Harvest sonrası kaynak kampanyada otomatik"),
+    ]:
+        if cnt > 0:
+            write(r, f"  {name}: {cnt} satır - {desc}"); r += 1
+    r += 1
+
+    write(r, f"{'4' if will_setup else '3'}) HATA CIKARSA CO2ZUM YOLLARI", "section"); r += 1
+    for line in [
+        "  * 'Parent campaign not found' -> Kampanya adi Amazon'daki gerceklerle ayni degil. Cift kontrol et.",
+        "  * 'Parent ad group not found' -> Ad group ismi yanlis. Bosluk/case duyarli olabilir.",
+        "  * 'Bid below minimum' -> Bid < $0.15 var. Amazon minimum kabul etmez.",
+        "  * 'Duplicate entity' -> Ayni kelime zaten var. O satiri atla, digerleri gecmis olabilir.",
+        "  * 'Invalid targeting expression' -> ASIN formati yanlis, 'asin=\"B0XXX\"' olmali.",
+        "  * Baska hata -> 'Download error report' ile Excel indir, PPC Asistan'a yolla.",
+    ]:
+        write(r, line); r += 1
+    r += 1
+
+    write(r, f"{'5' if will_setup else '4'}) GENEL KURALLAR", "section"); r += 1
+    for line in [
+        "  * Bid degisikligi sonrasi 7-14 gun bekle, erken mudahale etme.",
+        "  * Amazon attribution 2-3 gun gec - son 2-3 gunun verisi eksik gelir.",
+        "  * Bir seferde max %25 bid degisimi - fazlasi algoritmayi konfuze eder.",
+        "  * Onaylayip yukledin - 1 hafta sonra yeni rapor cek, dosyayi PPC Asistan'a yukle.",
+    ]:
+        write(r, line); r += 1
+
+    # =============== Column genislikleri ===============
+    from openpyxl.utils import get_column_letter
+    for i, h in enumerate(BULK_HEADERS, 1):
+        ws.column_dimensions[get_column_letter(i)].width = \
+            min(30, max(12, len(h) + 2))
+
+    # Sheet sirasi: Bulk once, OKU_ONCE sonra
+    wb._sheets = [ws, ws0]
 
     buf = io.BytesIO()
     wb.save(buf)
