@@ -308,9 +308,9 @@
   <div id="mgrBadge" class="mgr-badge" style="display:none" title="Denetçi Müdür — her AI çıktısını kontrol eder">🛡 Müdür: Standby</div>
   <button id="histBtn" style="display:none" onclick="openHistory()">⟲ Geçmiş</button>
   <button id="aiBtn" style="display:none" onclick="runAI()">🤖 AI Strateji</button>
-  <button id="bulkBtn" style="display:none" onclick="exportBulksheet()">📦 Bulksheet</button>
-  <button id="applyBtn" style="display:none" onclick="openApplyDlg()">📋 Uygulama Rehberi</button>
-  <button class="primary" id="exportBtn" style="display:none" onclick="exportFile()">⬇ Excel</button>
+  <button id="applyBtn" style="display:none" onclick="openApplyDlg()">📋 Rehber</button>
+  <button class="primary" id="bulkPrimary" style="display:none" onclick="exportBulksheet()" title="Amazon Bulk Operations'a direkt yüklenir">📦 Amazon Bulk İndir</button>
+  <button id="exportBtn" style="display:none" onclick="exportFile()" title="Manuel referans için sade Excel">⬇ Excel (manuel)</button>
 </header>
 
 <dialog id="applyDlg" style="max-width:640px">
@@ -319,8 +319,8 @@
   <div id="applySteps" style="line-height:1.7;font-size:13.5px;margin-top:14px"></div>
   <div class="actions">
     <button onclick="applyDlg.close()">Kapat</button>
-    <button class="primary" onclick="applyDlg.close();exportFile()">⬇ Excel'i indir → başla</button>
-    <button onclick="applyDlg.close();exportBulksheet()">📦 Bulksheet indir (tek tık uygula)</button>
+    <button onclick="applyDlg.close();exportFile()">⬇ Manuel Excel</button>
+    <button class="primary" onclick="applyDlg.close();exportBulksheet()">📦 Amazon Bulk İndir (önerilen)</button>
   </div>
 </dialog>
 
@@ -417,8 +417,24 @@
   <label>Hedef ACOS % (örn. 30)</label><input id="bAcos" type="number" step="1" value="30">
   <label>Negatif için min. tıklama (satışsız)</label><input id="bClicks" type="number" value="8">
   <label>Kelime taşıma için min. sipariş</label><input id="bOrders" type="number" value="2">
+  <div style="border-top:1px solid var(--border);margin:16px 0 4px;padding-top:10px">
+    <b style="font-size:12px;color:var(--purple)">🎯 HARVEST HEDEF KAMPANYA (bulk upload için)</b>
+    <div class="muted small" style="margin-top:3px">Bulk'ta harvest edilen yeni exact kelimeler bu kampanyaya yazılır. Boş bırakırsan güvenlik için MANUEL_EKLE sekmesine düşer. Amazon'da bir kez oluştur, sonra hep kullan.</div>
+  </div>
+  <label>Harvest kampanya adı (Amazon'daki gerçek isimle bire bir aynı)</label>
+  <input id="bHarvestCamp" placeholder="ör: MarkaAdı - Exact - Kazananlar" value="">
+  <label>Harvest ad group adı</label>
+  <input id="bHarvestAdGroup" placeholder="ör: Kazananlar" value="">
+
   <div class="muted small" style="margin-top:12px;padding:8px 12px;background:var(--panel2);border-radius:6px;line-height:1.55">
-    ℹ️ Kâr marjı ayarları sadeleştirildi. Reklamlar birden çok ürün için ortak çalıştığı için ürün-bazlı hesaplama karmaşıklaştırıyordu. Hedef ACOS'unu (üstte) kâr hesabına göre kendin belirle: <b>Hedef ACOS = (1 − COGS/fiyat − Amazon fee) × 0.7</b>. Belirsizse %25-35 arası başla.
+    ℹ️ Kâr marjı: sadeleştirildi. Hedef ACOS'u kâr hesabına göre kendin belirle: <b>Hedef ACOS = (1 − COGS/fiyat − Amazon fee) × 0.7</b>. Belirsizse %25-35 arası başla.
+  </div>
+  <label style="margin-top:14px">Yeni kelime hedef kampanya adı <span class="muted">(opsiyonel — Amazon'daki adla BİREBİR aynı olmalı)</span></label>
+  <input id="bHarvestCamp" placeholder="örn. batci - Exact - Kazananlar">
+  <label>Yeni kelime hedef ad group adı</label>
+  <input id="bHarvestAdGroup" placeholder="örn. Ad Group">
+  <div class="muted small" style="margin-top:8px;padding:8px 12px;background:var(--panel2);border-radius:6px;line-height:1.55">
+    ⚠️ Boş bırakırsan güvenlik gereği yeni kelimeler Bulksheet'e otomatik <b>eklenmez</b> — "MANUEL_EKLE" listesine düşer, sen Amazon'da elle eklersin (yanlış kampanyaya yazma riski sıfır). Doldurursan Bulksheet tek tıkla bu kampanyaya yeni kelime/ASIN Create satırı üretir. İsimleri Amazon konsolundan aynen kopyala, yazım hatası dosyayı geçersiz kılar.
   </div>
   <input type="hidden" id="bPrice" value="0">
   <input type="hidden" id="bCogs" value="0">
@@ -614,7 +630,7 @@ async function selectBrand(id){
   $('editBtn').style.display=brandId?'inline-block':'none';
   $('exportBtn').style.display=brandId?'inline-block':'none';
   $('aiBtn').style.display=brandId?'inline-block':'none';
-  $('bulkBtn').style.display=brandId?'inline-block':'none';
+  $('bulkPrimary').style.display=brandId?'inline-block':'none';
   $('histBtn').style.display=brandId?'inline-block':'none';
   $('mgrBadge').style.display=brandId?'inline-flex':'none';
   $('applyBtn').style.display=brandId?'inline-block':'none';
@@ -1244,6 +1260,10 @@ function openBrandDialog(edit){
   $('bCogs').value=b?(b.cogs||0):0;
   $('bFee').value=b?((b.amazon_fee_pct||0.15)*100).toFixed(1):15;
   $('bFba').value=b?(b.fba_fee||0):0;
+  $('bHarvestCamp').value=b?(b.harvest_campaign||''):'';
+  $('bHarvestAdGroup').value=b?(b.harvest_ad_group||''):'';
+  $('bHarvestCamp').value=b?(b.harvest_campaign||''):'';
+  $('bHarvestAdGroup').value=b?(b.harvest_ad_group||''):'';
   $('delBrandBtn').style.display=editing?'inline-block':'none';
   editingProducts=b&&b.products?JSON.parse(JSON.stringify(b.products)):[];
   renderProductsList();
@@ -1265,7 +1285,9 @@ async function saveBrand(){
     sell_price:Number($('bPrice').value)||0,
     cogs:Number($('bCogs').value)||0,
     amazon_fee_pct:(Number($('bFee').value)||0)/100,
-    fba_fee:Number($('bFba').value)||0});
+    fba_fee:Number($('bFba').value)||0,
+    harvest_campaign:$('bHarvestCamp').value.trim(),
+    harvest_ad_group:$('bHarvestAdGroup').value.trim()});
   if(!$('bName').value.trim()){toast('Marka adı gerekli');return;}
   const url=editing?`/api/brands/${brandId}`:'/api/brands';
   const r=await api(url,{method:editing?'PUT':'POST',

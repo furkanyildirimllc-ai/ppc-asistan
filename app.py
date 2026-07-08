@@ -44,7 +44,9 @@ def init_db():
             sell_price REAL DEFAULT 0,
             cogs REAL DEFAULT 0,
             amazon_fee_pct REAL DEFAULT 0.15,
-            fba_fee REAL DEFAULT 0);
+            fba_fee REAL DEFAULT 0,
+            harvest_campaign TEXT DEFAULT '',
+            harvest_ad_group TEXT DEFAULT '');
         CREATE TABLE IF NOT EXISTS uploads(
             id INTEGER PRIMARY KEY,
             brand_id INTEGER NOT NULL REFERENCES brands(id) ON DELETE CASCADE,
@@ -94,6 +96,8 @@ def init_db():
             ("cogs", "ALTER TABLE brands ADD COLUMN cogs REAL DEFAULT 0"),
             ("amazon_fee_pct", "ALTER TABLE brands ADD COLUMN amazon_fee_pct REAL DEFAULT 0.15"),
             ("fba_fee", "ALTER TABLE brands ADD COLUMN fba_fee REAL DEFAULT 0"),
+            ("harvest_campaign", "ALTER TABLE brands ADD COLUMN harvest_campaign TEXT DEFAULT ''"),
+            ("harvest_ad_group", "ALTER TABLE brands ADD COLUMN harvest_ad_group TEXT DEFAULT ''"),
         ]:
             if col not in cols:
                 c.execute(ddl)
@@ -112,6 +116,8 @@ class BrandIn(BaseModel):
     cogs: float = 0
     amazon_fee_pct: float = 0.15
     fba_fee: float = 0
+    harvest_campaign: str = ""
+    harvest_ad_group: str = ""
 
 
 def _profit_calc_single(sp, cogs, fee_pct, fba):
@@ -213,10 +219,12 @@ def create_brand(body: BrandIn):
             cur = c.execute(
                 "INSERT INTO brands(name,target_acos,min_clicks_neg,"
                 "min_orders_harvest,bid_change_cap,sell_price,cogs,"
-                "amazon_fee_pct,fba_fee) VALUES(?,?,?,?,?,?,?,?,?)",
+                "amazon_fee_pct,fba_fee,harvest_campaign,harvest_ad_group) "
+                "VALUES(?,?,?,?,?,?,?,?,?,?,?)",
                 (body.name.strip(), body.target_acos, body.min_clicks_neg,
                  body.min_orders_harvest, body.bid_change_cap,
-                 body.sell_price, body.cogs, body.amazon_fee_pct, body.fba_fee))
+                 body.sell_price, body.cogs, body.amazon_fee_pct, body.fba_fee,
+                 body.harvest_campaign.strip(), body.harvest_ad_group.strip()))
         except sqlite3.IntegrityError:
             raise HTTPException(400, "Bu isimde marka zaten var")
         return {"id": cur.lastrowid}
@@ -228,10 +236,12 @@ def update_brand(brand_id: int, body: BrandIn):
         c.execute(
             "UPDATE brands SET name=?,target_acos=?,min_clicks_neg=?,"
             "min_orders_harvest=?,bid_change_cap=?,sell_price=?,cogs=?,"
-            "amazon_fee_pct=?,fba_fee=? WHERE id=?",
+            "amazon_fee_pct=?,fba_fee=?,harvest_campaign=?,harvest_ad_group=? "
+            "WHERE id=?",
             (body.name.strip(), body.target_acos, body.min_clicks_neg,
              body.min_orders_harvest, body.bid_change_cap,
              body.sell_price, body.cogs, body.amazon_fee_pct, body.fba_fee,
+             body.harvest_campaign.strip(), body.harvest_ad_group.strip(),
              brand_id))
     _regenerate(brand_id)
     return {"ok": True}
@@ -650,7 +660,7 @@ def get_insights(brand_id: int):
 @app.get("/api/brands/{brand_id}/export-bulksheet")
 def export_bulksheet(brand_id: int):
     with db() as c:
-        brand = c.execute("SELECT name FROM brands WHERE id=?", (brand_id,)).fetchone()
+        brand = c.execute("SELECT * FROM brands WHERE id=?", (brand_id,)).fetchone()
         if not brand:
             raise HTTPException(404, "Marka bulunamadi")
         rows = c.execute(
@@ -663,7 +673,7 @@ def export_bulksheet(brand_id: int):
         d = dict(r)
         d["metrics"] = json.loads(d["metrics"] or "{}")
         recs.append(d)
-    buf = bulksheet.build(recs, brand["name"])
+    buf = bulksheet.build(recs, brand["name"], dict(brand))
     fname = f"{brand['name']}_amazon_bulksheet_{datetime.now():%Y%m%d}.xlsx"
     return StreamingResponse(
         buf, media_type="application/vnd.openxmlformats-officedocument"
