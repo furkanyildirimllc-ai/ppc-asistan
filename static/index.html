@@ -225,6 +225,28 @@
   .u-high{background:rgba(248,113,113,.15);color:var(--red)}
   .u-med{background:rgba(245,158,11,.15);color:var(--accent)}
   .u-low{background:rgba(52,211,153,.15);color:var(--green)}
+  /* Bulk Wizard */
+  .wiz-head{padding:20px 26px;border-bottom:1px solid var(--border);background:linear-gradient(135deg,rgba(245,158,11,.08),transparent)}
+  .wiz-head h2{font-size:18px;font-weight:700;margin-bottom:4px}
+  .wiz-head .sub{color:var(--muted);font-size:12.5px}
+  .wiz-steps{padding:22px 26px 8px}
+  .wstep{display:flex;gap:16px;padding:14px 0;border-bottom:1px solid var(--border);position:relative}
+  .wstep:last-child{border-bottom:0}
+  .wstep .num{width:34px;height:34px;border-radius:50%;background:var(--panel2);border:2px solid var(--border);display:flex;align-items:center;justify-content:center;font-weight:800;font-size:15px;flex-shrink:0;color:var(--muted)}
+  .wstep.done .num{background:var(--green);border-color:var(--green);color:#0d1117}
+  .wstep.now .num{background:var(--accent);border-color:var(--accent);color:#0d1117}
+  .wstep .body{flex:1;padding-top:3px}
+  .wstep .title{font-weight:700;font-size:14px;color:var(--text);margin-bottom:4px}
+  .wstep .desc{color:var(--muted);font-size:12.5px;line-height:1.6;margin-bottom:8px}
+  .wstep .desc a{color:var(--accent);text-decoration:none;border-bottom:1px dotted var(--accent)}
+  .wstep .action{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+  .wstep .action button{font-size:12.5px}
+  .wstep .warn{background:rgba(248,113,113,.08);border-left:3px solid var(--red);padding:8px 12px;border-radius:4px;font-size:12px;color:var(--red);margin-top:6px}
+  .wstep .info{background:rgba(96,165,250,.08);border-left:3px solid var(--blue);padding:8px 12px;border-radius:4px;font-size:12px;color:var(--blue);margin-top:6px;line-height:1.55}
+  .wstep code{background:var(--panel2);padding:2px 6px;border-radius:3px;font-size:12px;color:var(--accent)}
+  .wiz-foot{padding:14px 26px;background:var(--panel2);display:flex;justify-content:flex-end;gap:10px;border-top:1px solid var(--border)}
+  .stat-count{background:var(--panel2);border-radius:6px;padding:8px 10px;display:flex;justify-content:space-between;font-size:12.5px;margin:3px 0}
+  .stat-count b{color:var(--accent);font-weight:700}
   /* Müdür rozeti */
   .mgr-badge{display:inline-flex;align-items:center;gap:6px;padding:6px 12px;border-radius:20px;font-size:12px;font-weight:600;border:1px solid var(--border);background:var(--panel2);color:var(--muted);cursor:help;transition:.2s}
   .mgr-standby{color:var(--muted)}
@@ -309,9 +331,14 @@
   <button id="histBtn" style="display:none" onclick="openHistory()">⟲ Geçmiş</button>
   <button id="aiBtn" style="display:none" onclick="runAI()">🤖 AI Strateji</button>
   <button id="applyBtn" style="display:none" onclick="openApplyDlg()">📋 Rehber</button>
-  <button class="primary" id="bulkPrimary" style="display:none" onclick="exportBulksheet()" title="Amazon Bulk Operations'a direkt yüklenir">📦 Amazon Bulk İndir</button>
+  <button class="primary" id="bulkPrimary" style="display:none" onclick="openBulkWizard()" title="Adım adım Amazon'a yükle">📦 Amazon'a Yükle</button>
   <button id="exportBtn" style="display:none" onclick="exportFile()" title="Manuel referans için sade Excel">⬇ Excel (manuel)</button>
 </header>
+
+<!-- Bulk Wizard - tek tık yükleme -->
+<dialog id="bulkWiz" style="max-width:720px">
+  <div id="bulkWizBody"></div>
+</dialog>
 
 <dialog id="applyDlg" style="max-width:640px">
   <h3>📋 Onaylıları Amazon'da Nasıl Uygularım?</h3>
@@ -1080,6 +1107,119 @@ async function undoAction(hid){
 }
 
 function exportBulksheet(){window.location=`/api/brands/${brandId}/export-bulksheet`;}
+
+async function openBulkWizard(){
+  // Önce onaylı öneri sayılarını + marka ayarlarını çek
+  const [recsResp,brandsResp]=await Promise.all([
+    fetch(`/api/brands/${brandId}/recommendations?status=approved`),
+    fetch('/api/brands'),
+  ]);
+  const recs=recsResp.ok?await recsResp.json():[];
+  const bs=brandsResp.ok?await brandsResp.json():[];
+  const b=bs.find(x=>x.id==brandId)||{};
+  const cnt={};recs.forEach(r=>cnt[r.type]=(cnt[r.type]||0)+1);
+  const total=recs.length;
+  const hasHarvest=(cnt.harvest||0)+(cnt.harvest_pt||0)>0;
+  const hasHarvestCamp=!!(b.harvest_campaign&&b.harvest_campaign.trim());
+  const willCreateCamp=hasHarvest&&!hasHarvestCamp;
+
+  const step1Done=total>0;
+  const step2Done=false; // download - state yok
+  const step3Done=false;
+  const step4Done=false;
+
+  const stats=`<div class="stat-count"><span>🚫 Negatif (0 sipariş)</span><b>${cnt.negative||0}</b></div>
+    <div class="stat-count"><span>🌱 Yeni kelime (harvest)</span><b>${cnt.harvest||0}</b></div>
+    <div class="stat-count"><span>🎯 Yeni ASIN hedef</span><b>${cnt.harvest_pt||0}</b></div>
+    <div class="stat-count"><span>📉 Bid düşür</span><b>${cnt.bid_down||0}</b></div>
+    <div class="stat-count"><span>📈 Bid artır</span><b>${cnt.bid_up||0}</b></div>
+    <div class="stat-count"><span>📍 Placement multiplier</span><b>${cnt.placement||0}</b></div>`;
+
+  const html=`
+    <div class="wiz-head">
+      <h2>📦 Amazon'a Yükle — Adım Adım</h2>
+      <div class="sub">${b.name||'Marka'} · Toplam <b style="color:var(--accent)">${total}</b> onaylı değişiklik</div>
+    </div>
+    <div class="wiz-steps">
+
+      <div class="wstep ${step1Done?'done':'now'}">
+        <div class="num">${step1Done?'✓':'1'}</div>
+        <div class="body">
+          <div class="title">Onaylı değişikliklerini kontrol et</div>
+          <div class="desc">Bulk dosya aşağıdakileri içerecek:</div>
+          ${stats}
+          ${!total?`<div class="warn">Henüz onaylı öneri yok. Önce sekmelerde ✓ ile onayla.</div>`:''}
+        </div>
+      </div>
+
+      ${willCreateCamp?`<div class="wstep">
+        <div class="num">!</div>
+        <div class="body">
+          <div class="title">⚠ Yeni exact kampanya otomatik oluşacak</div>
+          <div class="desc">Marka ayarında "Harvest hedef kampanya" boş olduğu için, harvest kelimeleri için otomatik yeni bir kampanya + ad group oluşturulacak (Bulksheet içinde <b>SP_SETUP</b> sheet'inde). Adı: <code>${esc(b.name||'Marka')} - Exact - Kazananlar (yeni)</code></div>
+          <div class="warn"><b>ÖNEMLİ:</b> Yükleme başarılı olduktan sonra Amazon'a girip bu yeni kampanyaya <b>ÜRÜN eklemen lazım</b> (Ad Group → Products/Ads → Add). Bu kampanya ürünsüz reklam yapamaz.</div>
+          <div class="info">💡 Bir kere ayarlarsan sonraki bulksheet'lerde bu adım yok. <button class="cpy" onclick="bulkWiz.close();openBrandDialog(true)">Marka ayarına git</button></div>
+        </div>
+      </div>`:''}
+
+      <div class="wstep ${step2Done?'done':(step1Done?'now':'')}">
+        <div class="num">${step2Done?'✓':'2'}</div>
+        <div class="body">
+          <div class="title">Bulksheet dosyasını indir</div>
+          <div class="desc">Bilgisayarına .xlsx olarak inecek. İçinde <b>OKU_ONCE</b> sekmesinde detaylı rehber var.</div>
+          <div class="action">
+            <button class="primary" onclick="exportBulksheet()" ${!total?'disabled':''}>⬇ Bulksheet İndir</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="wstep">
+        <div class="num">3</div>
+        <div class="body">
+          <div class="title">Amazon Ads Console'a git ve yükle</div>
+          <div class="desc">Şu adımları izle:</div>
+          <div class="info">
+            <b>1.</b> <a href="https://advertising.amazon.com/cm/campaigns" target="_blank">advertising.amazon.com</a> aç, hesabına giriş yap<br>
+            <b>2.</b> Sol menüde <b>Bulk operations</b> ara (bazen "Measurement & Reporting" altında)<br>
+            <b>3.</b> <b>Upload</b> butonuna tıkla<br>
+            <b>4.</b> "Choose file" ile az önce indirdiğin .xlsx'i seç<br>
+            <b>5.</b> <b>Upload</b> tıkla — Amazon 10-30 saniye içinde valide eder<br>
+            <b>6.</b> <b>Success</b> yazısını görürsen tamam! Hata çıkarsa "View errors" ile bak
+          </div>
+        </div>
+      </div>
+
+      ${willCreateCamp?`<div class="wstep">
+        <div class="num">4</div>
+        <div class="body">
+          <div class="title">Yeni kampanyaya ürünü ekle (tek seferlik)</div>
+          <div class="desc">Bulk yükleme başarılı olunca yeni kampanya "eligible" olur ama <b>ürün yoksa reklam göstermez</b>. Şunları yap:</div>
+          <div class="info">
+            <b>1.</b> Amazon Ads → Campaigns → yeni oluşan kampanyayı bul (<code>${esc(b.name||'Marka')} - Exact - Kazananlar (yeni)</code>)<br>
+            <b>2.</b> Ad Group <code>Kazananlar</code> → <b>Products / Ads</b> sekmesi<br>
+            <b>3.</b> <b>Add products</b> → reklam yapmak istediğin ürünleri seç → Add<br>
+            <b>4.</b> Şimdi kampanya çalışmaya hazır — Amazon 1-2 saatte impression göstermeye başlar
+          </div>
+          <div class="info" style="border-color:var(--green);color:var(--green)">💡 <b>ÖNERİ:</b> Şimdi <button class="cpy" onclick="bulkWiz.close();openBrandDialog(true)">marka ayarına git</button> ve "Harvest hedef kampanya" alanına <code>${esc(b.name||'Marka')} - Exact - Kazananlar (yeni)</code> yaz. Sonraki bulksheetlerde bu adım olmayacak.</div>
+        </div>
+      </div>`:''}
+
+      <div class="wstep">
+        <div class="num">✓</div>
+        <div class="body">
+          <div class="title">Bittiği zaman:</div>
+          <div class="desc">1 hafta bekle → yeni rapor indir → PPC Asistan'a yükle → süreci tekrar et. Amazon attribution 2-3 gün geç, dolayısıyla dünkü değişiklikleri hemen ölçme.</div>
+        </div>
+      </div>
+
+    </div>
+    <div class="wiz-foot">
+      <button onclick="bulkWiz.close()">Kapat</button>
+      <button class="primary" onclick="exportBulksheet()" ${!total?'disabled':''}>⬇ Bulksheet İndir</button>
+    </div>`;
+  $('bulkWizBody').innerHTML=html;
+  $('bulkWiz').showModal();
+}
 
 async function openApplyDlg(){
   // Onayli önerileri sayarak grupla ve kişiselleştir
