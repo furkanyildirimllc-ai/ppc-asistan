@@ -141,7 +141,17 @@ def _extract_json(text):
     end = text.rfind("}")
     if start >= 0 and end > start:
         text = text[start:end + 1]
-    return json.loads(text)
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError:
+        try:
+            import json_repair
+            fixed = json_repair.loads(text)
+            if isinstance(fixed, dict):
+                return fixed
+        except Exception:
+            pass
+        raise
 
 
 def review(strategy, det_recs, brand):

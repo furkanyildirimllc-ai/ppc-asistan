@@ -138,7 +138,7 @@ def build_input(brand, search_terms, targets, placements, campaigns, det_recs):
 
 
 def _extract_json(text):
-    """Modelin cevabindan ilk JSON blogunu cikar."""
+    """Modelin cevabindan ilk JSON blogunu cikar. Bozuk JSON'u json_repair ile duzelt."""
     text = text.strip()
     if text.startswith("```"):
         text = re.sub(r"^```(json)?\s*", "", text)
@@ -148,7 +148,20 @@ def _extract_json(text):
     end = text.rfind("}")
     if start >= 0 and end > start:
         text = text[start:end + 1]
-    return json.loads(text)
+    # once standart parse dene
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError:
+        # bozuk JSON - json_repair kutuphanesi ile duzelt
+        try:
+            import json_repair
+            fixed = json_repair.loads(text)
+            if isinstance(fixed, dict):
+                return fixed
+            raise ValueError("json_repair sonucu dict degil")
+        except Exception as e:
+            # Son care: kismi parse
+            raise ValueError(f"JSON parse edilemedi (json_repair de basaramadi): {e}")
 
 
 WEB_SEARCH_TOOL = {
@@ -158,39 +171,65 @@ WEB_SEARCH_TOOL = {
 }
 
 
-def generate_strategy(payload):
-    """Sonnet'ten strateji uret. Return: dict."""
-    user_msg = ("Amazon PPC verisi ve deterministik onerilerim asagida. "
-                "Sistem talimatindaki JSON semasina UYGUN sekilde strateji uret.\n\n"
-                f"```json\n{json.dumps(payload, ensure_ascii=False, indent=2)}\n```")
-
+def _call_sonnet(user_msg, extra_note=""):
+    """Tek bir Sonnet cagrisi yapar, ham cevabı dondurur."""
+    system = SYSTEM_PROMPT + (extra_note or "")
     resp = client().messages.create(
         model=config.STRATEGY_MODEL,
         max_tokens=config.MAX_STRATEGY_TOKENS,
-        system=SYSTEM_PROMPT,
+        system=system,
         tools=[WEB_SEARCH_TOOL],
         messages=[{"role": "user", "content": user_msg}],
     )
-
-    # Tum text bloklarini birlestir (web_search ara ciktilarindan sonra final text gelir)
     parts = [b.text for b in resp.content if getattr(b, "type", "") == "text"]
     text = "\n".join(parts).strip()
-
     used_web = any(getattr(b, "type", "") in ("server_tool_use", "web_search_tool_result")
                    for b in resp.content)
+    return text, used_web, resp.usage
 
-    try:
-        data = _extract_json(text)
-    except Exception as e:
-        return {
-            "error": f"AI cikti parse edilemedi: {e}",
-            "raw_output": text[:2000],
-            "web_search_used": used_web,
-        }
-    data["_meta"] = {
-        "model": config.STRATEGY_MODEL,
-        "web_search_used": used_web,
-        "input_tokens": resp.usage.input_tokens,
-        "output_tokens": resp.usage.output_tokens,
-    }
-    return data
+
+def generate_strategy(payload):
+    """Sonnet'ten strateji uret. Retry + json_repair fallback. Return: dict."""
+    user_msg = ("Amazon PPC verisi ve deterministik onerilerim asagida. "
+                "Sistem talimatindaki JSON semasina UYGUN sekilde strateji uret. "
+                "JSON syntax'i MUTLAKA gecerli olsun - string icinde \" karakteri "
+                "kullaniyorsan \\\" ile escape et, virgul ve parantez dengesine dikkat et.\n\n"
+                f"```json\n{json.dumps(payload, ensure_ascii=False, indent=2)}\n```")
+
+    total_in = 0
+    total_out = 0
+    used_web = False
+    for attempt in range(2):  # ilk deneme + 1 retry
+        try:
+            extra_note = ""
+            if attempt > 0:
+                extra_note = ("\n\nONEMLI: Onceki denemede JSON parse hatasi oldu. "
+                              "Bu sefer DAHA KISA ve KESIN JSON uret, syntax kurallarina "
+                              "cok dikkat et. Uzun stringlerde escape hatasi yapma.")
+            text, web, usage = _call_sonnet(user_msg, extra_note)
+            total_in += usage.input_tokens
+            total_out += usage.output_tokens
+            used_web = used_web or web
+            data = _extract_json(text)
+            data["_meta"] = {
+                "model": config.STRATEGY_MODEL,
+                "web_search_used": used_web,
+                "input_tokens": total_in,
+                "output_tokens": total_out,
+                "attempts": attempt + 1,
+            }
+            return data
+        except Exception as e:
+            if attempt == 1:
+                # Son deneme de basarisiz - hata dondur
+                return {
+                    "error": f"AI cikti parse edilemedi ({attempt+1} denemede): {e}",
+                    "raw_output": text[:2000] if 'text' in locals() else "",
+                    "web_search_used": used_web,
+                    "_meta": {"model": config.STRATEGY_MODEL,
+                              "input_tokens": total_in,
+                              "output_tokens": total_out,
+                              "attempts": attempt + 1},
+                }
+            # ilk deneme basarisiz - loga yaz, tekrar dene
+            continue
