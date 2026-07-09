@@ -1109,13 +1109,15 @@ async function undoAction(hid){
 function exportBulksheet(){window.location=`/api/brands/${brandId}/export-bulksheet`;}
 
 async function openBulkWizard(){
-  // Önce onaylı öneri sayılarını + marka ayarlarını çek
-  const [recsResp,brandsResp]=await Promise.all([
+  // Önce onaylı öneri sayılarını + marka ayarlarını + readiness çek
+  const [recsResp,brandsResp,readinessResp]=await Promise.all([
     fetch(`/api/brands/${brandId}/recommendations?status=approved`),
     fetch('/api/brands'),
+    fetch(`/api/brands/${brandId}/bulk-readiness`),
   ]);
   const recs=recsResp.ok?await recsResp.json():[];
   const bs=brandsResp.ok?await brandsResp.json():[];
+  const readiness=readinessResp.ok?await readinessResp.json():{};
   const b=bs.find(x=>x.id==brandId)||{};
   const cnt={};recs.forEach(r=>cnt[r.type]=(cnt[r.type]||0)+1);
   const total=recs.length;
@@ -1135,12 +1137,28 @@ async function openBulkWizard(){
     <div class="stat-count"><span>📈 Bid artır</span><b>${cnt.bid_up||0}</b></div>
     <div class="stat-count"><span>📍 Placement multiplier</span><b>${cnt.placement||0}</b></div>`;
 
+  const idWarn=readiness.has_campaign_ids===false?`<div class="wstep">
+    <div class="num" style="background:var(--red);border-color:var(--red);color:#fff">⚠</div>
+    <div class="body">
+      <div class="title" style="color:var(--red)">HAZIR DEĞİL — Önce raporları TEKRAR yükle</div>
+      <div class="desc">Raporlarınız <b>eski parser</b> ile yüklenmiş (Campaign ID yok). Amazon 2024+ bulk formatı Campaign ID istiyor.</div>
+      <div class="warn"><b>Çözüm (2 dakika):</b><br>
+        1. Amazon Ads Console'dan Search Term + Targeting + Campaign + Placement raporlarını <b>yeniden indir</b> (aynı dosyalar olabilir)<br>
+        2. Sayfanın en üstündeki drop zone'a <b>tekrar sürükle</b><br>
+        3. Yeni parser Campaign ID + Ad Group ID yakalar<br>
+        4. Sonra bu wizard'ı tekrar aç → bulk dosya artık geçerli olur
+      </div>
+    </div>
+  </div>`:'';
+
   const html=`
     <div class="wiz-head">
       <h2>📦 Amazon'a Yükle — Adım Adım</h2>
-      <div class="sub">${b.name||'Marka'} · Toplam <b style="color:var(--accent)">${total}</b> onaylı değişiklik</div>
+      <div class="sub">${b.name||'Marka'} · Toplam <b style="color:var(--accent)">${total}</b> onaylı değişiklik${readiness.id_coverage_pct?` · ID coverage: <b>%${readiness.id_coverage_pct}</b>`:''}</div>
     </div>
     <div class="wiz-steps">
+
+      ${idWarn}
 
       <div class="wstep ${step1Done?'done':'now'}">
         <div class="num">${step1Done?'✓':'1'}</div>

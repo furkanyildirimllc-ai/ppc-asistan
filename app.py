@@ -625,6 +625,38 @@ def ai_strategy_history(brand_id: int):
 
 # ---------- Insights (dashboard) ----------
 
+@app.get("/api/brands/{brand_id}/bulk-readiness")
+def bulk_readiness(brand_id: int):
+    """Bulk indirmeye hazir miyiz kontrol et."""
+    with db() as c:
+        brand_row = c.execute("SELECT * FROM brands WHERE id=?", (brand_id,)).fetchone()
+        if not brand_row:
+            raise HTTPException(404, "Marka bulunamadi")
+        all_rows = []
+        for rtype in ("search_term", "targeting", "campaign", "placement"):
+            all_rows.extend(_load_rows(c, brand_id, rtype))
+        approved_cnt = c.execute(
+            "SELECT COUNT(*) c FROM recommendations WHERE brand_id=? AND status='approved'",
+            (brand_id,)).fetchone()["c"]
+    has_ids = any(r.get("campaign_id") for r in all_rows)
+    id_coverage = 0
+    if all_rows:
+        with_id = sum(1 for r in all_rows if r.get("campaign_id"))
+        id_coverage = round(with_id / len(all_rows) * 100, 1)
+    return {
+        "approved_count": approved_cnt,
+        "has_campaign_ids": has_ids,
+        "id_coverage_pct": id_coverage,
+        "harvest_campaign_set": bool(brand_row["harvest_campaign"]),
+        "ready": has_ids and approved_cnt > 0,
+        "message": (
+            "Hazir" if has_ids and approved_cnt > 0 else
+            "Onay yok - once oneri onayla" if not approved_cnt else
+            "Campaign ID yok - raporlari TEKRAR yukle (yeni parser icin)"
+        ),
+    }
+
+
 @app.get("/api/brands/{brand_id}/insights")
 def get_insights(brand_id: int):
     with db() as c:
@@ -678,6 +710,14 @@ def export_bulksheet(brand_id: int):
         all_rows = []
         for rtype in ("search_term", "targeting", "campaign", "placement"):
             all_rows.extend(_load_rows(c, brand_id, rtype))
+    # Pre-flight: ID map var mi kontrol et
+    has_ids = any(r.get("campaign_id") for r in all_rows)
+    if not has_ids:
+        raise HTTPException(400,
+            "Raporlarinizda Campaign ID yok - eski parser'la yuklenmis. "
+            "COZUM: Amazon Ads Console'dan raporlari TEKRAR indirin ve PPC Asistan'a "
+            "yeniden yukleyin. Yeni parser Campaign ID + Ad Group ID yakalar ve "
+            "bulk dosyasi Amazon validation'dan gecer.")
     buf = bulksheet.build(recs, brand["name"], dict(brand), report_rows=all_rows)
     fname = f"{brand['name']}_amazon_bulksheet_{datetime.now():%Y%m%d}.xlsx"
     return StreamingResponse(
