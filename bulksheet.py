@@ -434,8 +434,10 @@ def build(recs, brand_name, brand=None, report_rows=None):
         ws.column_dimensions[get_column_letter(i)].width = \
             min(30, max(12, len(h) + 2))
 
-    # Sheet sirasi: Bulk once, OKU_ONCE sonra
-    wb._sheets = [ws, ws0]
+    # Amazon Bulk butun sheet'leri validate ediyor ve OKU_ONCE'ta "Invalid Headers"
+    # hatasi verip TUM dosyayi reddediyor. Bu yuzden OKU_ONCE'i cikariyoruz.
+    # Talimatlar zaten UI Wizard'da mevcut.
+    wb.remove(ws0)
 
     buf = io.BytesIO()
     wb.save(buf)
