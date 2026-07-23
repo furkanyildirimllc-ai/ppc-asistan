@@ -193,7 +193,7 @@ def priorities(brand, wasted, oppo, lost_is, dead, conflicts, det_recs):
         items.append({
             "priority": "high", "icon": "👀",
             "title": f"'{top['term']}' TOS'ta %{top['tos_is_pct']} gorunurluk",
-            "detail": f"Satis getiriyor ({['sales']}) ama ekranin ustunde "
+            "detail": f"Satis getiriyor (${top['sales']}) ama ekranin ustunde "
                       f"kaybediyor. Bid ${top['cpc']} -> ${top['suggested_bid']}.",
             "action": "bid-artir",
         })

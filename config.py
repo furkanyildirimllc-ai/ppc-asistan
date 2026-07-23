@@ -6,6 +6,7 @@ from dotenv import load_dotenv
 load_dotenv(Path(__file__).parent / ".env")
 
 ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
+KEEPA_API_KEY = os.getenv("KEEPA_API_KEY", "")
 STRATEGY_MODEL = os.getenv("STRATEGY_MODEL", "claude-sonnet-4-6")
 SUPERVISOR_MODEL = os.getenv("SUPERVISOR_MODEL", "claude-fable-5")
 

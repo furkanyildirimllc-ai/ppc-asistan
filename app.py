@@ -29,6 +29,7 @@ def db():
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys=ON")
+    conn.execute("PRAGMA journal_mode=WAL")
     return conn
 
 
@@ -62,6 +63,8 @@ def init_db():
             type TEXT, campaign TEXT, ad_group TEXT, keyword TEXT,
             match_type TEXT, current_value REAL, suggested_value REAL,
             reason TEXT, metrics TEXT,
+            confidence_score INTEGER DEFAULT 0,
+            is_auto_applied INTEGER DEFAULT 0,
             status TEXT DEFAULT 'pending');
         CREATE TABLE IF NOT EXISTS ai_strategies(
             id INTEGER PRIMARY KEY,
@@ -100,6 +103,15 @@ def init_db():
             ("harvest_ad_group", "ALTER TABLE brands ADD COLUMN harvest_ad_group TEXT DEFAULT ''"),
         ]:
             if col not in cols:
+                c.execute(ddl)
+                
+        # ALTER TABLE recommendations
+        rec_cols = {r["name"] for r in c.execute("PRAGMA table_info(recommendations)")}
+        for col, ddl in [
+            ("confidence_score", "ALTER TABLE recommendations ADD COLUMN confidence_score INTEGER DEFAULT 0"),
+            ("is_auto_applied", "ALTER TABLE recommendations ADD COLUMN is_auto_applied INTEGER DEFAULT 0"),
+        ]:
+            if col not in rec_cols:
                 c.execute(ddl)
 
 
@@ -269,7 +281,8 @@ def _regenerate(brand_id):
         sts = _load_rows(c, brand_id, "search_term")
         tgs = _load_rows(c, brand_id, "targeting")
         plc = _load_rows(c, brand_id, "placement")
-        recs = analysis.run_all(dict(brand), sts, tgs, plc)
+        camps = _load_rows(c, brand_id, "campaign")
+        recs = analysis.run_all(dict(brand), sts, tgs, plc, camps)
         # islenmis (approved/rejected) onerileri tekrar gosterme
         done = {(r["type"], r["campaign"], r["keyword"], r["match_type"])
                 for r in c.execute(
@@ -280,13 +293,19 @@ def _regenerate(brand_id):
         for r in recs:
             if (r["type"], r["campaign"], r["keyword"], r["match_type"]) in done:
                 continue
+            
+            auto_apply = r.get("auto_apply", False)
+            status = 'approved' if auto_apply else 'pending'
+            
             c.execute(
                 "INSERT INTO recommendations(brand_id,type,campaign,ad_group,keyword,"
-                "match_type,current_value,suggested_value,reason,metrics) "
-                "VALUES(?,?,?,?,?,?,?,?,?,?)",
+                "match_type,current_value,suggested_value,reason,metrics,"
+                "confidence_score,is_auto_applied,status) "
+                "VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)",
                 (brand_id, r["type"], r["campaign"], r["ad_group"], r["keyword"],
                  r["match_type"], r["current_value"], r["suggested_value"],
-                 r["reason"], json.dumps(r["metrics"])))
+                 r["reason"], json.dumps(r["metrics"]), 
+                 r.get("confidence", 0), 1 if auto_apply else 0, status))
 
 
 @app.post("/api/brands/{brand_id}/upload")
@@ -297,6 +316,11 @@ async def upload(brand_id: int, files: list[UploadFile]):
             raise HTTPException(404, "Marka bulunamadi")
         for f in files:
             content = await f.read()
+            # Guvenlik: 100MB'tan buyuk dosyalari reddet (OOM koruması)
+            if len(content) > 100 * 1024 * 1024:
+                results.append({"file": f.filename, "ok": False,
+                                "error": "Dosya çok büyük (max 100MB)"})
+                continue
             try:
                 rtype, rows = parsers.parse(f.filename, content)
             except Exception as e:
@@ -633,7 +657,7 @@ def bulk_readiness(brand_id: int):
         if not brand_row:
             raise HTTPException(404, "Marka bulunamadi")
         all_rows = []
-        for rtype in ("search_term", "targeting", "campaign", "placement"):
+        for rtype in ("search_term", "targeting", "campaign", "placement", "bulk_ids"):
             all_rows.extend(_load_rows(c, brand_id, rtype))
         approved_cnt = c.execute(
             "SELECT COUNT(*) c FROM recommendations WHERE brand_id=? AND status='approved'",
@@ -652,9 +676,36 @@ def bulk_readiness(brand_id: int):
         "message": (
             "Hazir" if has_ids and approved_cnt > 0 else
             "Onay yok - once oneri onayla" if not approved_cnt else
-            "Campaign ID yok - raporlari TEKRAR yukle (yeni parser icin)"
+            "Campaign ID yok - Amazon Ads Console > Bulk Operations > Download "
+            "spreadsheet ile ID dosyasini indirip PPC Asistan'a yukle "
+            "(normal performans raporlarinda ID bulunmaz, kac kere indirsen fark etmez)"
         ),
     }
+
+
+@app.get("/api/brands/{brand_id}/campaign-ad-groups")
+def campaign_ad_groups(brand_id: int):
+    """Bulk Operations ID dosyasindan gercek kampanya/ad-group isim listesi.
+
+    Harvest hedefi secerken kullanici elle yazip yazim hatasi yapmasin diye -
+    burada donen her (kampanya, ad group) cifti garanti ID'si cozulebilir
+    olandir (ayni report_rows kaynagindan geliyor, bulksheet.py'nin ID
+    haritasiyla birebir tutarli)."""
+    with db() as c:
+        if not c.execute("SELECT 1 FROM brands WHERE id=?", (brand_id,)).fetchone():
+            raise HTTPException(404, "Marka bulunamadi")
+        bulk_ids = _load_rows(c, brand_id, "bulk_ids")
+    pairs = set()
+    for row in bulk_ids:
+        camp = (row.get("campaign") or "").strip()
+        ag = (row.get("ad_group") or "").strip()
+        if camp and ag and row.get("campaign_id") and row.get("ad_group_id"):
+            pairs.add((camp, ag))
+    by_camp = {}
+    for camp, ag in sorted(pairs):
+        by_camp.setdefault(camp, []).append(ag)
+    return [{"campaign": c, "ad_groups": sorted(set(ags))}
+            for c, ags in sorted(by_camp.items())]
 
 
 @app.get("/api/brands/{brand_id}/insights")
@@ -708,16 +759,19 @@ def export_bulksheet(brand_id: int):
     # Raw report rows'i ID map icin gec
     with db() as c:
         all_rows = []
-        for rtype in ("search_term", "targeting", "campaign", "placement"):
+        for rtype in ("search_term", "targeting", "campaign", "placement", "bulk_ids"):
             all_rows.extend(_load_rows(c, brand_id, rtype))
     # Pre-flight: ID map var mi kontrol et
     has_ids = any(r.get("campaign_id") for r in all_rows)
     if not has_ids:
         raise HTTPException(400,
-            "Raporlarinizda Campaign ID yok - eski parser'la yuklenmis. "
-            "COZUM: Amazon Ads Console'dan raporlari TEKRAR indirin ve PPC Asistan'a "
-            "yeniden yukleyin. Yeni parser Campaign ID + Ad Group ID yakalar ve "
-            "bulk dosyasi Amazon validation'dan gecer.")
+            "Campaign ID/Ad Group ID bulunamadi. Normal performans raporlari "
+            "(Search Term, Targeting, Campaign, Placement) bu ID'leri HICBIR ZAMAN "
+            "icermez - kac kere yeniden indirirseniz indirin degismez. "
+            "COZUM: Amazon Ads Console > Bulk operations > 'Download spreadsheet' "
+            "ile ID eslemesi iceren dosyayi indirin, PPC Asistan'a normal rapor "
+            "gibi surukleyip yukleyin (otomatik taninir), sonra Bulksheet'i "
+            "tekrar indirin.")
     buf = bulksheet.build(recs, brand["name"], dict(brand), report_rows=all_rows)
     fname = f"{brand['name']}_amazon_bulksheet_{datetime.now():%Y%m%d}.xlsx"
     return StreamingResponse(

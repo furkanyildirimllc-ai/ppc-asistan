@@ -78,9 +78,18 @@ def _heuristic_checks(strategy, det_recs):
                  "problem": f"AI parse hatasi: {strategy['error']}",
                  "fix": "Yeniden uret veya raw_output'u incele"}]
 
-    # 1. Harvest ve negatif cakismasi
+    # 1. Harvest ve negatif cakismasi & Top Performer Korumasi (Risk Manager)
     det_harvest = {r["keyword"].lower() for r in det_recs
                    if r["type"] in ("harvest", "harvest_pt")}
+    
+    # En cok satis getiren kelimeleri bul (Risk Manager icin)
+    total_sales = sum(r.get("metrics", {}).get("sales", 0) for r in det_recs if isinstance(r.get("metrics"), dict))
+    top_performers = {
+        r["keyword"].lower(): r["metrics"].get("sales", 0)
+        for r in det_recs
+        if isinstance(r.get("metrics"), dict) and r.get("metrics", {}).get("sales", 0) > (total_sales * 0.10 if total_sales > 0 else 100)
+    }
+
     for neg in strategy.get("extra_negatives", []) or []:
         kw = (neg.get("keyword") or "").lower()
         if kw in det_harvest:
@@ -89,6 +98,13 @@ def _heuristic_checks(strategy, det_recs):
                 "location": f"extra_negatives -> '{kw}'",
                 "problem": "Bu kelime harvest onerilmisken negatif olarak da onerildi",
                 "fix": "Bu negatifi cikart - kelimeyi kazanan olarak topluyoruz",
+            })
+        if kw in top_performers:
+            issues.append({
+                "severity": "critical",
+                "location": f"extra_negatives -> '{kw}'",
+                "problem": f"VETO: Toplam satisin buyuk kismini getiren ({top_performers[kw]}$) bir kelimeyi negatifliyorsun!",
+                "fix": "Asla top performer kelimeleri negatifleme.",
             })
 
     # 2. Yeni kampanya bid'leri

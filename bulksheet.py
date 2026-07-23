@@ -41,17 +41,6 @@ BULK_HEADERS = [
     "Orders", "Units", "Conversion Rate", "ACOS", "CPC", "ROAS",
 ]
 
-# Amazon placement API adlari (Bidding Adjustment entity icin)
-PLACEMENT_API = {
-    "top of search": "Placement Top",
-    "top": "Placement Top",
-    "product pages": "Placement Product Page",
-    "detail page": "Placement Product Page",
-    "product page": "Placement Product Page",
-    "rest of search": "Placement Rest Of Search",
-    "rest": "Placement Rest Of Search",
-}
-
 
 def _id_str(v):
     """ID'yi string olarak dondur (float/int/str -> str)."""
@@ -64,12 +53,15 @@ def _id_str(v):
 
 
 def _sanitize_name(s):
-    """Kampanya/adgroup adindan Amazon'un anlayamayacagi karakterleri temizle."""
+    """Kampanya/adgroup adindan Amazon'un anlayamayacagi karakterleri temizle.
+    
+    NOT: Parantezleri SILME — Amazon kampanya adlarinda parantez kullanimi
+    normaldir ve silmek ID eslesmesini bozar.
+    """
     if not s:
         return s
     s = str(s).strip()
-    # Amazon'da parentez, tab, cift bosluk sorun cikarabiliyor
-    s = s.replace("(", "").replace(")", "").replace("\t", " ")
+    s = s.replace("\t", " ")
     while "  " in s:
         s = s.replace("  ", " ")
     return s.strip()
@@ -90,12 +82,12 @@ def build(recs, brand_name, brand=None, report_rows=None):
     brand_name = _sanitize_name(brand_name) or "Marka"
     dest_campaign = _sanitize_name(brand.get("harvest_campaign") or "")
     dest_ad_group = _sanitize_name(brand.get("harvest_ad_group") or "")
-    dest_campaign_id = _id_str(brand.get("harvest_campaign_id"))
-    dest_ad_group_id = _id_str(brand.get("harvest_ad_group_id"))
 
     # ID map'leri kur
-    camp_id_map = {}  # {campaign_name_lower: campaign_id}
-    ag_id_map = {}    # {(camp_lower, ag_lower): ad_group_id}
+    camp_id_map = {}   # {campaign_name_lower: campaign_id}
+    ag_id_map = {}      # {(camp_lower, ag_lower): ad_group_id}
+    kw_id_map = {}      # {(camp_lower, ag_lower, keyword_lower, match_lower): keyword_id}
+    placement_adj_map = {}  # {(campaign_id, placement_api): mevcut_yuzde}
     for row in (report_rows or []):
         cid = _id_str(row.get("campaign_id"))
         cname = (row.get("campaign") or "").strip()
@@ -105,9 +97,22 @@ def build(recs, brand_name, brand=None, report_rows=None):
         agname = (row.get("ad_group") or "").strip()
         if agid and cname and agname:
             ag_id_map.setdefault((cname.lower(), agname.lower()), agid)
+        kwid = _id_str(row.get("keyword_id"))
+        kwtext = (row.get("keyword") or "").strip()
+        mt = (row.get("match_type") or "").strip()
+        if kwid and cname and agname and kwtext and mt:
+            kw_id_map.setdefault(
+                (cname.lower(), agname.lower(), kwtext.lower(), mt.lower()), kwid)
+        if row.get("entity") == "Bidding Adjustment" and cid and row.get("placement"):
+            placement_adj_map[(cid, row["placement"])] = row.get("percentage") or 0
 
-    # Yeni kampanya olusturmak Amazon bulk'ta artik zor (Campaign ID sart).
-    # Kullanicinin harvest_campaign_id set etmesi lazim veya harvest atlanmali.
+    # Hedef kampanya/ad group ID'sini ISIMDEN coz (ayri bir ID alani tutmuyoruz -
+    # tek dogruluk kaynagi bulk_ids dosyasindan gelen isim<->ID esleme haritasi).
+    # Marka ayarlarindaki isim, bulk_ids dosyasinda bulunan gercek bir kampanya/ad
+    # group ile birebir eslesirse otomatik cozulur; eslesmezse harvest atlanir.
+    dest_campaign_id = camp_id_map.get(dest_campaign.lower(), "") if dest_campaign else ""
+    dest_ad_group_id = ag_id_map.get((dest_campaign.lower(), dest_ad_group.lower()), "") \
+        if (dest_campaign and dest_ad_group) else ""
     harvest_ok = bool(dest_campaign_id and dest_ad_group_id)
 
     today = datetime.now().strftime("%Y%m%d")
@@ -132,7 +137,7 @@ def build(recs, brand_name, brand=None, report_rows=None):
               "keyword_create": 0, "keyword_update": 0,
               "pt_create": 0, "neg_kw": 0, "neg_pt": 0,
               "placement": 0, "sculpt": 0}
-    skipped = {"no_camp_id": [], "no_ag_id": [], "no_harvest_dest": []}
+    skipped = {"no_camp_id": [], "no_ag_id": [], "no_harvest_dest": [], "no_kw_id": []}
 
     def get_camp_id(name):
         return camp_id_map.get((name or "").strip().lower(), "")
@@ -141,38 +146,49 @@ def build(recs, brand_name, brand=None, report_rows=None):
         return ag_id_map.get(((camp or "").strip().lower(),
                               (ag or "").strip().lower()), "")
 
-    # ---- Bidding Adjustment (placement multiplier) ----
+    def get_kw_id(camp, ag, kw, mt):
+        return kw_id_map.get(((camp or "").strip().lower(), (ag or "").strip().lower(),
+                              (kw or "").strip().lower(), (mt or "").strip().lower()), "")
+
+    # ---- Placement (Bidding Adjustment) ----
+    # ONCEKI HATA (duzeltildi): eski surum reason metnindeki ilk sayiyi (genelde
+    # ACOS yuzdesi) regex ile "artis yuzdesi" saniyordu - "carpani sifirla/dusur"
+    # onerileri ters yonde +%68-136 ARTIS satiri uretiyordu. Simdi yon (up/zero)
+    # ve adim (step_pct) analysis.py'den YAPISAL geliyor, metinden tahmin yok.
+    # Mevcut carpan degeri de tahmin edilmiyor - bulk_ids dosyasindaki gercek
+    # Bidding Adjustment satirlarindan (placement_adj_map) okunuyor; hic
+    # adjustment yoksa Operation=Create, varsa Operation=Update kullanilir.
     for rec in recs:
         if rec["type"] != "placement":
             continue
-        pl_key = (rec.get("keyword") or "").lower()
-        api_name = None
-        for k, v in PLACEMENT_API.items():
-            if k in pl_key:
-                api_name = v
-                break
-        pct = ""
-        reason = rec.get("reason") or ""
-        import re as _re
-        m = _re.search(r"\+?%?(\d{1,3})\s*%?", reason)
-        if m:
-            pct = m.group(1)
+        m = rec.get("metrics") or {}
+        api_name = m.get("placement_api")
+        direction = m.get("direction")
+        step_pct = m.get("step_pct")
         src_camp = _sanitize_name(rec.get("campaign", ""))
         camp_id = get_camp_id(rec.get("campaign", ""))
-        if not (src_camp and api_name and pct):
+        if not (src_camp and api_name and direction):
             continue
         if not camp_id:
             skipped["no_camp_id"].append(f"placement in {src_camp}")
             continue
+        current_pct = placement_adj_map.get((camp_id, api_name))
+        operation = "Update" if current_pct is not None else "Create"
+        if direction == "up":
+            new_pct = min(900, (current_pct or 0) + (step_pct or 25))
+        else:  # 'zero'
+            new_pct = 0
+            if current_pct == 0:
+                continue  # zaten 0 - yazacak bir sey yok
         r = _empty_row()
         r.update({
             "Product": "Sponsored Products",
             "Entity": "Bidding Adjustment",
-            "Operation": "Create",
+            "Operation": operation,
             "Campaign ID": camp_id,
             "Campaign Name": src_camp,
             "Placement": api_name,
-            "Percentage": pct,
+            "Percentage": int(new_pct),
         })
         ws.append([r[h] for h in BULK_HEADERS])
         counts["placement"] += 1
@@ -188,7 +204,7 @@ def build(recs, brand_name, brand=None, report_rows=None):
         bid = rec.get("suggested_value")
         camp_id = get_camp_id(rec.get("campaign", ""))
         ag_id = get_ag_id(rec.get("campaign", ""), rec.get("ad_group", ""))
-        keyword_id = _id_str(rec.get("keyword_id"))
+        keyword_id = get_kw_id(rec.get("campaign", ""), rec.get("ad_group", ""), kw, mt)
         if not (camp and ag and kw and bid):
             continue
         if not camp_id:
@@ -197,6 +213,13 @@ def build(recs, brand_name, brand=None, report_rows=None):
         if not ag_id:
             skipped["no_ag_id"].append(f"bid update in {camp}/{ag}")
             continue
+        if not keyword_id:
+            # Amazon bu satiri Keyword ID (Read only) olmadan REDDEDIYOR
+            # (gercek hata raporunda dogrulandi: "Missing value for column:
+            # Keyword ID (Read only)"). Isimle eslesme yeterli degil - tahmin
+            # etmek yerine atla.
+            skipped["no_kw_id"].append(f"bid update '{kw}' in {camp}/{ag}")
+            continue
         r = _empty_row()
         r.update({
             "Product": "Sponsored Products",
@@ -204,6 +227,7 @@ def build(recs, brand_name, brand=None, report_rows=None):
             "Operation": "Update",
             "Campaign ID": camp_id,
             "Ad Group ID": ag_id,
+            "Keyword ID (Read only)": keyword_id,
             "Campaign Name": camp,
             "Ad Group Name": ag,
             "State": "enabled",
@@ -211,12 +235,10 @@ def build(recs, brand_name, brand=None, report_rows=None):
             "Match Type": mt,
             "Bid": bid,
         })
-        if keyword_id:
-            r["Keyword ID (Read only)"] = keyword_id
         ws.append([r[h] for h in BULK_HEADERS])
         counts["keyword_update"] += 1
 
-    # ---- Keyword Create (harvest yeni kelime) - hedef kampanya ID gerekli ----
+    # ---- Keyword Create (harvest yeni kelime) ----
     for rec in recs:
         if rec["type"] != "harvest":
             continue
@@ -224,25 +246,93 @@ def build(recs, brand_name, brand=None, report_rows=None):
         bid = rec.get("suggested_value")
         if not (kw and bid):
             continue
-        if not harvest_ok:
-            skipped["no_harvest_dest"].append(f"harvest kw: {kw}")
-            continue
-        r = _empty_row()
-        r.update({
-            "Product": "Sponsored Products",
-            "Entity": "Keyword",
-            "Operation": "Create",
-            "Campaign ID": dest_campaign_id,
-            "Ad Group ID": dest_ad_group_id,
-            "Campaign Name": dest_campaign,
-            "Ad Group Name": dest_ad_group,
-            "State": "enabled",
-            "Keyword Text": kw,
-            "Match Type": "exact",
-            "Bid": bid,
-        })
-        ws.append([r[h] for h in BULK_HEADERS])
-        counts["keyword_create"] += 1
+            
+        if harvest_ok:
+            r = _empty_row()
+            r.update({
+                "Product": "Sponsored Products",
+                "Entity": "Keyword",
+                "Operation": "Create",
+                "Campaign ID": dest_campaign_id,
+                "Ad Group ID": dest_ad_group_id,
+                "Campaign Name": dest_campaign,
+                "Ad Group Name": dest_ad_group,
+                "State": "enabled",
+                "Keyword Text": kw,
+                "Match Type": "exact",
+                "Bid": bid,
+            })
+            ws.append([r[h] for h in BULK_HEADERS])
+            counts["keyword_create"] += 1
+        else:
+            # SEARCH TERM ISOLATION: SKAG Kampanyasi Olustur
+            skag_camp = f"SKAG - {kw.title()}"
+            skag_ag = "Exact"
+            
+            # 1. Campaign Create
+            r_camp = _empty_row()
+            r_camp.update({
+                "Product": "Sponsored Products",
+                "Entity": "Campaign",
+                "Operation": "Create",
+                "Campaign Name": skag_camp,
+                "State": "enabled",
+                "Targeting Type": "manual",
+                "Start Date": today,
+                "Daily Budget": 10, # default $10
+            })
+            ws.append([r_camp[h] for h in BULK_HEADERS])
+            counts["campaign_create"] += 1
+            
+            # 2. Ad Group Create
+            r_ag = _empty_row()
+            r_ag.update({
+                "Product": "Sponsored Products",
+                "Entity": "Ad Group",
+                "Operation": "Create",
+                "Campaign Name": skag_camp,
+                "Ad Group Name": skag_ag,
+                "State": "enabled",
+                "Ad Group Default Bid": bid,
+            })
+            ws.append([r_ag[h] for h in BULK_HEADERS])
+            counts["adgroup_create"] += 1
+            
+            # 3. Keyword Create
+            r_kw = _empty_row()
+            r_kw.update({
+                "Product": "Sponsored Products",
+                "Entity": "Keyword",
+                "Operation": "Create",
+                "Campaign Name": skag_camp,
+                "Ad Group Name": skag_ag,
+                "State": "enabled",
+                "Keyword Text": kw,
+                "Match Type": "exact",
+                "Bid": bid,
+            })
+            ws.append([r_kw[h] for h in BULK_HEADERS])
+            counts["keyword_create"] += 1
+            
+            # 4. Source Campaign'lerde Negatifle (Isolation)
+            sources = [s.strip() for s in rec.get("campaign", "").split(",") if s.strip()]
+            for src in sources:
+                src_id = get_camp_id(src)
+                if not src_id:
+                    continue # Bulunamazsa atla
+                r_neg = _empty_row()
+                r_neg.update({
+                    "Product": "Sponsored Products",
+                    "Entity": "Campaign Negative Keyword",
+                    "Operation": "Create",
+                    "Campaign ID": src_id,
+                    "Campaign Name": src,
+                    "State": "enabled",
+                    "Keyword Text": kw,
+                    "Match Type": "negative exact",
+                })
+                ws.append([r_neg[h] for h in BULK_HEADERS])
+                counts["neg_kw"] += 1
 
     # ---- Product Targeting Create (yeni ASIN hedefleri) ----
     for rec in recs:
@@ -301,7 +391,12 @@ def build(recs, brand_name, brand=None, report_rows=None):
         counts["neg_kw"] += 1
 
     # ---- Traffic sculpting negatifleri ----
+    # KRITIK: sadece harvest_ok ise calisir. Aksi halde kazanan kelime hicbir
+    # yere eklenmeden (Keyword/PT Create atlanir) kaynak kampanyada negatiflenir
+    # -> para kazandiran trafik sessizce kesilir. Bu daha once BIR HATA idi.
     for rec in recs:
+        if not harvest_ok:
+            break
         if rec["type"] not in ("harvest", "harvest_pt"):
             continue
         kw = rec.get("keyword", "")
@@ -318,7 +413,7 @@ def build(recs, brand_name, brand=None, report_rows=None):
                 r = _empty_row()
                 r.update({
                     "Product": "Sponsored Products",
-                    "Entity": "Negative Product Targeting",
+                    "Entity": "Campaign Negative Product Targeting",
                     "Operation": "Create",
                     "Campaign ID": src_id,
                     "Campaign Name": src,
@@ -385,9 +480,10 @@ def build(recs, brand_name, brand=None, report_rows=None):
         write(r, f"  3. Kampanya adi: (istedigin isim, ornek '{brand_name} Exact Kazananlar')", ""); r += 1
         write(r, "  4. Ad group ekle, urun ekle, bir tane exact kelime ekle (dummy)", ""); r += 1
         write(r, "  5. Kaydet -> kampanya ve ad group Amazon'da olusur", ""); r += 1
-        write(r, "  6. Bulk operations -> Custom spreadsheet ile 'Sponsored Products Campaigns' raporu indir", ""); r += 1
-        write(r, "  7. PPC Asistan'da yeni bir Search Term veya Targeting raporu yukle", ""); r += 1
-        write(r, "     (bu Campaign ID'lerin kaydedilmesi icin)", ""); r += 1
+        write(r, "  6. Bulk operations -> 'Download spreadsheet' ile ID esleme dosyasini indir", ""); r += 1
+        write(r, "     (Search Term/Targeting raporlarinda ID OLMAZ - sadece bu indirmede var)", ""); r += 1
+        write(r, "  7. PPC Asistan'a bu dosyayi normal rapor gibi surukle-birak yukle", ""); r += 1
+        write(r, "     (otomatik 'Bulk Operations' olarak tanir, Campaign/Ad Group ID kaydeder)", ""); r += 1
         write(r, "  8. Marka ayarindan 'Harvest hedef kampanya' ismini gir", ""); r += 1
         write(r, "  9. Yeni bulksheet indir - artik harvest kelimeler dahil olur", ""); r += 1
         r += 1

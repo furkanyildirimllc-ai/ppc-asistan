@@ -4,48 +4,134 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>PPC Asistan</title>
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
-  :root{
-    --bg:#0d1117; --panel:#161b22; --panel2:#1c2330; --border:#2d3646;
-    --text:#e6edf3; --muted:#8b98a9; --accent:#f59e0b; --green:#34d399;
-    --red:#f87171; --blue:#60a5fa; --purple:#c084fc;
+  :root {
+    --bg: #050505;
+    --panel: rgba(18, 18, 20, 0.7);
+    --panel2: rgba(26, 26, 29, 0.85);
+    --border: rgba(255, 255, 255, 0.08);
+    --text: #F3F4F6;
+    --muted: #888888;
+    --accent: #38BDF8;      /* Neon Sky Blue */
+    --accent-glow: rgba(56, 189, 248, 0.35);
+    --green: #10B981;
+    --red: #F43F5E;
+    --blue: #6366F1;       /* Indigo */
+    --purple: #D946EF;     /* Fuchsia */
+    --glass-blur: blur(20px);
   }
-  *{box-sizing:border-box;margin:0;padding:0}
-  body{background:var(--bg);color:var(--text);font-family:-apple-system,'Segoe UI',sans-serif;font-size:14px}
-  header{display:flex;align-items:center;gap:14px;padding:14px 24px;border-bottom:1px solid var(--border);background:var(--panel)}
-  header h1{font-size:17px;font-weight:700;display:flex;align-items:baseline;gap:8px}
-  header h1 span{color:var(--accent)}
-  header h1 .ver{font-size:10px;color:var(--muted);font-weight:500;letter-spacing:.5px}
-  .wrap{max-width:1280px;margin:0 auto;padding:20px 24px}
-  .row{display:flex;gap:16px;flex-wrap:wrap}
-  .card{background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:16px}
-  select,input,button{font:inherit;color:var(--text)}
-  select,input{background:var(--panel2);border:1px solid var(--border);border-radius:7px;padding:7px 10px;outline:none}
-  select:focus,input:focus{border-color:var(--accent)}
-  button{background:var(--panel2);border:1px solid var(--border);border-radius:7px;padding:7px 14px;cursor:pointer;transition:.12s}
-  button:hover{border-color:var(--accent);color:var(--accent)}
-  button.primary{background:var(--accent);border-color:var(--accent);color:#111;font-weight:600}
-  button.primary:hover{filter:brightness(1.1);color:#111}
-  button.ok{color:var(--green)} button.no{color:var(--red)}
-  .muted{color:var(--muted)} .small{font-size:12px}
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--bg);
+    background-image: 
+      radial-gradient(circle at 0% 0%, rgba(56, 189, 248, 0.08) 0%, transparent 40%), 
+      radial-gradient(circle at 100% 100%, rgba(99, 102, 241, 0.08) 0%, transparent 40%);
+    background-attachment: fixed;
+    color: var(--text);
+    font-family: 'Outfit', -apple-system, sans-serif;
+    font-size: 14px;
+    -webkit-font-smoothing: antialiased;
+  }
+  /* Animations */
+  @keyframes fadeUp {
+    from { opacity: 0; transform: translateY(12px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  .card, .hero-card, .kpi-ribbon, .mg {
+    animation: fadeUp 0.4s ease-out backwards;
+  }
+  .hero-card:nth-child(2) { animation-delay: 0.1s; }
+  .hero-card:nth-child(3) { animation-delay: 0.2s; }
+  .hero-card:nth-child(4) { animation-delay: 0.3s; }
+  
+  header {
+    display: flex; align-items: center; gap: 14px; padding: 16px 28px;
+    border-bottom: 1px solid var(--border);
+    background: rgba(11, 14, 20, 0.8);
+    backdrop-filter: var(--glass-blur);
+    position: sticky; top: 0; z-index: 100;
+  }
+  header h1 { font-size: 18px; font-weight: 800; display: flex; align-items: baseline; gap: 8px; letter-spacing: -0.5px; }
+  header h1 span { color: var(--accent); text-shadow: 0 0 10px var(--accent-glow); }
+  header h1 .ver { font-size: 10px; color: var(--muted); font-weight: 600; letter-spacing: 1px; text-transform: uppercase; }
+  .wrap { max-width: 1320px; margin: 0 auto; padding: 24px }
+  .row { display: flex; gap: 18px; flex-wrap: wrap }
+  
+  .card {
+    background: var(--panel);
+    backdrop-filter: var(--glass-blur);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 20px;
+    box-shadow: 0 4px 24px -4px rgba(0,0,0,0.2);
+  }
+  select, input, button { font: inherit; color: var(--text); transition: all 0.2s; }
+  select, input {
+    background: rgba(0,0,0,0.2); border: 1px solid var(--border);
+    border-radius: 8px; padding: 8px 12px; outline: none;
+    box-shadow: inset 0 2px 4px rgba(0,0,0,0.1);
+  }
+  select:focus, input:focus { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-glow); }
+  button {
+    background: rgba(255,255,255,0.05); border: 1px solid var(--border);
+    border-radius: 8px; padding: 8px 16px; cursor: pointer; font-weight: 500;
+  }
+  button:hover { background: rgba(255,255,255,0.1); transform: translateY(-1px); box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
+  button:active { transform: translateY(0); }
+  button.primary {
+    background: linear-gradient(135deg, #38BDF8, #6366F1);
+    border: none; color: #fff; font-weight: 700; text-shadow: 0 1px 2px rgba(0,0,0,0.3);
+    letter-spacing: 0.5px;
+  }
+  button.primary:hover { filter: brightness(1.15); box-shadow: 0 4px 20px var(--accent-glow); }
+  button.ok { color: var(--green); background: rgba(16, 185, 129, 0.1); border-color: transparent; }
+  button.no { color: var(--red); background: rgba(239, 68, 68, 0.1); border-color: transparent; }
+  button.ok:hover { background: rgba(16, 185, 129, 0.2); color: #fff; }
+  button.no:hover { background: rgba(239, 68, 68, 0.2); color: #fff; }
+  .muted { color: var(--muted) } .small { font-size: 12px }
   /* stat cards */
-  .stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin:16px 0}
-  .stat{background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:14px}
-  .stat .v{font-size:22px;font-weight:700;margin-top:4px}
+  .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 14px; margin: 20px 0; }
+  .stat {
+    background: var(--panel); backdrop-filter: var(--glass-blur);
+    border: 1px solid var(--border); border-radius: 12px; padding: 16px;
+    box-shadow: 0 2px 12px rgba(0,0,0,0.1);
+  }
+  .stat .v { font-size: 24px; font-weight: 800; margin-top: 6px; letter-spacing: -0.5px; }
   /* dropzone */
-  #drop{border:2px dashed var(--border);border-radius:10px;padding:26px;text-align:center;color:var(--muted);cursor:pointer;transition:.15s;margin:16px 0}
-  #drop.over{border-color:var(--accent);color:var(--accent);background:rgba(245,158,11,.06)}
+  #drop {
+    background: rgba(0,0,0,0.1);
+    border: 2px dashed rgba(255,255,255,0.1);
+    border-radius: 12px; padding: 32px; text-align: center; color: var(--muted);
+    cursor: pointer; transition: 0.2s; margin: 20px 0; font-weight: 500;
+  }
+  #drop:hover, #drop.over {
+    border-color: var(--accent); color: var(--accent);
+    background: rgba(245, 158, 11, 0.05); box-shadow: 0 0 24px var(--accent-glow);
+  }
   /* tabs */
-  .tabs{display:flex;gap:8px;margin:18px 0 12px;flex-wrap:wrap}
-  .tab{padding:7px 14px;border-radius:20px;border:1px solid var(--border);cursor:pointer;color:var(--muted)}
-  .tab.active{border-color:var(--accent);color:var(--accent);font-weight:600}
-  .tab .n{background:var(--panel2);border-radius:10px;padding:1px 8px;margin-left:6px;font-size:12px}
+  .tabs { display: flex; gap: 10px; margin: 20px 0 16px; flex-wrap: wrap }
+  .tab {
+    padding: 8px 16px; border-radius: 20px; border: 1px solid var(--border);
+    cursor: pointer; color: var(--muted); font-weight: 500; transition: 0.2s;
+    background: rgba(255,255,255,0.02);
+  }
+  .tab:hover { background: rgba(255,255,255,0.05); }
+  .tab.active {
+    border-color: var(--accent); color: var(--accent); font-weight: 600;
+    background: rgba(245, 158, 11, 0.1); box-shadow: 0 0 16px var(--accent-glow);
+  }
+  .tab .n { background: rgba(0,0,0,0.3); border-radius: 10px; padding: 2px 8px; margin-left: 8px; font-size: 11px; font-weight: 700; }
   /* table */
-  table{width:100%;border-collapse:collapse}
-  th{color:var(--muted);font-weight:600;text-align:left;font-size:12px;padding:8px;border-bottom:1px solid var(--border)}
-  td{padding:8px;border-bottom:1px solid #1e2634;vertical-align:top}
-  tr:hover td{background:rgba(255,255,255,.02)}
-  .kw{font-weight:600}
+  table { width: 100%; border-collapse: separate; border-spacing: 0; }
+  th {
+    color: var(--muted); font-weight: 600; text-align: left; font-size: 11px;
+    padding: 12px 10px; text-transform: uppercase; letter-spacing: 0.5px;
+    border-bottom: 1px solid var(--border); background: rgba(255,255,255,0.01);
+  }
+  td { padding: 12px 10px; border-bottom: 1px solid rgba(255,255,255,0.03); vertical-align: top; }
+  tr:hover td { background: rgba(255,255,255,0.03); }
+  .kw { font-weight: 600; color: #fff; }
   .badge{display:inline-block;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:600}
   .b-harvest{background:rgba(52,211,153,.15);color:var(--green)}
   .b-harvest_pt{background:rgba(192,132,252,.15);color:var(--purple)}
@@ -65,7 +151,7 @@
   dialog label{display:block;margin:10px 0 4px;color:var(--muted);font-size:12px}
   dialog input{width:100%}
   .actions{display:flex;gap:10px;margin-top:16px;justify-content:flex-end}
-  #toast{position:fixed;bottom:22px;right:22px;background:var(--panel2);border:1px solid var(--accent);border-radius:9px;padding:12px 18px;display:none;z-index:50}
+  #toast{position:fixed;bottom:22px;right:22px;background:var(--panel2);border:1px solid var(--accent);border-radius:9px;padding:12px 18px;display:none;z-index:100}
   .topcamps td{font-size:12.5px}
   /* copy button */
   .cpy{background:transparent;border:1px solid var(--border);border-radius:5px;padding:3px 7px;font-size:11px;color:var(--muted);cursor:pointer}
@@ -92,56 +178,77 @@
   .spin{display:inline-block;width:14px;height:14px;border:2px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin 1s linear infinite;vertical-align:middle;margin-right:6px}
   @keyframes spin{to{transform:rotate(360deg)}}
   /* Dashboard hero */
-  .hero{display:grid;grid-template-columns:280px 1fr 1fr 1fr;gap:14px;margin:16px 0}
-  @media(max-width:1000px){.hero{grid-template-columns:1fr 1fr}}
-  .hero-card{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:16px;position:relative;overflow:hidden;transition:transform .2s, border-color .2s}
-  .hero-card:hover{transform:translateY(-2px);border-color:rgba(245,158,11,.3)}
-  .hero-card::after{content:'';position:absolute;left:0;top:0;bottom:0;width:3px;opacity:.7}
-  .hc-red::after{background:var(--red)}
-  .hc-green::after{background:var(--green)}
-  .hc-orange::after{background:var(--accent)}
-  .hc-blue::after{background:var(--blue)}
-  .hc-purple::after{background:var(--purple)}
-  /* KPI Ribbon - üst çubuk (4x2 sabit, geniş ekranda 8x1) */
-  .kpi-ribbon{background:linear-gradient(180deg,var(--panel) 0%,var(--panel2) 100%);border:1px solid var(--border);border-radius:12px;padding:0;margin:16px 0;display:grid;grid-template-columns:repeat(4,1fr);gap:0;position:relative;overflow:hidden}
-  @media(min-width:1400px){.kpi-ribbon{grid-template-columns:repeat(8,1fr)}}
-  @media(max-width:720px){.kpi-ribbon{grid-template-columns:repeat(2,1fr)}}
-  .kpi{padding:14px 16px;min-width:0;display:flex;flex-direction:column;justify-content:center;border-right:1px solid var(--border);border-bottom:1px solid var(--border);min-height:76px}
-  /* geniş ekranda tek satır - alt border yok */
-  @media(min-width:1400px){.kpi{border-bottom:0}}
-  /* 4 sütunlu 2 satırda alt satırın alt border'ı olmasın */
+  .hero { display: grid; grid-template-columns: 280px 1fr 1fr 1fr; gap: 16px; margin: 20px 0; }
+  @media(max-width:1000px){ .hero { grid-template-columns: 1fr 1fr; } }
+  .hero-card {
+    background: var(--panel); backdrop-filter: var(--glass-blur);
+    border: 1px solid var(--border); border-radius: 14px; padding: 20px;
+    position: relative; overflow: hidden; transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    box-shadow: 0 4px 20px rgba(0,0,0,0.15);
+  }
+  .hero-card:hover { transform: translateY(-4px); border-color: rgba(245,158,11,0.4); box-shadow: 0 8px 30px rgba(0,0,0,0.25); }
+  .hero-card::after { content:''; position:absolute; left:0; top:0; bottom:0; width:4px; }
+  .hc-red::after{background:var(--red); box-shadow: 2px 0 12px var(--red);}
+  .hc-green::after{background:var(--green); box-shadow: 2px 0 12px var(--green);}
+  .hc-orange::after{background:var(--accent); box-shadow: 2px 0 12px var(--accent);}
+  .hc-blue::after{background:var(--blue); box-shadow: 2px 0 12px var(--blue);}
+  .hc-purple::after{background:var(--purple); box-shadow: 2px 0 12px var(--purple);}
+  
+  /* KPI Ribbon */
+  .kpi-ribbon {
+    background: rgba(22, 27, 34, 0.5); backdrop-filter: var(--glass-blur);
+    border: 1px solid var(--border); border-radius: 14px; margin: 20px 0;
+    display: grid; grid-template-columns: repeat(4, 1fr); box-shadow: 0 4px 24px rgba(0,0,0,0.1);
+  }
+  @media(min-width:1400px){ .kpi-ribbon { grid-template-columns: repeat(8, 1fr); } }
+  @media(max-width:720px){ .kpi-ribbon { grid-template-columns: repeat(2, 1fr); } }
+  .kpi {
+    padding: 16px 20px; min-height: 86px; display: flex; flex-direction: column; justify-content: center;
+    border-right: 1px solid var(--border); border-bottom: 1px solid var(--border);
+    transition: background 0.2s; position: relative;
+  }
+  .kpi::before {
+    content: ''; position: absolute; left: 0; right: 0; top: 0; bottom: 0;
+    background: radial-gradient(circle at 50% 50%, rgba(255,255,255,0.03), transparent 60%);
+    opacity: 0; transition: opacity 0.3s;
+  }
+  .kpi:hover::before { opacity: 1; }
+  @media(min-width:1400px){ .kpi { border-bottom: 0; } }
   @media(min-width:721px) and (max-width:1399px){
-    .kpi:nth-child(n+5){border-bottom:0}
-    .kpi:nth-child(4n){border-right:0}
+    .kpi:nth-child(n+5) { border-bottom: 0; }
+    .kpi:nth-child(4n) { border-right: 0; }
   }
   @media(max-width:720px){
-    .kpi:nth-child(2n){border-right:0}
-    .kpi:nth-last-child(-n+2){border-bottom:0}
+    .kpi:nth-child(2n) { border-right: 0; }
+    .kpi:nth-last-child(-n+2) { border-bottom: 0; }
   }
-  @media(min-width:1400px){.kpi:last-child{border-right:0}}
-  .kpi .l{color:var(--muted);font-size:10.5px;text-transform:uppercase;letter-spacing:.7px;font-weight:700;margin-bottom:6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-  .kpi .v{font-size:20px;font-weight:800;letter-spacing:-.3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:1.15;color:var(--text)}
-  .kpi .s{color:var(--muted);font-size:11.5px;margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-weight:500}
-  .kpi{transition:background .15s}
-  .kpi:hover{background:rgba(255,255,255,.02)}
-  .kpi.pos .v{color:var(--green)}
-  .kpi.neg .v{color:var(--red)}
-  .kpi.warn .v{color:var(--accent)}
-  /* Metrik gruplari */
-  .metric-groups{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin:16px 0}
-  @media(max-width:1100px){.metric-groups{grid-template-columns:repeat(2,1fr)}}
-  .mg{background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:14px;transition:.2s}
-  .mg:hover{border-color:rgba(245,158,11,.25)}
-  .mg h6{color:var(--muted);font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.7px;margin-bottom:10px;padding-bottom:8px;border-bottom:1px solid var(--border)}
-  .mg .m{display:flex;justify-content:space-between;align-items:baseline;padding:5px 0;font-size:12.5px}
-  .mg .m .k{color:var(--muted)}
-  .mg .m .v{font-weight:700;color:var(--text)}
-  .mg .m .v.hi{color:var(--green)}
-  .mg .m .v.lo{color:var(--red)}
-  .mg .m .v.mid{color:var(--accent)}
-  .mg .mini{display:flex;gap:6px;margin-top:8px;flex-wrap:wrap}
-  .mg .chip{background:var(--panel2);border-radius:12px;padding:3px 9px;font-size:11px;color:var(--muted)}
-  .mg .chip b{color:var(--text)}
+  @media(min-width:1400px){ .kpi:last-child { border-right: 0; } }
+  .kpi .l { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: 1px; font-weight: 700; margin-bottom: 8px; }
+  .kpi .v { font-size: 24px; font-weight: 800; letter-spacing: -0.5px; color: #fff; line-height: 1; text-shadow: 0 2px 10px rgba(0,0,0,0.3); }
+  .kpi .s { color: var(--muted); font-size: 12px; margin-top: 6px; font-weight: 500; }
+  .kpi.pos .v { color: var(--green); text-shadow: 0 2px 12px rgba(16, 185, 129, 0.2); }
+  .kpi.neg .v { color: var(--red); text-shadow: 0 2px 12px rgba(239, 68, 68, 0.2); }
+  .kpi.warn .v { color: var(--accent); text-shadow: 0 2px 12px rgba(245, 158, 11, 0.2); }
+  
+  /* Metric groups */
+  .metric-groups { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin: 20px 0; }
+  @media(max-width:1100px){ .metric-groups { grid-template-columns: repeat(2, 1fr); } }
+  .mg {
+    background: var(--panel); backdrop-filter: var(--glass-blur);
+    border: 1px solid var(--border); border-radius: 14px; padding: 18px;
+    transition: 0.3s; box-shadow: 0 4px 16px rgba(0,0,0,0.1);
+  }
+  .mg:hover { border-color: rgba(245, 158, 11, 0.3); transform: translateY(-2px); }
+  .mg h6 { color: var(--accent); font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 12px; padding-bottom: 10px; border-bottom: 1px solid var(--border); }
+  .mg .m { display: flex; justify-content: space-between; align-items: baseline; padding: 6px 0; font-size: 13px; }
+  .mg .m .k { color: var(--muted); }
+  .mg .m .v { font-weight: 700; color: #fff; }
+  .mg .m .v.hi { color: var(--green); }
+  .mg .m .v.lo { color: var(--red); }
+  .mg .m .v.mid { color: var(--accent); }
+  .mg .mini { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
+  .mg .chip { background: rgba(0,0,0,0.3); border: 1px solid var(--border); border-radius: 12px; padding: 4px 10px; font-size: 11px; color: var(--muted); font-weight: 500; }
+  .mg .chip b { color: #fff; font-weight: 700; }
   /* Rank table (best/worst) */
   .rank-mini{margin-top:6px;font-size:12px}
   .rank-mini .r{padding:6px 0;border-top:1px solid var(--border);display:flex;justify-content:space-between;align-items:baseline;gap:8px}
@@ -263,12 +370,18 @@
   .mgr-report h4{font-size:14px;margin-bottom:8px;display:flex;align-items:center;gap:8px}
   .mgr-report .summary{color:var(--text);font-size:13px;line-height:1.6;margin-bottom:10px}
   .mgr-report .meta{color:var(--muted);font-size:11px;letter-spacing:.3px}
-  /* Chart grid */
-  .charts{display:grid;grid-template-columns:2fr 1fr 1fr;gap:14px;margin-top:16px}
+  .charts{display:grid;grid-template-columns:2fr 1fr 1fr;gap:18px;margin-top:20px}
   @media(max-width:1000px){.charts{grid-template-columns:1fr}}
-  .chart-card{background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:14px}
-  .chart-card h5{color:var(--accent);font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;margin-bottom:10px}
-  .chart-wrap{position:relative;height:220px}
+  .chart-card{
+    background:var(--panel); backdrop-filter: var(--glass-blur);
+    border:1px solid var(--border); border-radius:14px; padding:20px;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+    transition: 0.3s;
+  }
+  .chart-card:hover { border-color: rgba(255,255,255,0.15); box-shadow: 0 8px 30px rgba(0,0,0,0.2); }
+  .chart-card h5{color:var(--text);font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:1px;margin-bottom:16px; display:flex; align-items:center; gap:8px;}
+  .chart-card h5::before { content:''; display:inline-block; width:6px; height:6px; background:var(--accent); border-radius:50%; box-shadow:0 0 8px var(--accent-glow); }
+  .chart-wrap{position:relative;height:240px}
   /* Overview strip - sakin */
   .overview{background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:14px 18px;margin-bottom:14px;display:flex;gap:20px;align-items:center;flex-wrap:wrap}
   .overview .big{font-size:22px;opacity:.9}
@@ -297,10 +410,12 @@
   /* Chat drawer */
   #chatBtn{position:fixed;bottom:22px;right:22px;background:var(--accent);color:#111;border:0;border-radius:50%;width:56px;height:56px;font-size:24px;cursor:pointer;box-shadow:0 4px 14px rgba(0,0,0,.4);z-index:40}
   #chatDrawer{position:fixed;top:0;right:-460px;width:440px;height:100vh;background:var(--panel);border-left:1px solid var(--border);z-index:60;display:flex;flex-direction:column;transition:right .3s}
-  #chatDrawer.open{right:0}
+  #chatDrawer.open{right:0; box-shadow: -15px 0 40px rgba(0,0,0,0.6);}
+  #chatBackdrop{position:fixed;top:0;left:0;width:100vw;height:100vh;background:rgba(0,0,0,0.4);z-index:50;visibility:hidden;opacity:0;pointer-events:none;transition:opacity .3s, visibility .3s}
+  #chatBackdrop.open{visibility:visible;opacity:1;pointer-events:auto}
   #chatDrawer header{padding:14px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px}
   #chatMsgs{flex:1;overflow-y:auto;padding:14px 16px;display:flex;flex-direction:column;gap:10px}
-  .msg{padding:10px 12px;border-radius:10px;max-width:88%;font-size:13.5px;line-height:1.55;white-space:pre-wrap}
+  .msg{padding:10px 12px;border-radius:10px;max-width:88%;font-size:13.5px;line-height:1.55;white-space:normal;word-wrap:break-word}
   .msg.user{background:var(--accent);color:#111;align-self:flex-end;border-bottom-right-radius:2px}
   .msg.assistant{background:var(--panel2);align-self:flex-start;border-bottom-left-radius:2px}
   .msg.typing{color:var(--muted);font-style:italic}
@@ -406,8 +521,9 @@
       <div style="flex:1"></div>
       <button class="cpy" onclick="copyAllKeywords()">📋 Kelimeleri Kopyala</button>
       <button class="cpy" onclick="copyTSV()">📋 Tablo (TSV) Kopyala</button>
-      <button class="ok" onclick="bulkAction('approved')">✓ Tümünü Onayla</button>
-      <button class="no" onclick="bulkAction('rejected')">✗ Tümünü Reddet</button>
+      <button class="ok" onclick="bulkAction('approved', 'tab')" style="border-radius: 6px 0 0 6px">✓ Sekmeyi Onayla</button>
+      <button class="no" onclick="bulkAction('rejected', 'tab')" style="border-radius: 0 6px 6px 0; margin-left:-1px; margin-right: 12px">✗ Sekmeyi Reddet</button>
+      <button class="primary" onclick="bulkAction('approved', 'all')" style="padding-left: 20px; padding-right: 20px">🚀 TÜMÜNÜ ONAYLA (HER ŞEYİ)</button>
     </div>
     <div class="guide" id="tabGuide"></div>
     <div style="overflow-x:auto"><table id="recTable"></table></div>
@@ -591,6 +707,9 @@ const HINTS={
   'health_score':'<b>Sağlık Skoru.</b> 4 boyut: verim (ACOS/hedef, 40p) + israf kontrolü (25p) + fırsat yakalama (20p) + görünürlük (15p). 75+ sağlıklı. Tek metrik ama katmanlı — bir alan çökerse hemen görürsün.',
   'placement':'<b>Placement.</b> Reklamın nerede gösterildiği: <b>Top of Search</b> (arama üstü, en pahalı en yüksek CVR), <b>Product Pages</b> (rakip ürün sayfaları), <b>Rest of Search</b> (arama içi diğer). Her biri farklı CVR — farklı stratejiyle yönet.',
   'aci_search_query':'<b>Search Query Report.</b> Amazon\'un sana müşterinin gerçekten ne yazdığını gösteren rapor. "Match Type" ne olursa olsun (broad), müşteri kelime kelime ne yazdı — burada altın var. Haftada 1 mutlaka aç.',
+  'blackhat_brand_bidding':'<b>Brand Bidding (Rakip Avı).</b> Rakibin marka adını tam eşleşme (Exact) olarak hedeflemek. Etik dışı sayılabilir ama kuraldışı değildir. Rakibin markasını arayan müşteriyi, daha ucuz/iyi ürününle çalarsın. Savaş başlatır, o da sana yapar.',
+  'blackhat_click_share':'<b>Click-Share Hırsızlığı.</b> Rakiplerinin en çok tık aldığı kelimelerde agresif %300 Placement Multiplier (TOS) basıp onları 1 hafta boyunca 2. sayfaya itmek. Organik sıralamalarını kanatıp sonra normale dönersin.',
+  'blackhat_asin_sniping':'<b>ASIN Sniping (Out of Stock).</b> Keepa API ile stokları biten veya fiyatı aniden fırlayan rakipleri anlık tespit edip, ASIN hedefine devasa bid girmek. Çaresiz kalan müşteriyi tek tıkla sana çeker.'
 };
 
 function h(key){
@@ -601,6 +720,9 @@ function h(key){
 
 let brands=[], brandId=null, recs=[], activeTab='harvest', editing=false;
 const TABS=[
+  ['anomaly_pause','🚨 Anomaliler'],
+  ['expansion','📈 Büyüme (Broad)'],
+  ['budget','💳 Bütçe Yönetimi'],
   ['harvest','🌱 Kelime Avcısı'],
   ['harvest_pt','🎯 Ürün Hedefleri'],
   ['negative','🚫 Negatifler'],
@@ -609,6 +731,15 @@ const TABS=[
   ['placement','📍 Placement'],
 ];
 const GUIDES={
+  anomaly_pause:`<b>Ne yapıyor?</b> 1. Hesabı sömüren "karadelik" olmuş kelimeleri yakalar. 2. <b>Yamyamlık (Cannibalization) Tespiti:</b> Aynı kelimeyi bilmeden 3 farklı kampanyada hedefliyorsanız, en iyisini bırakıp diğerlerini durdurarak kendi kendinizle rekabet etmenizi (CPC şişmesini) engeller.<br>
+  <b>Nasıl uygularsın?</b> Amazon konsolunda hedef/kelimeye gidin ve durumu <b>Paused (Duraklatıldı)</b> yapın.`,
+  expansion:`<b>Ne yapıyor?</b> Cironuzu zirveye taşımak için 3 farklı <b>Huni Genişletme (Funnel Expansion)</b> stratejisi kurar:<br>
+  1. <b>Broad Expansion:</b> Sadece Exact'te iyi satan kelimeleri bulup Broad açtırarak "Long-tail" aramaları avlar.<br>
+  2. <b>Video (SBV) & Display (SD) Sıçraması:</b> $500+ veya 10+ sipariş getiren kelimeleri sadece SP'de bırakmaz, arama sayfasını tamamen işgal etmeniz için Video ve Display reklamlarına taşımanızı önerir.<br>
+  3. <b>🔥 Organic Ranking Push:</b> Dönüşüm oranı (CVR) %15'in üzerinde olan "altın" kelimeleri tespit eder. Geçici olarak kârı (ACOS) unutup, Amazon algoritmasını beslemek ve ürünü organik olarak 1. sayfaya uçurmak için aşırı agresif teklifler önerir.<br>
+  <b>Nasıl uygularsın?</b> Çıkan önerilere göre Seller Central'da yeni kampanyalar kurun.`,
+  budget:`<b>Ne yapıyor?</b> "Önce Ciro" stratejisiyle kampanya bütçelerini yönetir. İyi performans gösteren (ACOS hedefine yakın) kampanyaların günlük bütçesini anında artırarak ölçekler; sadece aşırı israf eden (0 sipariş & yüksek harcama) kampanyaların bütçesini kısar.<br>
+  <b>Nasıl uygularsın?</b> Amazon konsolunda Campaigns → ilgili kampanyayı bul → <b>Daily Budget</b> (Günlük Bütçe) değerini önerilen oranda artır/azalt.`,
   harvest:`<b>Ne yapıyor?</b> Oto/broad/phrase kampanyalarında satış getiren arama terimlerini bulur (min. sipariş eşiğini geçen + ACOS hedefin altında). Bu işleme <b>harvest ${h('harvest')}</b>, funnel'ın son katmanına taşımaya <b>match funnel ${h('match_funnel')}</b> denir. Önerilen bid = <b>RPC ${h('RPC')} × hedef ACOS</b> — yani hedefini tutturacak maksimum tık maliyeti.<br>
   <b>Nasıl uygularsın?</b> ① Onayla → Excel'e aktar. ② Amazon konsolunda exact match kampanyana (yoksa aç: "MarkaAdı - Exact - Kazananlar") kelimeyi önerilen bidle ekle. ③ <b>ÇOK ÖNEMLİ:</b> Aynı kelimeyi kaynak kampanyada <b>negatif exact</b> olarak ekle — buna <b>traffic sculpting ${h('traffic_sculpting')}</b> denir.`,
   harvest_pt:`<b>Ne yapıyor?</b> Oto kampanyanın ürün sayfalarında satış getirdiği rakip ASIN'leri bulur.<br>
@@ -678,6 +809,8 @@ async function loadInsights(){
     const d=await r.json();
     if(d.empty){
       $('kpiRibbon').innerHTML='';$('metricGroups').innerHTML='';
+      // Eski chartlari temizle (stale chart sorunu)
+      ['trend','match','camp'].forEach(k=>destroyChart(k));
       $('hero').innerHTML='<div class="hero-card hc-blue" style="grid-column:1/-1"><h5>Bilgi</h5><div class="sub">Rapor yükle, dashboard oluşsun.</div></div>';return;
     }
     const safe=(name,fn,target)=>{
@@ -1001,29 +1134,96 @@ function renderCharts(d){
     }
     return;
   }
-  Chart.defaults.color='#8b98a9';
-  Chart.defaults.borderColor='#2d3646';
+  Chart.defaults.color = '#9CA3AF';
+  Chart.defaults.borderColor = 'rgba(255,255,255,0.05)';
+  Chart.defaults.font.family = "'Inter', sans-serif";
+  
   // Trend - yükleme geçmişinden basit rows bar
   const trend=(d.upload_trend||[]).slice(-10);
   destroyChart('trend');
-  charts.trend=new Chart($('chTrend'),{type:'line',data:{
-    labels:trend.map(t=>t.date),
-    datasets:[{label:'Satır sayısı',data:trend.map(t=>t.rows),borderColor:'#f59e0b',backgroundColor:'rgba(245,158,11,.15)',tension:.3,fill:true}]
-  },options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}}}});
+  const ctxTrend = $('chTrend').getContext('2d');
+  const gradient = ctxTrend.createLinearGradient(0, 0, 0, 240);
+  gradient.addColorStop(0, 'rgba(56, 189, 248, 0.4)');
+  gradient.addColorStop(1, 'rgba(56, 189, 248, 0.0)');
+  
+  charts.trend=new Chart(ctxTrend,{
+    type:'line',
+    data:{
+      labels:trend.map(t=>t.date),
+      datasets:[{
+        label:'Satır sayısı',
+        data:trend.map(t=>t.rows),
+        borderColor:'#38BDF8',
+        backgroundColor:gradient,
+        borderWidth:2,
+        tension:0.4,
+        fill:true,
+        pointBackgroundColor:'#050505',
+        pointBorderColor:'#38BDF8',
+        pointBorderWidth:2,
+        pointRadius:4,
+        pointHoverRadius:6
+      }]
+    },
+    options:{
+      responsive:true, maintainAspectRatio:false,
+      plugins:{legend:{display:false}, tooltip:{mode:'index', intersect:false, backgroundColor:'rgba(18,18,20,0.9)', titleColor:'#38BDF8', padding:12, borderColor:'rgba(255,255,255,0.1)', borderWidth:1}},
+      scales:{ x:{grid:{display:false}}, y:{beginAtZero:true, grid:{color:'rgba(255,255,255,0.03)'}} }
+    }
+  });
+
   // Match type dagilimi
   const mt=d.match_type_distribution||[];
   destroyChart('match');
-  charts.match=new Chart($('chMatch'),{type:'doughnut',data:{
-    labels:mt.map(m=>m.match_type),
-    datasets:[{data:mt.map(m=>m.spend),backgroundColor:['#f59e0b','#60a5fa','#34d399','#c084fc','#f87171','#8b98a9']}]
-  },options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'bottom',labels:{font:{size:11}}}}}});
+charts.match=new Chart($('chMatch'),{
+    type:'doughnut',
+    data:{
+      labels:mt.map(m=>m.match_type),
+      datasets:[{
+        data:mt.map(m=>m.spend),
+        backgroundColor:['#F59E0B','#3B82F6','#10B981','#8B5CF6','#EF4444','#9CA3AF'],
+        borderWidth:0,
+        hoverOffset:4
+      }]
+    },
+    options:{
+      responsive:true, maintainAspectRatio:false, cutout:'70%',
+      plugins:{
+        legend:{position:'bottom', labels:{font:{size:11, family:"'Inter', sans-serif"}, padding:16, usePointStyle:true}},
+        tooltip:{backgroundColor:'rgba(11,14,20,0.9)', padding:12, borderColor:'rgba(255,255,255,0.1)', borderWidth:1}
+      }
+    }
+  });
+
   // Kampanya harcama
   const cd=(d.campaign_distribution||[]).slice(0,8);
   destroyChart('camp');
-  charts.camp=new Chart($('chCamp'),{type:'bar',data:{
-    labels:cd.map(c=>c.campaign.length>18?c.campaign.slice(0,18)+'…':c.campaign),
-    datasets:[{label:'Harcama $',data:cd.map(c=>c.spend),backgroundColor:cd.map(c=>c.acos_pct==null?'#f87171':c.acos_pct>((brands.find(x=>x.id==brandId)||{}).target_acos*100)?'#f59e0b':'#34d399')}]
-  },options:{indexAxis:'y',responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}}}});
+  charts.camp=new Chart($('chCamp'),{
+    type:'bar',
+    data:{
+      labels:cd.map(c=>c.campaign.length>18?c.campaign.slice(0,18)+'…':c.campaign),
+      datasets:[{
+        label:'Harcama $',
+        data:cd.map(c=>c.spend),
+        backgroundColor:cd.map(c=>c.acos_pct==null?'rgba(239, 68, 68, 0.8)':c.acos_pct>((brands.find(x=>x.id==brandId)||{}).target_acos*100)?'rgba(245, 158, 11, 0.8)':'rgba(16, 185, 129, 0.8)'),
+        borderRadius: 4
+      }]
+    },
+    options:{
+      indexAxis:'y', responsive:true, maintainAspectRatio:false,
+      plugins:{legend:{display:false}, tooltip:{backgroundColor:'rgba(11,14,20,0.9)', padding:12, borderColor:'rgba(255,255,255,0.1)', borderWidth:1}},
+      scales:{ x:{grid:{color:'rgba(255,255,255,0.03)'}}, y:{grid:{display:false}} }
+    }
+  });
+}
+
+function parseMD(text) {
+  let t = esc(text);
+  t = t.replace(/\*\*(.*?)\*\*/g, '<b>$1</b>');
+  t = t.replace(/\*(.*?)\*/g, '<i>$1</i>');
+  t = t.replace(/`(.*?)`/g, '<code style="background:var(--panel);padding:2px 4px;border-radius:4px;color:var(--accent)">$1</code>');
+  t = t.replace(/\n/g, '<br>');
+  return t;
 }
 
 /* --- Chat --- */
@@ -1031,6 +1231,15 @@ let chatOpen=false, chatLoading=false;
 function toggleChat(){
   chatOpen=!chatOpen;
   $('chatDrawer').classList.toggle('open',chatOpen);
+  let bd = $('chatBackdrop');
+  if(!bd) {
+    bd = document.createElement('div');
+    bd.id = 'chatBackdrop';
+    bd.onclick = toggleChat;
+    document.body.appendChild(bd);
+  }
+  bd.classList.toggle('open',chatOpen);
+  
   if(chatOpen){
     const b=brands.find(x=>x.id==brandId);
     $('chatBrand').textContent=b?`— ${b.name}`:'';
@@ -1046,7 +1255,7 @@ async function loadChatHistory(){
   const box=$('chatMsgs');
   let head='';
   if(ds){
-    head=`<div class="msg assistant" style="border:1px dashed var(--accent);background:rgba(245,158,11,.05)">
+    head=`<div class="msg assistant" style="background:var(--panel);border:1px solid var(--border)">
       <b>📂 Elimdeki veri:</b><br>
       • ${num(ds.campaigns)} kampanya<br>
       • ${num(ds.targets)} hedef (bid uygulanan)<br>
@@ -1054,7 +1263,7 @@ async function loadChatHistory(){
       • Toplam harcama: <b>$${num(ds.total_spend)}</b> / satış: <b>$${num(ds.total_sales)}</b>${ds.acos_pct!=null?' / ACOS <b>%'+ds.acos_pct+'</b>':''}
     </div>`;
   }
-  box.innerHTML=head+(msgs.length?msgs.map(m=>`<div class="msg ${m.role}">${esc(m.content)}</div>`).join(''):
+  box.innerHTML=head+(msgs.length?msgs.map(m=>`<div class="msg ${m.role}">${parseMD(m.content)}</div>`).join(''):
     `<div class="msg assistant">Verini gördüm — üst kutuda özet. Uzman seviye sorabilirsin:<br>• "Hangi kampanyada placement multiplier ekleyeyim?"<br>• "Bu hesapta dayparting başlatmalı mıyım?"<br>• "En büyük 3 israfım hangi kelimeler?"<br>• "Break-even ACOS'um ne, bidleri buna göre yeniden yaz."<br>• "Şu kampanyayı büyütmeli miyim?"</div>`);
   box.scrollTop=box.scrollHeight;
 }
@@ -1063,7 +1272,7 @@ async function sendChat(e){
   if(chatLoading||!brandId)return;
   const inp=$('chatIn');const msg=inp.value.trim();if(!msg)return;
   const box=$('chatMsgs');
-  box.innerHTML+=`<div class="msg user">${esc(msg)}</div><div class="msg assistant typing" id="typing"><span class="spin"></span> düşünüyor...</div>`;
+  box.innerHTML+=`<div class="msg user">${parseMD(msg)}</div><div class="msg assistant typing" id="typing"><span class="spin"></span> düşünüyor...</div>`;
   box.scrollTop=box.scrollHeight;
   inp.value='';chatLoading=true;
   try{
@@ -1071,7 +1280,7 @@ async function sendChat(e){
       headers:{'Content-Type':'application/json'},body:JSON.stringify({message:msg})});
     const d=await r.json();
     $('typing').remove();
-    box.innerHTML+=`<div class="msg assistant">${esc(d.reply)}</div>`;
+    box.innerHTML+=`<div class="msg assistant">${parseMD(d.reply)}</div>`;
     box.scrollTop=box.scrollHeight;
   }catch(err){
     $('typing').remove();
@@ -1334,19 +1543,32 @@ function renderTable(){
   $('recTitle').textContent=(TABS.find(x=>x[0]==activeTab)||[])[1]+` — ${rows.length} öneri`;
   if(!rows.length){t.innerHTML='<tr><td class="muted">Bu kategoride bekleyen öneri yok. Rapor yükledin mi?</td></tr>';return;}
   const isBid=activeTab.startsWith('bid_');
+  const isBudget=activeTab=='budget';
+  const isAnomaly=activeTab=='anomaly_pause';
   t.innerHTML=`<tr><th>Kelime/Hedef</th><th>Kampanya</th><th>Match</th>
-    ${isBid?'<th>CPC</th>':''}<th>${activeTab=='negative'?'':'Önerilen Bid'}</th>
-    <th>Tık</th><th>Harcama</th><th>Satış</th><th>Sip.</th><th>ACOS</th><th>Neden</th><th></th></tr>`+
+    ${isBid?'<th>CPC</th>':''}<th>${activeTab=='negative'?'':(isBudget?'Önerilen Bütçe Değişimi':(isAnomaly?'Aksiyon':'Önerilen Bid'))}</th>
+    <th>Tık</th><th>Harcama</th><th>Satış</th><th>Sip.</th><th>ACOS</th><th>Güven</th><th>Neden</th><th></th></tr>`+
     rows.map(r=>{
       const m=r.metrics||{};
+      const conf = r.confidence_score ? `<span style="color:${r.confidence_score>90?'var(--green)':r.confidence_score>75?'var(--accent)':'var(--red)'};font-weight:bold">%${r.confidence_score}</span>` : '—';
+      let sugHtml = '';
+      if (activeTab === 'anomaly_pause') {
+          sugHtml = `<span style="color:var(--red); font-weight:bold; padding:4px 8px; background:rgba(255,50,50,0.1); border-radius:4px;">${r.suggested_value}</span>`;
+      } else if(isBudget && r.suggested_value != null) {
+          const pct = Math.round(r.suggested_value * 100);
+          sugHtml = `<span style="color:${pct>0?'var(--green)':'var(--red)'}; font-weight:bold">${pct>0?'+':''}${pct}%</span>`;
+      } else if (r.suggested_value != null) {
+          sugHtml = `<input class="bidin" type="number" step="0.01" value="${r.suggested_value}" onchange="editBid(${r.id},this.value)">`;
+      }
       return`<tr>
       <td class="kw">${r.keyword}</td>
       <td class="small muted" style="max-width:220px">${r.campaign}${r.ad_group?'<br>'+r.ad_group:''}</td>
       <td><span class="badge b-${r.type}">${r.match_type}</span></td>
       ${isBid?`<td>${fmt$(r.current_value)}</td>`:''}
-      <td>${r.suggested_value==null?'':`<input class="bidin" type="number" step="0.01" value="${r.suggested_value}" onchange="editBid(${r.id},this.value)">`}</td>
+      <td>${sugHtml}</td>
       <td>${m.clicks??''}</td><td>${fmt$(m.spend)}</td><td>${fmt$(m.sales)}</td>
       <td>${m.orders??''}</td><td>${m.acos==null?'—':m.acos+'%'}</td>
+      <td>${conf}</td>
       <td class="small muted" style="max-width:260px">${r.reason}</td>
       <td style="white-space:nowrap">
         <button class="cpy" title="Kelimeyi kopyala" onclick="copyText('${r.keyword.replace(/'/g,"\\'")}')">📋</button>
@@ -1363,17 +1585,27 @@ async function editBid(id,val){
 }
 
 async function action(ids,status){
-  await api(`/api/brands/${brandId}/recommendations/action`,{method:'POST',
-    headers:{'Content-Type':'application/json'},body:JSON.stringify({ids,status})});
-  recs=recs.filter(r=>!ids.includes(r.id));
-  renderTabs();renderTable();
-  loadInsights();
+  try{
+    await api(`/api/brands/${brandId}/recommendations/action`,{method:'POST',
+      headers:{'Content-Type':'application/json'},body:JSON.stringify({ids,status})});
+    recs=recs.filter(r=>!ids.includes(r.id));
+    renderTabs();renderTable();
+    loadInsights();
+  }catch(e){
+    toast('⚠ Hata: Öneriler kaydedilemedi — internet bağlantını kontrol et');
+    console.error('action error:',e);
+  }
 }
 
-function bulkAction(status){
-  const ids=recs.filter(r=>r.type==activeTab).map(r=>r.id);
+function bulkAction(status, scope='tab'){
+  const ids = scope === 'all' 
+    ? recs.map(r=>r.id) 
+    : recs.filter(r=>r.type==activeTab).map(r=>r.id);
   if(!ids.length)return;
-  if(!confirm(`${ids.length} öneri ${status=='approved'?'onaylanacak':'reddedilecek'}. Emin misin?`))return;
+  const msg = scope === 'all' 
+    ? `TÜM SEKMELERDEKİ toplam ${ids.length} öneri ${status=='approved'?'onaylanacak':'reddedilecek'}. Emin misin?`
+    : `Bu sekmedeki ${ids.length} öneri ${status=='approved'?'onaylanacak':'reddedilecek'}. Emin misin?`;
+  if(!confirm(msg))return;
   action(ids,status);
 }
 
@@ -1558,7 +1790,23 @@ function renderAI(data){
     html+=`<div class="rev-issue sev-critical"><b>AI parse hatası:</b> ${esc(s.error)}<br><pre style="white-space:pre-wrap;margin-top:8px;font-size:11px">${esc(s.raw_output||'')}</pre></div>`;
   }
   if(s.executive_summary){
-    html+=`<div class="exec"><b>Yönetici Özeti:</b><br>${esc(s.executive_summary)}</div>`;
+    html+=`<div class="exec" style="margin-bottom:14px;"><b>👑 CEO Kararı:</b><br>${esc(s.executive_summary)}</div>`;
+  }
+  
+  if((s.board_debate||[]).length){
+    html+=`<div class="ai-section" style="background:var(--panel2); padding:16px; border-radius:10px; border:1px solid var(--border);">
+      <h4 style="margin-bottom:12px; color:var(--text);"><i style="font-size:16px">🏛️</i> Yönetim Kurulu Toplantısı (Multi-Agent)</h4>
+      <div style="display:flex; flex-direction:column; gap:10px;">` +
+      s.board_debate.map(b => {
+        const isBlackHat = b.agent && b.agent.includes('Black-Hat');
+        const agCls = b.agent==='CMO' ? 'var(--blue)' : b.agent==='CFO' ? 'var(--red)' : isBlackHat ? '#a855f7' : 'var(--accent)';
+        const agIcon = b.agent==='CMO' ? '📈 CMO' : b.agent==='CFO' ? '🛡️ CFO' : isBlackHat ? '🥷 Black-Hat' : '⚖️ CEO';
+        return `<div style="background:var(--panel); padding:10px 14px; border-left:3px solid ${agCls}; border-radius:4px;">
+          <div style="font-size:12px; font-weight:bold; color:${agCls}; margin-bottom:4px;">${agIcon}</div>
+          <div style="color:var(--text); line-height:1.4;">${esc(b.comment||'')}</div>
+        </div>`;
+      }).join('') +
+    `</div></div>`;
   }
   const ds=s.data_sufficiency;
   if(ds){
