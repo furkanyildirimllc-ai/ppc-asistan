@@ -429,6 +429,31 @@
   .st-approved{background:rgba(52,211,153,.15);color:var(--green)}
   .st-rejected{background:rgba(248,113,113,.15);color:var(--red)}
   .st-pending{background:rgba(139,152,169,.15);color:var(--muted)}
+  /* launch dialog */
+  .fgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:2px 14px}
+  .fgrid label{margin:8px 0 4px}
+  .req{color:var(--red)}
+  dialog textarea{width:100%;background:var(--panel2);color:var(--fg);border:1px solid var(--border);
+    border-radius:6px;padding:8px;font-family:inherit;font-size:13px;resize:vertical}
+  .chk{display:flex!important;align-items:center;gap:7px;color:var(--fg)!important;font-size:13px!important}
+  .chk input{width:auto!important}
+  .lp-sec{margin-top:16px;border:1px solid var(--border);border-radius:8px;overflow:hidden}
+  .lp-sec>h5{margin:0;padding:9px 13px;background:var(--panel2);font-size:13px;
+    border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px}
+  .lp-sec>div{padding:11px 13px}
+  .lp-econ{display:flex;gap:18px;flex-wrap:wrap}
+  .lp-econ div{font-size:12px;color:var(--muted)}
+  .lp-econ b{display:block;font-size:17px;color:var(--fg);margin-top:2px}
+  .lp-camp{border-top:1px solid var(--border);padding:9px 0}
+  .lp-camp:first-child{border-top:0;padding-top:0}
+  .lp-camp .nm{font-weight:600;font-size:13px}
+  .lp-camp .meta{font-size:11.5px;color:var(--muted);margin:3px 0 6px}
+  .kwchip{display:inline-block;background:var(--panel2);border:1px solid var(--border);
+    border-radius:4px;padding:2px 7px;margin:2px 3px 2px 0;font-size:11.5px}
+  .lp-step{display:flex;gap:9px;padding:7px 0;border-top:1px dashed var(--border);font-size:12.5px;line-height:1.6}
+  .lp-step:first-child{border-top:0}
+  .lp-step .n{flex:0 0 21px;height:21px;border-radius:50%;background:var(--accent);color:#111;
+    font-weight:700;font-size:11px;display:flex;align-items:center;justify-content:center}
   /* profit banner */
   .profit-banner{background:linear-gradient(90deg,rgba(52,211,153,.12),rgba(96,165,250,.08));border:1px solid rgba(52,211,153,.3);border-radius:8px;padding:10px 14px;margin:12px 0;font-size:13px;display:flex;gap:16px;flex-wrap:wrap;align-items:center}
   .profit-banner b{color:var(--green)}
@@ -440,6 +465,7 @@
   <select id="brandSel" onchange="selectBrand(this.value)"></select>
   <button onclick="openBrandDialog()">+ Marka</button>
   <button onclick="openBrandDialog(true)" id="editBtn" style="display:none">⚙ Ayarlar</button>
+  <button onclick="openLaunchDlg()" title="Sıfır geçmişli yeni ürün için kampanya kur">🚀 Yeni Ürün Launch</button>
   <button onclick="helpDlg.showModal()">📖 Rehber</button>
   <div style="flex:1"></div>
   <div id="mgrBadge" class="mgr-badge" style="display:none" title="Denetçi Müdür — her AI çıktısını kontrol eder">🛡 Müdür: Standby</div>
@@ -449,6 +475,66 @@
   <button class="primary" id="bulkPrimary" style="display:none" onclick="openBulkWizard()" title="Adım adım Amazon'a yükle">📦 Amazon'a Yükle</button>
   <button id="exportBtn" style="display:none" onclick="exportFile()" title="Manuel referans için sade Excel">⬇ Excel (manuel)</button>
 </header>
+
+<!-- Launch - sifir gecmisli yeni urun icin kampanya kurulumu -->
+<dialog id="launchDlg" style="max-width:860px">
+  <h3>🚀 Yeni Ürün Launch</h3>
+  <p class="muted small" style="margin-top:4px;margin-bottom:14px">
+    Hiç reklam geçmişi olmayan ürün için: rakip + keyword araştır → kâr analizi →
+    kampanya planı → Amazon bulk sheet. Rapor yüklemene gerek yok.
+  </p>
+
+  <div id="launchForm">
+    <div class="fgrid">
+      <label>Ürün başlığı <span class="req">*</span>
+        <input id="lqTitle" aria-label="Ürün başlığı"
+               placeholder="Stainless Steel Insulated Water Bottle 32oz Wide Mouth">
+      </label>
+      <label>Marka / kampanya öneki
+        <input id="lqBrand" aria-label="Marka adı" placeholder="HydroTest">
+      </label>
+      <label>ASIN
+        <input id="lqAsin" aria-label="Ürün ASIN" placeholder="B0XXXXXXXX">
+      </label>
+      <label>SKU <span class="muted">(boşsa ASIN kullanılır)</span>
+        <input id="lqSku" aria-label="Ürün SKU" placeholder="WB-32-BLK">
+      </label>
+      <label>Satış fiyatı ($) <span class="req">*</span>
+        <input id="lqPrice" type="number" step="0.01" aria-label="Satış fiyatı" placeholder="24.99">
+      </label>
+      <label>COGS — ürün maliyeti ($)
+        <input id="lqCogs" type="number" step="0.01" aria-label="Ürün maliyeti COGS" placeholder="6.50">
+      </label>
+      <label>FBA ücreti ($)
+        <input id="lqFba" type="number" step="0.01" aria-label="FBA ücreti" placeholder="5.20">
+      </label>
+      <label>Amazon komisyonu (%)
+        <input id="lqFee" type="number" step="0.1" value="15" aria-label="Amazon komisyon yüzdesi">
+      </label>
+    </div>
+
+    <label style="display:block;margin-top:12px">Rakip ASIN / başlıkları
+      <span class="muted small">— her satıra bir tane: <code>ASIN | başlık | fiyat</code> (sadece ASIN de olur)</span>
+      <textarea id="lqComp" rows="4" aria-label="Rakip ürünler"
+        placeholder="B0AAA11111 | Hydro Flask 32 oz Wide Mouth Water Bottle | 44.95&#10;B0BBB22222 | Iron Flask Sports Water Bottle 32oz | 21.95"></textarea>
+    </label>
+
+    <label class="chk" style="margin-top:10px">
+      <input type="checkbox" id="lqAi" checked aria-label="AI strateji kullan">
+      AI strateji kullan <span class="muted small">(Claude — keyword + negatif + gerekçe üretir, ~30-60 sn)</span>
+    </label>
+
+    <div style="margin-top:16px;display:flex;gap:8px;align-items:center">
+      <button class="primary" onclick="runLaunch()" id="lqRun">🔍 Rakip + keyword araştır, plan kur</button>
+      <button onclick="launchDlg.close()">Kapat</button>
+      <span id="lqLoad" style="display:none;color:var(--muted);font-size:13px">
+        <span class="spin"></span> araştırılıyor, plan kuruluyor…
+      </span>
+    </div>
+  </div>
+
+  <div id="launchResult" style="margin-top:18px"></div>
+</dialog>
 
 <!-- Bulk Wizard - tek tık yükleme -->
 <dialog id="bulkWiz" style="max-width:720px">
@@ -789,8 +875,11 @@ function brandStale(gen){return gen!==undefined&&gen!==brandGen;}
 
 // Onceki markaya ait ekranda kalabilecek her seyi temizle.
 function clearBrandView(){
+  // NOT: priorityHolder ve proHolder ("Uzman Analizler") statik HTML'de yok,
+  // renderHero/renderProInsights tarafindan dinamik olusturuluyor - bunlar da temizlenmeli.
   ['kpiRibbon','metricGroups','alarmStrip','campAdvisor','hero','uploadInfo',
-   'aiBody','revBadge','aiMeta','recTable','tabs','tabGuide']
+   'aiBody','revBadge','aiMeta','recTable','tabs','tabGuide',
+   'priorityHolder','proHolder']
     .forEach(k=>{const el=$(k);if(el)el.innerHTML='';});
   ['trend','match','camp'].forEach(k=>destroyChart(k));
   recs=[];
@@ -837,9 +926,11 @@ async function loadInsights(gen){
     if(brandStale(gen))return;
     if(d.empty){
       $('kpiRibbon').innerHTML='';$('metricGroups').innerHTML='';
-      // Eski markanin verisi ekranda kalmasin: alarm serit + kampanya danismani da temizlenir.
+      // Eski markanin verisi ekranda kalmasin: alarm serit + kampanya danismani +
+      // dinamik panellerin (oncelik listesi, "Uzman Analizler") hepsi temizlenir.
       $('alarmStrip').innerHTML='';
       renderCampAdvisor([]);
+      ['priorityHolder','proHolder'].forEach(k=>{const el=$(k);if(el)el.innerHTML='';});
       // Eski chartlari temizle (stale chart sorunu)
       ['trend','match','camp'].forEach(k=>destroyChart(k));
       $('hero').innerHTML='<div class="hero-card hc-blue" style="grid-column:1/-1"><h5>Bilgi</h5><div class="sub">Rapor yükle, dashboard oluşsun.</div></div>';return;
@@ -1104,6 +1195,9 @@ function renderHero(d){
     let holder=$('priorityHolder');
     if(!holder){holder=document.createElement('div');holder.id='priorityHolder';$('hero').after(holder);}
     holder.innerHTML=priHtml;
+  } else {
+    // Bu markada oncelik yok -> onceki markanin plani ekranda kalmasin.
+    const holder=$('priorityHolder');if(holder)holder.innerHTML='';
   }
   // Pro insights
   renderProInsights(d.pro_insights);
@@ -1731,6 +1825,221 @@ async function deleteBrand(){
   await api(`/api/brands/${brandId}`,{method:'DELETE'});
   $('brandDlg').close();brandId=null;
   await loadBrands();
+}
+
+/* ============ LAUNCH — sifir gecmisli yeni urun ============ */
+let launchPlan=null;
+
+function openLaunchDlg(){
+  $('launchResult').innerHTML='';
+  launchPlan=null;
+  // Secili marka varsa marka adini onek olarak onerelim.
+  const b=brands.find(x=>x.id==brandId);
+  if(b&&!$('lqBrand').value)$('lqBrand').value=b.name;
+  $('launchDlg').showModal();
+}
+
+// "B0AAA | baslik | 44.95" satirlarini rakip nesnesine cevirir.
+function parseCompetitors(raw){
+  return raw.split('\n').map(l=>l.trim()).filter(Boolean).map(line=>{
+    const p=line.split('|').map(s=>s.trim());
+    const looksAsin=s=>/^B0[A-Z0-9]{8}$/i.test(s||'');
+    let asin=null,title=null,price=null;
+    if(p.length===1){ looksAsin(p[0])?asin=p[0]:title=p[0]; }
+    else{
+      asin=looksAsin(p[0])?p[0]:null;
+      title=asin?(p[1]||null):p[0];
+      const last=p[p.length-1].replace(/[^0-9.]/g,'');
+      if(p.length>=3&&last)price=Number(last)||null;
+    }
+    return {asin:asin?asin.toUpperCase():null,title,price};
+  });
+}
+
+async function runLaunch(){
+  const title=$('lqTitle').value.trim();
+  if(!title){toast('Ürün başlığı gerekli');return;}
+  const price=Number($('lqPrice').value)||null;
+  if(!price){toast('Satış fiyatı gerekli — kâr ve bid hesabı buna dayanıyor');return;}
+  const body={
+    title, brand:$('lqBrand').value.trim()||null,
+    asin:$('lqAsin').value.trim()||null, sku:$('lqSku').value.trim()||null,
+    price, cogs:Number($('lqCogs').value)||null, fba_fee:Number($('lqFba').value)||null,
+    fee_pct:(Number($('lqFee').value)||15)/100,
+    competitors:parseCompetitors($('lqComp').value),
+    use_ai:$('lqAi').checked,
+  };
+  $('lqRun').disabled=true;$('lqLoad').style.display='inline';
+  $('launchResult').innerHTML='';
+  try{
+    const r=await api('/api/launch/analyze',{method:'POST',
+      headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+    launchPlan=await r.json();
+    renderLaunchPlan(launchPlan);
+  }catch(e){
+    $('launchResult').innerHTML=`<div class="rev-issue sev-critical" role="alert">Plan üretilemedi: ${esc(e.message||e)}</div>`;
+  }finally{
+    $('lqRun').disabled=false;$('lqLoad').style.display='none';
+  }
+}
+
+async function downloadLaunchBulk(){
+  if(!launchPlan){toast('Önce plan üret');return;}
+  try{
+    const r=await api('/api/launch/bulksheet',{method:'POST',
+      headers:{'Content-Type':'application/json'},body:JSON.stringify(launchPlan)});
+    const blob=await r.blob();
+    const p=launchPlan.product||{};
+    const safe=((p.brand||p.title||'launch')+'').replace(/[^\w -]/g,'').trim().slice(0,24)||'launch';
+    const a=document.createElement('a');
+    a.href=URL.createObjectURL(blob);
+    a.download=`${safe}_launch_bulksheet.xlsx`;
+    a.click();
+    setTimeout(()=>URL.revokeObjectURL(a.href),4000);
+    toast('✅ Bulk sheet indirildi');
+  }catch(e){toast('⚠ Bulk sheet indirilemedi');}
+}
+
+function copyLaunchKw(group){
+  const kw=(launchPlan&&launchPlan.keywords&&launchPlan.keywords[group])||[];
+  if(!kw.length){toast('Kelime yok');return;}
+  navigator.clipboard.writeText(kw.join('\n'));
+  toast(`${kw.length} ${group} kelime kopyalandı (her satıra 1)`);
+}
+function copyLaunchNeg(){
+  const n=(launchPlan&&launchPlan.negatives)||[];
+  if(!n.length){toast('Negatif yok');return;}
+  navigator.clipboard.writeText(n.join('\n'));
+  toast(`${n.length} negatif kelime kopyalandı`);
+}
+
+function renderLaunchPlan(p){
+  const e=p.economics||{}, kw=p.keywords||{}, camps=p.campaigns||[];
+  const money=v=>v==null?'—':'$'+Number(v).toFixed(2);
+  const chips=(arr,max=99)=>(arr||[]).slice(0,max).map(k=>`<span class="kwchip">${esc(k)}</span>`).join('')
+    ||'<span class="muted small">—</span>';
+
+  // --- ekonomi ---
+  const econHtml=`<div class="lp-econ">
+    <div>Birim kâr (reklamsız)<b>${money(e.unit_profit_before_ads)}</b></div>
+    <div>Break-even ACOS<b>${e.break_even_acos_pct==null?'—':'%'+e.break_even_acos_pct}</b></div>
+    <div>Önerilen hedef ACOS<b style="color:var(--green)">${e.recommended_target_acos_pct==null?'—':'%'+e.recommended_target_acos_pct}</b></div>
+    <div>Marj (reklamsız)<b>${e.margin_pct_before_ads==null?'—':'%'+e.margin_pct_before_ads}</b></div>
+    <div>Toplam günlük bütçe<b>${money(p.daily_budget_total)}</b></div>
+  </div>
+  <div class="muted small" style="margin-top:9px;line-height:1.6">
+    Break-even ACOS'un <b>%${e.break_even_acos_pct??'—'}</b> — bunun üstünde her satış zarar.
+    Launch'ta hedefi <b>%${e.recommended_target_acos_pct??'—'}</b> tut; ilk 2 hafta ACOS yüksek çıkarsa panikleme,
+    veri topluyorsun.</div>`;
+
+  // --- kampanyalar ---
+  const campHtml=camps.map(c=>{
+    const kws=c.keywords||[], pts=c.product_targets||[];
+    return `<div class="lp-camp">
+      <div class="nm">${esc(c.name)}</div>
+      <div class="meta">${c.targeting_type||'Manual'}${c.match?' · '+c.match+' match':''} ·
+        bütçe <b>${money(c.budget)}/gün</b> · varsayılan bid <b>${money(c.default_bid)}</b>
+        ${c.auto_groups?' · 4 otomatik hedefleme grubu':''}
+        ${kws.length?' · '+kws.length+' kelime':''}${pts.length?' · '+pts.length+' ASIN hedefi':''}</div>
+      ${kws.length?chips(kws,12)+(kws.length>12?`<span class="muted small"> +${kws.length-12} daha</span>`:''):''}
+      ${pts.length?chips(pts,12):''}
+    </div>`;
+  }).join('');
+
+  // --- manuel adimlar: bulk kullanmayanlar icin ---
+  const steps=[
+    `<b>Amazon Seller Central → Campaign Manager</b>'ı aç. Aşağıdaki <b>${camps.length} kampanyayı</b> tek tek kur.
+     Bulk sheet indirdiysen bu adımları atlayabilirsin — dosya hepsini kendisi oluşturur.`,
+    ...camps.map(c=>{
+      const kws=c.keywords||[], pts=c.product_targets||[];
+      let d=`<b>${esc(c.name)}</b> — <i>Create campaign → Sponsored Products → ${c.targeting_type==='Auto'?'Automatic':'Manual'} targeting</i>.
+        Günlük bütçe <b>${money(c.budget)}</b>, bidding strategy <b>"Dynamic bids – down only"</b>,
+        varsayılan bid <b>${money(c.default_bid)}</b>.`;
+      if(c.auto_groups)d+=` Otomatik hedefleme 4 grubunu da (close match, loose match, substitutes, complements) <b>açık</b> bırak — keşif için.`;
+      if(kws.length)d+=` Ad group'a <b>${kws.length} kelimeyi ${c.match} match</b> olarak ekle
+        <button class="cpy" onclick="copyLaunchKw('${c.match}')">📋 kopyala</button>`;
+      if(pts.length)d+=` Product targeting sekmesinden <b>${pts.length} rakip ASIN'i</b> tek tek hedefle.`;
+      if((c.negatives||[]).length)d+=` Negative keywords sekmesine <b>${c.negatives.length} negatif kelimeyi exact</b> olarak ekle
+        <button class="cpy" onclick="copyLaunchNeg()">📋 kopyala</button>`;
+      return d;
+    }),
+    `<b>Ürünü reklamlara bağla:</b> her kampanyanın ad group'unda <i>Products</i> bölümünden
+     SKU <b>${esc(p.product?.sku||'—')}</b> ${p.product?.asin?`(ASIN ${esc(p.product.asin)})`:''} ürününü seç.`,
+    `<b>İlk 14 gün — dokunma.</b> Veri topluyorsun. ACOS'a değil, tıklama ve impression sayısına bak.
+     Günde birkaç kez bid değiştirmek Amazon'un öğrenme dönemini sıfırlar.`,
+    `<b>2. hafta sonunda Search Term Report indir.</b> Sipariş getiren arama terimlerini
+     <b>${esc((camps.find(c=>c.key==='exact')||{}).name||'Exact kampanyası')}</b>'na exact olarak taşı;
+     aynı kelimeyi kaynak kampanyada <b>negatif exact</b> yap (traffic sculpting).`,
+    `<b>İsrafı kes:</b> 10+ tık alıp 0 sipariş veren terimleri negatif exact ekle.
+     Break-even ACOS'un %${e.break_even_acos_pct??'—'} — bunu sürekli aşan kelimelerde bidi
+     <i>RPC × hedef ACOS</i> formülüyle düşür.`,
+    `<b>4. haftadan sonra ölçekle:</b> ACOS hedefin %20+ altındaki kelimelerde bidi kademeli
+     (+%10) artır, kazanan kampanyanın bütçesini büyüt. Top of Search ACOS'un düşükse
+     placement multiplier +%25 ekle.`,
+  ];
+
+  $('launchResult').innerHTML=`
+    <div class="lp-sec">
+      <h5>💰 Kâr Analizi ${p.keyword_source==='ai'?'<span class="rev-badge rev-ok" style="margin-left:auto">AI planı</span>':'<span class="rev-badge rev-warn" style="margin-left:auto">sezgisel (AI kapalı)</span>'}</h5>
+      <div>${econHtml}</div>
+    </div>
+
+    ${p.rationale?`<div class="lp-sec"><h5>🧠 Neden bu strateji?</h5>
+      <div class="small" style="line-height:1.65">${esc(p.rationale)}</div></div>`:''}
+
+    <div class="lp-sec">
+      <h5>🔑 Keyword'ler
+        <span style="margin-left:auto;display:flex;gap:5px">
+          <button class="cpy" onclick="copyLaunchKw('exact')">exact (${(kw.exact||[]).length})</button>
+          <button class="cpy" onclick="copyLaunchKw('phrase')">phrase (${(kw.phrase||[]).length})</button>
+          <button class="cpy" onclick="copyLaunchKw('broad')">broad (${(kw.broad||[]).length})</button>
+        </span>
+      </h5>
+      <div>
+        <div class="muted small" style="margin-bottom:4px">EXACT — en yüksek alıcı niyeti, en yüksek bid</div>
+        ${chips(kw.exact)}
+        <div class="muted small" style="margin:10px 0 4px">PHRASE — orta huni</div>
+        ${chips(kw.phrase)}
+        <div class="muted small" style="margin:10px 0 4px">BROAD — keşif</div>
+        ${chips(kw.broad)}
+      </div>
+    </div>
+
+    <div class="lp-sec">
+      <h5>🚫 Proaktif Negatifler (${(p.negatives||[]).length})
+        <button class="cpy" style="margin-left:auto" onclick="copyLaunchNeg()">📋 kopyala</button></h5>
+      <div>
+        <div class="muted small" style="margin-bottom:6px">Rapor beklemeden baştan ekle — ilk günden israfı keser.</div>
+        ${chips(p.negatives)}
+      </div>
+    </div>
+
+    <div class="lp-sec">
+      <h5>📊 Kampanya Yapısı (${camps.length} kampanya · ${money(p.daily_budget_total)}/gün)</h5>
+      <div>${campHtml}</div>
+    </div>
+
+    <div class="lp-sec">
+      <h5>✋ Manuel Kurulum — Amazon'da adım adım ne yapacaksın</h5>
+      <div>
+        <div class="muted small" style="margin-bottom:8px">
+          Bulk sheet yüklemek istemiyorsan (ya da önce elle görmek istiyorsan) bu adımları sırayla uygula.
+        </div>
+        ${steps.map((s,i)=>`<div class="lp-step"><div class="n">${i+1}</div><div>${s}</div></div>`).join('')}
+      </div>
+    </div>
+
+    ${(p.action_plan||[]).length?`<div class="lp-sec"><h5>🗓 AI Zaman Planı</h5><div>
+      ${p.action_plan.map((a,i)=>`<div class="lp-step"><div class="n">${i+1}</div><div>${esc(a)}</div></div>`).join('')}
+    </div></div>`:''}
+
+    ${(p.notes||[]).length?`<div class="lp-sec"><h5>📌 Notlar</h5><div class="small" style="line-height:1.7">
+      ${p.notes.map(n=>`<div>${esc(n)}</div>`).join('')}</div></div>`:''}
+
+    <div style="margin-top:16px;display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+      <button class="primary" onclick="downloadLaunchBulk()">📦 Amazon Bulk Sheet indir (.xlsx)</button>
+      <span class="muted small">Seller Central → Sponsored Ads → Bulk Operations → Spreadsheet upload</span>
+    </div>`;
 }
 
 /* --- kopyalama --- */
