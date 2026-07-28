@@ -18,6 +18,7 @@ from openpyxl.styles import Font, PatternFill
 
 import config
 from bulksheet import BULK_HEADERS, _sanitize_name
+import competitor_intel
 
 try:
     import keepa_engine
@@ -45,17 +46,36 @@ def _ngrams(tokens, n):
     return [" ".join(tokens[i:i + n]) for i in range(len(tokens) - n + 1)]
 
 
-def heuristic_keywords(title, competitors, max_kw=40):
-    """Baslik + rakip basliklarindan frekansa gore aday keyword'ler."""
+def heuristic_keywords(title, competitors, max_kw=40, search_suggestions=None):
+    """Baslik + rakip metinlerinden (baslik, bullets, description) frekansa gore aday keyword'ler."""
     freq = {}
-    sources = [title or ""] + [c.get("title", "") for c in (competitors or [])]
-    for src in sources:
+    sources = []
+    if title:
+        sources.append((title, 1.0))
+        
+    for c in (competitors or []):
+        if c.get("title"):
+            sources.append((c["title"], 1.0))
+        for b in c.get("bullets", []):
+            if b:
+                sources.append((b, 0.8))  # bullets have lower weight than title
+        if c.get("description"):
+            sources.append((c["description"], 0.5))  # description lowest weight
+
+    for src, src_weight in sources:
         toks = _tokens(src)
         for n in (1, 2, 3):
             for g in _ngrams(toks, n):
-                # tek kelimelik cok genel terimleri hafif cezalandir
-                w = 1.0 if n == 1 else 1.6 if n == 2 else 1.4
+                w = (1.0 if n == 1 else 1.6 if n == 2 else 1.4) * src_weight
                 freq[g] = freq.get(g, 0) + w
+                
+    # Arama onerileri (search_suggestions) varsa agirligini cok artir
+    if search_suggestions:
+        sug_lower = [s.lower() for s in search_suggestions]
+        for g in freq:
+            if g in sug_lower:
+                freq[g] *= 2.5
+
     # kendi basligindaki terimlere bonus
     own = set(_tokens(title))
     ranked = sorted(freq.items(),
@@ -73,7 +93,7 @@ def heuristic_keywords(title, competitors, max_kw=40):
     return out
 
 
-def ai_strategy(title, competitors, price=None, economics=None, model=None):
+def ai_strategy(title, competitors, price=None, economics=None, model=None, product_data=None, keyword_analysis=None, competitor_intel_data=None, market_assessment=None):
     """Claude ile tam launch stratejisi: keyword'ler + negatifler + gerekce +
     2 haftalik aksiyon plani. Anahtar yoksa None."""
     if not config.ANTHROPIC_API_KEY:
@@ -82,19 +102,43 @@ def ai_strategy(title, competitors, price=None, economics=None, model=None):
         from anthropic import Anthropic
     except Exception:
         return None
-    comp_titles = "\n".join(f"- {c.get('title','')}" for c in (competitors or [])[:14])
+        
+    product_data = product_data or {}
+    comp_titles = "\n".join(f"- {c.get('title','')} (Fiyat: {c.get('price', '-')})" for c in (competitors or [])[:14])
+    
+    intel_text = ""
+    if competitor_intel_data:
+        intel_text += f"\nREKABET DURUMU:\n{competitor_intel_data.get('market_summary', '')}\n"
+    if market_assessment:
+        intel_text += f"FIRSAT SKORU: {market_assessment.get('opportunity_score')}/100\n"
+        intel_text += f"Önerilen Agresiflik: {market_assessment.get('recommended_aggression')}\n"
+    if keyword_analysis and keyword_analysis.get('high_priority'):
+        hp_kws = [k['keyword'] for k in keyword_analysis['high_priority'][:10]]
+        intel_text += f"YÜKSEK ÖNCELİKLİ KELİMELER (Rakipler + Arama Önerilerinden):\n{', '.join(hp_kws)}\n"
+        
+    try:
+        import expert_knowledge
+        expert_context = expert_knowledge.EXPERT_KNOWLEDGE
+    except ImportError:
+        expert_context = ""
+
     econ_line = ""
     if economics:
         econ_line = (f"\nEKONOMI: birim kar ${economics.get('unit_profit_before_ads')}, "
                      f"break-even ACOS %{economics.get('break_even_acos_pct')}, "
                      f"onerilen hedef ACOS %{economics.get('recommended_target_acos_pct')}. "
                      f"Bid onerilerini bu marja gore mantikli tut.")
+                     
     prompt = f"""Sen Amazon PPC uzmanisin. Yeni listelenen ("sifir") bir urun icin
 Sponsored Products LAUNCH stratejisi kur.
 
+UZMANLIK BİLGİSİ (Referans Al):
+{expert_context[:2000] if expert_context else '(yok)'}
+
 URUN: {title}
 FIYAT: {price or 'bilinmiyor'}{econ_line}
-RAKIP BASLIKLARI:
+{intel_text}
+RAKIPLER:
 {comp_titles or '(yok)'}
 
 Sadece gecerli JSON dondur, baska hicbir sey yazma:
@@ -105,11 +149,23 @@ Sadece gecerli JSON dondur, baska hicbir sey yazma:
   "brand_defense": ["varsa marka/rakip terimleri, yoksa []"],
   "negatives": ["auto/broad'da bosa para yakacak alakasiz terimler (exact negatif)"],
   "rationale": "2-3 cumle Turkce: bu urun icin launch stratejisinin OZU",
+  "expert_reasoning": {{
+    "keyword_strategy": "Kelimeler neden seçildi...",
+    "bid_strategy": "Bid seviyeleri neden bu şekilde...",
+    "campaign_structure": "Kampanya yapısı neden böyle...",
+    "risk_assessment": "Potansiyel riskler...",
+    "competitive_edge": "Rekabet avantajımız..."
+  }},
   "action_plan": [
-    "Hafta 1: ... (Turkce, somut aksiyon)",
-    "Hafta 2: ...",
-    "Hafta 3-4: ..."
-  ]
+    "Hafta 1: ...",
+    "Hafta 2: ..."
+  ],
+  "launch_phases": {{
+    "week_1": {{"focus": "...", "actions": ["..."], "budget_pct": 30}},
+    "week_2": {{"focus": "...", "actions": ["..."], "budget_pct": 25}},
+    "week_3_4": {{"focus": "...", "actions": ["..."], "budget_pct": 25}},
+    "week_5_plus": {{"focus": "...", "actions": ["..."], "budget_pct": 20}}
+  }}
 }}
 Keyword'leri urun dilinde (genelde Ingilizce) yaz. Alakasiz cok-genel tek kelimeleri ele."""
     import json
@@ -119,7 +175,7 @@ Keyword'leri urun dilinde (genelde Ingilizce) yaz. Alakasiz cok-genel tek kelime
         try:
             resp = client.messages.create(
                 model=model or config.LAUNCH_MODEL,
-                max_tokens=2500,
+                max_tokens=3000,
                 system="Sadece istenen JSON'u dondur. Aciklama, markdown fence veya ek metin yazma.",
                 messages=[{"role": "user", "content": prompt}],
             )
@@ -141,6 +197,8 @@ Keyword'leri urun dilinde (genelde Ingilizce) yaz. Alakasiz cok-genel tek kelime
                 clean[k] = [str(v).strip().lower() for v in vals if str(v).strip()]
             clean["rationale"] = str(data.get("rationale") or "").strip()
             clean["action_plan"] = [str(x).strip() for x in (data.get("action_plan") or []) if str(x).strip()]
+            clean["expert_reasoning"] = data.get("expert_reasoning") or {}
+            clean["launch_phases"] = data.get("launch_phases") or {}
             if clean["exact"] or clean["broad"]:
                 return clean
             last_err = "bos keyword listesi"
@@ -201,16 +259,50 @@ def build_plan(product, competitors=None, use_ai=True, model=None):
     title = product.get("title") or ""
     asin = (product.get("asin") or "").strip()
     sku = (product.get("sku") or "").strip() or asin  # SKU yoksa ASIN'i placeholder yap
+    # Autocomplete/infer missing financial values
     price = product.get("price")
+    try:
+        price = float(price) if price is not None else 0
+    except (ValueError, TypeError):
+        price = 0
+
     competitors = competitors or []
+    search_suggestions = product.get("search_suggestions") or []
+    if price <= 0:
+        comp_prices = [float(c.get("price") or 0) for c in competitors if c.get("price") and float(c.get("price") or 0) > 0]
+        if comp_prices:
+            price = round(sum(comp_prices) / len(comp_prices), 2)
+        else:
+            price = 29.99
+        product["price"] = price
+
+    if not product.get("cogs"):
+        product["cogs"] = round(price * 0.25, 2)
+
+    if not product.get("fba_fee"):
+        product["fba_fee"] = round(max(3.50, price * 0.18 + 1.50), 2)
+
+    if not product.get("fee_pct"):
+        product["fee_pct"] = 0.15
 
     econ = break_even(price, product.get("cogs"),
                       product.get("fee_pct", 0.15), product.get("fba_fee"))
 
-    heur = heuristic_keywords(title, competitors)
-    ai = ai_strategy(title, competitors, price, econ, model=model) if use_ai else None
+    # Competitor intelligence computations
+    intel_data = competitor_intel.analyze_competitors(competitors, product)
+    kw_analysis = competitor_intel.reverse_engineer_keywords(title, competitors, search_suggestions)
+    market_assess = competitor_intel.assess_market_opportunity(product, competitors, product.get("bsr"))
 
-    negatives, rationale, action_plan = [], "", []
+    heur = heuristic_keywords(title, competitors, search_suggestions=search_suggestions)
+    ai = ai_strategy(
+        title, competitors, price, econ, model=model, 
+        product_data=product, 
+        keyword_analysis=kw_analysis,
+        competitor_intel_data=intel_data,
+        market_assessment=market_assess
+    ) if use_ai else None
+
+    negatives, rationale, action_plan, expert_reasoning, launch_phases = [], "", [], {}, {}
     if ai:
         exact = ai.get("exact") or heur[:8]
         phrase = ai.get("phrase") or heur[:15]
@@ -218,6 +310,8 @@ def build_plan(product, competitors=None, use_ai=True, model=None):
         negatives = ai.get("negatives") or []
         rationale = ai.get("rationale") or ""
         action_plan = ai.get("action_plan") or []
+        expert_reasoning = ai.get("expert_reasoning") or {}
+        launch_phases = ai.get("launch_phases") or {}
         source = "ai"
     else:
         exact = heur[:8]
@@ -277,7 +371,12 @@ def build_plan(product, competitors=None, use_ai=True, model=None):
         "negatives": negatives,
         "economics": econ,
         "rationale": rationale,
+        "expert_reasoning": expert_reasoning,
+        "launch_phases": launch_phases,
         "action_plan": action_plan,
+        "competitor_intel": intel_data,
+        "keyword_analysis": kw_analysis,
+        "market_assessment": market_assess,
         "bids": bids,
         "budgets": budgets,
         "daily_budget_total": round(total_budget, 2),

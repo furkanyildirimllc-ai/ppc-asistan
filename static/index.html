@@ -51,6 +51,7 @@
     background: rgba(11, 14, 20, 0.8);
     backdrop-filter: var(--glass-blur);
     position: sticky; top: 0; z-index: 100;
+    flex-wrap: wrap; /* Ensure menu doesn't overflow */
   }
   header h1 { font-size: 18px; font-weight: 800; display: flex; align-items: baseline; gap: 8px; letter-spacing: -0.5px; }
   header h1 span { color: var(--accent); text-shadow: 0 0 10px var(--accent-glow); }
@@ -76,6 +77,7 @@
   button {
     background: rgba(255,255,255,0.05); border: 1px solid var(--border);
     border-radius: 8px; padding: 8px 16px; cursor: pointer; font-weight: 500;
+    white-space: nowrap; /* Prevent emojis from wrapping on text */
   }
   button:hover { background: rgba(255,255,255,0.1); transform: translateY(-1px); box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
   button:active { transform: translateY(0); }
@@ -468,10 +470,11 @@
   .lp-camp .meta{font-size:11.5px;color:var(--muted);margin:3px 0 6px}
   .kwchip{display:inline-block;background:var(--panel2);border:1px solid var(--border);
     border-radius:4px;padding:2px 7px;margin:2px 3px 2px 0;font-size:11.5px}
-  .lp-step{display:flex;gap:9px;padding:7px 0;border-top:1px dashed var(--border);font-size:12.5px;line-height:1.6}
+  .lp-step{display:flex;gap:12px;padding:9px 0;border-top:1px dashed var(--border);font-size:12.5px;line-height:1.6}
   .lp-step:first-child{border-top:0}
-  .lp-step .n{flex:0 0 21px;height:21px;border-radius:50%;background:var(--accent);color:#111;
-    font-weight:700;font-size:11px;display:flex;align-items:center;justify-content:center}
+  .lp-step .n{flex:0 0 24px;height:24px;border-radius:50%;background:var(--accent);color:#111;
+    font-weight:700;font-size:12px;display:flex;align-items:center;justify-content:center;margin-top:2px}
+  .lp-step > div:last-child {flex:1; min-width:0; word-break: break-word;} /* Prevent text overflow */
   /* profit banner */
   .profit-banner{background:linear-gradient(90deg,rgba(52,211,153,.12),rgba(96,165,250,.08));border:1px solid rgba(52,211,153,.3);border-radius:8px;padding:10px 14px;margin:12px 0;font-size:13px;display:flex;gap:16px;flex-wrap:wrap;align-items:center}
   .profit-banner b{color:var(--green)}
@@ -586,58 +589,60 @@
 </dialog>
 
 <!-- Launch - sifir gecmisli yeni urun icin kampanya kurulumu -->
-<dialog id="launchDlg" style="max-width:860px">
-  <h3>🚀 Yeni Ürün Launch</h3>
-  <p class="muted small" style="margin-top:4px;margin-bottom:14px">
-    Hiç reklam geçmişi olmayan ürün için: rakip + keyword araştır → kâr analizi →
-    kampanya planı → Amazon bulk sheet. Rapor yüklemene gerek yok.
+<dialog id="launchDlg" style="max-width:880px; width:95%; max-height: 90vh; overflow-y: auto;">
+  <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:12px">
+    <h3 style="margin:0">🚀 Yeni Ürün Launch (Sıfır Geçmiş PPC Motoru)</h3>
+    <button class="ghost small" onclick="autoFillLaunch()" style="color:var(--accent); border-color:var(--accent)">⚡ Otomatik Doldur (Akıllı Tahminler)</button>
+  </div>
+  <p class="muted small" style="margin-top:2px;margin-bottom:16px; line-height:1.5">
+    Hiç reklam geçmişi olmayan ürün için: Otomatik rakip ve keyword analizi → Kârlılık hesabı → Kampanya planı. 
+    Eksik alanları sistem otomatik tahmin eder, elle girmek zorunda değilsiniz.
   </p>
 
   <div id="launchForm">
     <div class="fgrid">
-      <label>Ürün başlığı <span class="req">*</span>
+      <label>Ürün Başlığı <span class="req">*</span>
         <input id="lqTitle" aria-label="Ürün başlığı"
-               placeholder="Stainless Steel Insulated Water Bottle 32oz Wide Mouth">
+               placeholder="Örn: Stainless Steel Insulated Water Bottle 32oz Wide Mouth">
       </label>
-      <label>Marka / kampanya öneki
+      <label>Marka / Kampanya Öneki
         <input id="lqBrand" aria-label="Marka adı" placeholder="HydroTest">
       </label>
-      <label>ASIN
+      <label>ASIN <span class="muted">(opsiyonel)</span>
         <input id="lqAsin" aria-label="Ürün ASIN" placeholder="B0XXXXXXXX">
       </label>
-      <label>SKU <span class="muted">(boşsa ASIN kullanılır)</span>
+      <label>SKU <span class="muted">(boşsa otomatik üretilir)</span>
         <input id="lqSku" aria-label="Ürün SKU" placeholder="WB-32-BLK">
       </label>
-      <label>Satış fiyatı ($) <span class="req">*</span>
+      <label>Satış Fiyatı ($) <span class="muted">(boşsa tahmini hesaplanır)</span>
         <input id="lqPrice" type="number" step="0.01" aria-label="Satış fiyatı" placeholder="24.99">
       </label>
-      <label>COGS — ürün maliyeti ($)
+      <label>COGS — Ürün Maliyeti ($) <span class="muted">(boşsa %25 tahmin)</span>
         <input id="lqCogs" type="number" step="0.01" aria-label="Ürün maliyeti COGS" placeholder="6.50">
       </label>
-      <label>FBA ücreti ($)
+      <label>FBA Ücreti ($) <span class="muted">(boşsa standart kargo)</span>
         <input id="lqFba" type="number" step="0.01" aria-label="FBA ücreti" placeholder="5.20">
       </label>
-      <label>Amazon komisyonu (%)
+      <label>Amazon Komisyonu (%)
         <input id="lqFee" type="number" step="0.1" value="15" aria-label="Amazon komisyon yüzdesi">
       </label>
     </div>
 
-    <label style="display:block;margin-top:12px">Rakip ASIN / başlıkları
-      <span class="muted small">— her satıra bir tane: <code>ASIN | başlık | fiyat</code> (sadece ASIN de olur)</span>
-      <textarea id="lqComp" rows="4" aria-label="Rakip ürünler"
+    <label style="display:block;margin-top:14px">Rakip ASIN / Başlıkları <span class="muted small">— (Opsiyonel) Her satıra bir tane: <code>ASIN | Başlık | Fiyat</code> veya sadece <code>ASIN</code></span>
+      <textarea id="lqComp" rows="3" aria-label="Rakip ürünler"
         placeholder="B0AAA11111 | Hydro Flask 32 oz Wide Mouth Water Bottle | 44.95&#10;B0BBB22222 | Iron Flask Sports Water Bottle 32oz | 21.95"></textarea>
     </label>
 
-    <label class="chk" style="margin-top:10px">
+    <label class="chk" style="margin-top:12px">
       <input type="checkbox" id="lqAi" checked aria-label="AI strateji kullan">
-      AI strateji kullan <span class="muted small">(Claude — keyword + negatif + gerekçe üretir, ~30-60 sn)</span>
+      AI Uzman Stratejisi Kullan <span class="muted small">(Claude — Keyword + Negatifler + Uzman Gerekçelendirme üretir)</span>
     </label>
 
-    <div style="margin-top:16px;display:flex;gap:8px;align-items:center">
-      <button class="primary" onclick="runLaunch()" id="lqRun">🔍 Rakip + keyword araştır, plan kur</button>
+    <div style="margin-top:18px;display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+      <button class="primary" onclick="runLaunch()" id="lqRun" style="padding:10px 20px">🔍 Analiz Et & Kampanya Planı Kur</button>
       <button onclick="launchDlg.close()">Kapat</button>
-      <span id="lqLoad" style="display:none;color:var(--muted);font-size:13px">
-        <span class="spin"></span> araştırılıyor, plan kuruluyor…
+      <span id="lqLoad" style="display:none;color:var(--accent);font-size:13px;font-weight:600">
+        <span class="spin"></span> Rakipler taranıyor, uzman stratejisi oluşturuluyor…
       </span>
     </div>
   </div>
@@ -2009,6 +2014,24 @@ async function downloadExtZip(){
 /* ============ LAUNCH — sifir gecmisli yeni urun ============ */
 let launchPlan=null;
 
+function autoFillLaunch() {
+  const pInput = $('lqPrice');
+  let price = Number(pInput.value) || 29.99;
+  pInput.value = price.toFixed(2);
+
+  if (!$('lqCogs').value) {
+    $('lqCogs').value = (price * 0.25).toFixed(2);
+  }
+  if (!$('lqFba').value) {
+    $('lqFba').value = Math.max(3.50, price * 0.18 + 1.50).toFixed(2);
+  }
+  if (!$('lqSku').value) {
+    const asin = $('lqAsin').value.trim() || 'ASIN';
+    $('lqSku').value = 'SKU-' + asin.toUpperCase();
+  }
+  toast('⚡ Akıllı tahminler (Fiyat, COGS, FBA, SKU) otomatik dolduruldu!');
+}
+
 function openLaunchDlg(){
   $('launchResult').innerHTML='';
   launchPlan=null;
@@ -2038,8 +2061,13 @@ function parseCompetitors(raw){
 async function runLaunch(){
   const title=$('lqTitle').value.trim();
   if(!title){toast('Ürün başlığı gerekli');return;}
-  const price=Number($('lqPrice').value)||null;
-  if(!price){toast('Satış fiyatı gerekli — kâr ve bid hesabı buna dayanıyor');return;}
+  
+  // Auto-fill financial inputs if user left them empty
+  if(!$('lqPrice').value || !$('lqCogs').value || !$('lqFba').value) {
+    autoFillLaunch();
+  }
+  
+  const price=Number($('lqPrice').value)||29.99;
   const body={
     title, brand:$('lqBrand').value.trim()||null,
     asin:$('lqAsin').value.trim()||null, sku:$('lqSku').value.trim()||null,
@@ -2157,14 +2185,45 @@ function renderLaunchPlan(p){
      placement multiplier +%25 ekle.`,
   ];
 
+  // --- rakip zekasi ---
+  const cIntel = p.competitor_intel || {};
+  let cIntelHtml = '';
+  if (cIntel.weak_targets && cIntel.weak_targets.length > 0) {
+    const weakItems = cIntel.weak_targets.map(w => 
+      `<div class="ai-item"><span class="k">${esc(w.asin)}</span> — <span class="why">${esc(w.reason)} (${esc(w.strategy)})</span></div>`
+    ).join('');
+    cIntelHtml = `<div class="lp-sec" style="border-left: 3px solid var(--green)">
+      <h5>🎯 Zayıf Rakip Fırsatları (${cIntel.weak_targets.length} ASIN)</h5>
+      <div>${weakItems}</div>
+    </div>`;
+  }
+
+  // --- uzman mantigi ---
+  const expReason = p.expert_reasoning || {};
+  let expReasonHtml = '';
+  if (expReason.keyword_strategy || expReason.bid_strategy || expReason.risk_assessment) {
+    expReasonHtml = `<div class="lp-sec">
+      <h5>🧠 Uzman Analizi & Strateji Gerekçeleri</h5>
+      <div>
+        ${expReason.keyword_strategy ? `<div class="ai-item"><span class="k">🔑 Keyword Stratejisi:</span> <div class="why">${esc(expReason.keyword_strategy)}</div></div>` : ''}
+        ${expReason.bid_strategy ? `<div class="ai-item"><span class="k">💵 Bid Mantığı:</span> <div class="why">${esc(expReason.bid_strategy)}</div></div>` : ''}
+        ${expReason.risk_assessment ? `<div class="ai-item"><span class="k">⚠️ Risk Değerlendirmesi:</span> <div class="why">${esc(expReason.risk_assessment)}</div></div>` : ''}
+      </div>
+    </div>`;
+  }
+
   $('launchResult').innerHTML=`
     <div class="lp-sec">
       <h5>💰 Kâr Analizi ${p.keyword_source==='ai'?'<span class="rev-badge rev-ok" style="margin-left:auto">AI planı</span>':'<span class="rev-badge rev-warn" style="margin-left:auto">sezgisel (AI kapalı)</span>'}</h5>
       <div>${econHtml}</div>
     </div>
 
-    ${p.rationale?`<div class="lp-sec"><h5>🧠 Neden bu strateji?</h5>
+    ${cIntelHtml}
+
+    ${p.rationale?`<div class="lp-sec"><h5>💡 Neden bu strateji?</h5>
       <div class="small" style="line-height:1.65">${esc(p.rationale)}</div></div>`:''}
+
+    ${expReasonHtml}
 
     <div class="lp-sec">
       <h5>🔑 Keyword'ler

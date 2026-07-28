@@ -20,8 +20,7 @@ def search_related_asins(asin):
         if not products:
             return []
             
-        product = products[0]
-        bought_together = product.get("frequentlyBoughtTogether", [])
+        bought_together = product.get("frequentlyBoughtTogether") or []
         
         recs = []
         for rel_asin in bought_together:

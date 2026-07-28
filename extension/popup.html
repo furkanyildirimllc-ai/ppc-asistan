@@ -3,68 +3,427 @@
 <head>
   <meta charset="utf-8" />
   <style>
-    :root { --bg:#0f172a; --card:#1e293b; --line:#334155; --fg:#e2e8f0;
-            --muted:#94a3b8; --acc:#38bdf8; --ok:#22c55e; --warn:#f59e0b; }
+    :root {
+      --bg: #0f172a;
+      --card: #1e293b;
+      --card-hover: #2a374a;
+      --line: #334155;
+      --fg: #e2e8f0;
+      --muted: #94a3b8;
+      --acc: #38bdf8;
+      --acc-hover: #0284c7;
+      --ok: #22c55e;
+      --warn: #f59e0b;
+      --danger: #ef4444;
+      --radius-sm: 8px;
+      --radius-md: 12px;
+      --radius-full: 999px;
+    }
     * { box-sizing: border-box; }
-    body { width: 380px; margin: 0; font: 13px/1.45 system-ui, sans-serif;
-           background: var(--bg); color: var(--fg); }
-    header { padding: 12px 14px; border-bottom: 1px solid var(--line);
-             display: flex; align-items: center; gap: 8px; }
-    header b { font-size: 14px; }
-    header small { color: var(--muted); margin-left: auto; }
-    .body { padding: 12px 14px; }
-    .card { background: var(--card); border: 1px solid var(--line);
-            border-radius: 10px; padding: 10px 12px; margin-bottom: 10px; }
-    label { display:block; color: var(--muted); font-size: 11px; margin: 6px 0 2px; }
-    input { width: 100%; padding: 6px 8px; border-radius: 6px; border: 1px solid var(--line);
-            background: #0b1220; color: var(--fg); font-size: 13px; }
-    .row { display: flex; gap: 8px; }
-    .row > div { flex: 1; }
-    button { width: 100%; padding: 9px; border: 0; border-radius: 8px; cursor: pointer;
-             font-weight: 600; font-size: 13px; margin-top: 8px; }
+    body {
+      width: 420px;
+      height: 580px;
+      margin: 0;
+      font: 14px/1.5 system-ui, -apple-system, Inter, sans-serif;
+      background: var(--bg);
+      color: var(--fg);
+      overflow-x: hidden;
+      overflow-y: auto;
+    }
+    
+    /* Header */
+    header {
+      padding: 16px;
+      border-bottom: 1px solid var(--line);
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      position: sticky;
+      top: 0;
+      background: rgba(15, 23, 42, 0.9);
+      backdrop-filter: blur(8px);
+      z-index: 100;
+    }
+    header b { font-size: 16px; font-weight: 600; }
+    header small { color: var(--muted); margin-left: auto; font-size: 12px; }
+    
+    /* Wizard Steps Indicator */
+    .steps-nav {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 14px 20px;
+      background: #0b1220;
+      border-bottom: 1px solid var(--line);
+      position: relative;
+    }
+    .steps-nav::before {
+      content: '';
+      position: absolute;
+      top: 50%;
+      left: 36px;
+      right: 36px;
+      height: 2px;
+      background: var(--line);
+      transform: translateY(-50%);
+      z-index: 1;
+    }
+    .step-dot {
+      width: 26px;
+      height: 26px;
+      border-radius: 50%;
+      background: var(--card);
+      border: 2px solid var(--line);
+      color: var(--muted);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 11px;
+      font-weight: 700;
+      z-index: 2;
+      transition: all 0.25s ease;
+      cursor: pointer;
+    }
+    .step-dot.active {
+      border-color: var(--acc);
+      background: var(--acc);
+      color: #04212e;
+      box-shadow: 0 0 12px rgba(56, 189, 248, 0.4);
+    }
+    .step-dot.done {
+      border-color: var(--ok);
+      background: var(--card);
+      color: var(--ok);
+    }
+    
+    /* Layout */
+    .body-content {
+      padding: 14px;
+      position: relative;
+    }
+    .step-panel {
+      display: none;
+      animation: fadeIn 0.25s ease;
+    }
+    .step-panel.active {
+      display: block;
+    }
+    
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(4px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    
+    /* UI Components */
+    .card {
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: var(--radius-md);
+      padding: 12px 14px;
+      margin-bottom: 10px;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    }
+    .tag {
+      font-size: 11px;
+      color: var(--acc);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      font-weight: 700;
+      margin-bottom: 6px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    label {
+      display: block;
+      color: var(--muted);
+      font-size: 11px;
+      font-weight: 600;
+      margin: 6px 0 3px;
+      text-transform: uppercase;
+      letter-spacing: 0.03em;
+    }
+    input {
+      width: 100%;
+      padding: 7px 10px;
+      border-radius: var(--radius-sm);
+      border: 1px solid var(--line);
+      background: #0b1220;
+      color: var(--fg);
+      font-size: 12px;
+      transition: border-color 0.2s;
+    }
+    input:focus { outline: none; border-color: var(--acc); }
+    .row { display: flex; gap: 8px; align-items: center; }
+    .row > div { flex: 1; min-width: 0; }
+    
+    button {
+      width: 100%;
+      padding: 9px;
+      border: 0;
+      border-radius: var(--radius-sm);
+      cursor: pointer;
+      font-weight: 600;
+      font-size: 13px;
+      margin-top: 8px;
+      transition: all 0.2s;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+    }
     .primary { background: var(--acc); color: #04212e; }
+    .primary:hover:not(:disabled) { background: var(--acc-hover); color: #fff; }
     .ghost { background: transparent; color: var(--acc); border: 1px solid var(--acc); }
+    .ghost:hover:not(:disabled) { background: rgba(56, 189, 248, 0.12); }
     .success { background: var(--ok); color: #052e16; }
-    button:disabled { opacity: .5; cursor: default; }
-    .muted { color: var(--muted); }
-    .kw { display: inline-block; background: #0b1220; border: 1px solid var(--line);
-          border-radius: 999px; padding: 2px 8px; margin: 2px 3px 0 0; font-size: 11px; }
-    .tag { font-size: 10px; color: var(--acc); text-transform: uppercase; letter-spacing: .04em; }
-    .camp { border-left: 3px solid var(--acc); padding-left: 8px; margin: 8px 0; }
-    .camp b { font-size: 12px; }
-    .note { background: #1c1408; border: 1px solid #422006; color: #fcd34d;
-            border-radius: 8px; padding: 8px; font-size: 11px; margin-top: 8px; }
-    .spin { color: var(--acc); }
-    a { color: var(--acc); }
+    .success:hover:not(:disabled) { filter: brightness(1.1); }
+    button:disabled { opacity: 0.5; cursor: not-allowed; }
+    
+    .muted { color: var(--muted); font-size: 11px; line-height: 1.4; }
+    .spin { animation: spin 1s linear infinite; display: inline-block; }
+    @keyframes spin { 100% { transform: rotate(360deg); } }
+    
+    /* Step 1 specifics */
+    .indicator { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; font-weight: 600; margin-right: 8px; }
+    .i-ok { color: var(--ok); }
+    .i-warn { color: var(--warn); }
+    .i-danger { color: var(--danger); }
+    
+    /* Step 2 specifics */
+    .comp-card {
+      display: flex;
+      gap: 8px;
+      padding: 8px 10px;
+      border-radius: var(--radius-sm);
+      background: #0b1220;
+      border: 1px solid var(--line);
+      margin-bottom: 6px;
+      align-items: center;
+      overflow: hidden;
+    }
+    .comp-card.strong { border-left: 4px solid var(--danger); }
+    .comp-card.weak { border-left: 4px solid var(--ok); }
+    .comp-info { flex: 1; min-width: 0; overflow: hidden; }
+    .comp-title { font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: 600; color: var(--fg); }
+    .comp-meta { font-size: 11px; color: var(--muted); margin-top: 2px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+    .star-rating { color: #fbbf24; font-size: 11px; }
+    
+    /* Step 3 specifics */
+    .chip {
+      display: inline-flex;
+      align-items: center;
+      background: #0b1220;
+      border: 1px solid var(--line);
+      border-radius: var(--radius-full);
+      padding: 3px 9px;
+      margin: 3px 3px 0 0;
+      font-size: 11px;
+      font-weight: 500;
+      color: var(--fg);
+    }
+    .chip.high { border-color: var(--danger); color: #fca5a5; }
+    .chip.med { border-color: var(--warn); color: #fde68a; }
+    .chip.low { border-color: var(--acc); color: #bae6fd; }
+    
+    /* Step 4 specifics */
+    .camp-card {
+      border-left: 4px solid var(--acc);
+      background: #0b1220;
+      padding: 8px 10px;
+      border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+      margin-bottom: 6px;
+    }
+    .timeline { position: relative; padding-left: 14px; }
+    .timeline::before {
+      content: ''; position: absolute; left: 0; top: 4px; bottom: 4px; width: 2px; background: var(--line);
+    }
+    .tl-item { position: relative; margin-bottom: 8px; font-size: 11px; line-height: 1.4; color: var(--fg); }
+    .tl-item::before {
+      content: ''; position: absolute; left: -18px; top: 4px; width: 7px; height: 7px;
+      border-radius: 50%; background: var(--acc);
+    }
+    .expert-note {
+      background: rgba(56, 189, 248, 0.08);
+      border-left: 3px solid var(--acc);
+      padding: 8px 10px;
+      border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+      font-size: 11px;
+      line-height: 1.45;
+      margin-top: 6px;
+      color: var(--fg);
+    }
+    
+    /* Loading view */
+    .loader-view {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      height: 260px;
+      text-align: center;
+    }
+    .spinner {
+      width: 36px; height: 36px;
+      border: 3px solid var(--line);
+      border-top-color: var(--acc);
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+      margin-bottom: 14px;
+    }
+    
   </style>
 </head>
 <body>
   <header>
-    <b>🚀 PPC Launch</b>
-    <small id="status">hazir</small>
+    <b>🚀 PPC Launch Pro</b>
+    <small id="status-text">Hazır</small>
   </header>
-  <div class="body">
-    <div class="card" id="detect">
-      <div class="tag">Algilanan urun</div>
-      <label>Baslik</label><input id="f-title" placeholder="Amazon sayfasini ac veya elle gir" />
-      <div class="row">
-        <div><label>ASIN</label><input id="f-asin" placeholder="B0..." /></div>
-        <div><label>Fiyat ($)</label><input id="f-price" type="number" step="0.01" /></div>
+  
+  <div class="steps-nav">
+    <div class="step-dot active" id="dot-1">1</div>
+    <div class="step-dot" id="dot-2">2</div>
+    <div class="step-dot" id="dot-3">3</div>
+    <div class="step-dot" id="dot-4">4</div>
+    <div class="step-dot" id="dot-5">5</div>
+  </div>
+
+  <div class="body-content">
+    
+    <!-- STEP 1: Ürün Tarama -->
+    <div class="step-panel active" id="step-1">
+      <div class="card">
+        <div class="tag">Ürün Analizi</div>
+        <div id="product-indicators" style="margin-bottom: 10px; display: none;">
+          <span class="indicator i-ok" id="ind-aplus">✓ A+ İçerik</span>
+          <span class="indicator" id="ind-imgs">📸 0 Görsel</span>
+          <span class="indicator" id="ind-rating">⭐ 0.0</span>
+        </div>
+        
+        <label>Başlık</label>
+        <input id="f-title" placeholder="Amazon ürün sayfasını açın" />
+        
+        <div class="row">
+          <div><label>ASIN</label><input id="f-asin" placeholder="B0..." /></div>
+          <div><label>Fiyat ($)</label><input id="f-price" type="number" step="0.01" /></div>
+        </div>
+        
+        <div class="row">
+          <div><label>SKU (Opsiyonel)</label><input id="f-sku" placeholder="Satıcı SKU" /></div>
+          <div><label>Marka</label><input id="f-brand" placeholder="Marka adı" /></div>
+        </div>
+        
+        <div class="row">
+          <div><label>Üretim Maliyeti (COGS $)</label><input id="f-cogs" type="number" step="0.01" placeholder="Kar analizi için" /></div>
+          <div><label>FBA Ücreti ($)</label><input id="f-fba" type="number" step="0.01" placeholder="Kar analizi için" /></div>
+        </div>
       </div>
-      <div class="row">
-        <div><label>SKU (seller)</label><input id="f-sku" placeholder="opsiyonel" /></div>
-        <div><label>Marka</label><input id="f-brand" placeholder="opsiyonel" /></div>
-      </div>
-      <div class="row">
-        <div><label>Maliyet/COGS ($)</label><input id="f-cogs" type="number" step="0.01" placeholder="kar hesabi icin" /></div>
-        <div><label>FBA ucreti ($)</label><input id="f-fba" type="number" step="0.01" placeholder="opsiyonel" /></div>
-      </div>
-      <div class="muted" id="comp-count" style="margin-top:6px"></div>
-      <button class="ghost" id="btn-rescan">↻ Sayfayi yeniden oku</button>
-      <button class="primary" id="btn-analyze">🔍 Rakip + Keyword arastir, plan kur</button>
+      
+      <button class="ghost" id="btn-rescan">↻ Sayfayı Yeniden Tara</button>
+      <button class="primary" id="btn-step-1-next">Devam Et →</button>
     </div>
 
-    <div id="plan"></div>
+    <!-- STEP 2: Rakip Keşfi -->
+    <div class="step-panel" id="step-2">
+      <div class="card">
+        <div class="tag">Rakip Hedefleri <span id="comp-count-title" style="color:var(--muted);float:right">0 seçildi</span></div>
+        <div class="muted" style="margin-bottom: 10px;">Otomatik bulunan rakipleri inceleyin. Güçlü rakipler (kırmızı), zayıf hedefler (yeşil).</div>
+        
+        <div id="competitors-list" style="max-height: 280px; overflow-y: auto;">
+          <!-- Competitor cards injected here -->
+        </div>
+        
+        <div style="margin-top: 10px;">
+          <div class="row">
+            <input id="f-manual-asin" placeholder="Manuel ASIN Ekle (B0...)" style="flex:2" />
+            <button class="ghost" id="btn-add-comp" style="margin-top:0; padding: 8px;">+ Ekle</button>
+          </div>
+        </div>
+      </div>
+      <div class="row">
+        <button class="ghost" onclick="goToStep(1)">← Geri</button>
+        <button class="primary" id="btn-step-2-next" style="flex: 2;">Devam Et →</button>
+      </div>
+    </div>
+
+    <!-- STEP 3: Keyword Keşfi -->
+    <div class="step-panel" id="step-3">
+      <div class="card">
+        <div class="tag">Anahtar Kelime Fırsatları</div>
+        <div class="muted" style="margin-bottom: 10px;">Rakiplerden ve Amazon otomatik tamamlamadan (Autocomplete) elde edilen kelimeler:</div>
+        
+        <div id="keyword-loading" class="muted">Kelimeler toplanıyor <span class="spin">⏳</span></div>
+        
+        <div id="keywords-container" style="max-height: 300px; overflow-y: auto; display: none;">
+          <!-- Chips injected here -->
+        </div>
+      </div>
+      
+      <div class="expert-note">
+        <b>💡 AI Stratejisi:</b> Bu kelimeler analiz edilerek bütçenize en uygun Exact, Phrase ve Broad kampanyalarına otomatik dağıtılacaktır.
+      </div>
+      
+      <div class="row">
+        <button class="ghost" onclick="goToStep(2)">← Geri</button>
+        <button class="primary" id="btn-analyze" style="flex: 2;">AI Analizi Başlat 🧠</button>
+      </div>
+    </div>
+
+    <!-- STEP 4: Strateji & Plan (Loading + Result) -->
+    <div class="step-panel" id="step-4">
+      <div id="loading-view" class="loader-view">
+        <div class="spinner"></div>
+        <b style="font-size:16px;">AI Planı Oluşturuluyor...</b>
+        <div class="muted" style="margin-top:8px">Rakipler analiz ediliyor, CPC tahminleri yapılıyor ve optimal bütçe dağıtımı hesaplanıyor.</div>
+      </div>
+      
+      <div id="plan-view" style="display: none;">
+        <div id="plan-content">
+          <!-- AI plan injected here -->
+        </div>
+        <button class="primary" onclick="goToStep(5)" style="margin-top:16px;">İndirme Adımına Geç →</button>
+      </div>
+    </div>
+
+    <!-- STEP 5: İndir & Uygula -->
+    <div class="step-panel" id="step-5">
+      <div class="card" style="text-align: center; padding: 24px 16px;">
+        <div style="font-size: 40px; margin-bottom: 12px;">✅</div>
+        <b style="font-size: 18px;">PPC Planınız Hazır!</b>
+        <div class="muted" style="margin-top: 8px;">Stratejiniz başarıyla oluşturuldu. Aşağıdaki dosyayı indirip doğrudan Seller Central'a yükleyebilirsiniz.</div>
+      </div>
+      
+      <div class="card">
+        <div class="tag">Özet Tablosu</div>
+        <div class="row" style="text-align: center; margin-top: 10px;">
+          <div>
+            <div style="font-size: 20px; font-weight: bold; color: var(--acc);" id="summary-budget">$0</div>
+            <div class="muted">Günlük Bütçe</div>
+          </div>
+          <div>
+            <div style="font-size: 20px; font-weight: bold; color: var(--acc);" id="summary-camps">0</div>
+            <div class="muted">Kampanya</div>
+          </div>
+          <div>
+            <div style="font-size: 20px; font-weight: bold; color: var(--acc);" id="summary-kws">0</div>
+            <div class="muted">Kelime/Hedef</div>
+          </div>
+        </div>
+      </div>
+      
+      <button class="success" id="btn-dl" style="font-size: 16px; padding: 14px;">⬇️ Bulk Sheet İndir (.xlsx)</button>
+      
+      <div class="expert-note" style="margin-top: 16px; background: rgba(245, 158, 11, 0.1); border-color: var(--warn); color: var(--fg);">
+        <b>📌 Nasıl Yüklenir?</b>
+        <ol style="margin: 8px 0 0 16px; padding: 0; color: var(--muted);">
+          <li style="margin-bottom: 4px;">Amazon Seller Central'ı açın</li>
+          <li style="margin-bottom: 4px;">Campaign Manager > Bulk Operations</li>
+          <li style="margin-bottom: 4px;">"Choose file" diyerek indirdiğiniz dosyayı seçin</li>
+          <li>"Upload to process" butonuna tıklayın</li>
+        </ol>
+      </div>
+    </div>
+
   </div>
 
   <script src="popup.js"></script>

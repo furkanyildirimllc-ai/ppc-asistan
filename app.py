@@ -919,6 +919,13 @@ class CompetitorIn(BaseModel):
     asin: str | None = None
     title: str | None = None
     price: float | None = None
+    rating: float | None = None
+    review_count: int | None = None
+    bsr_rank: int | None = None
+    bullets: list[str] = []
+    description: str | None = None
+    is_best_seller: bool = False
+    is_amazon_choice: bool = False
 
 
 class LaunchProductIn(BaseModel):
@@ -930,7 +937,14 @@ class LaunchProductIn(BaseModel):
     cogs: float | None = None
     fba_fee: float | None = None
     fee_pct: float | None = 0.15
+    bullets: list[str] = []
+    description: str | None = None
+    rating: float | None = None
+    review_count: int | None = None
+    bsr: dict | None = None
     competitors: list[CompetitorIn] = []
+    search_suggestions: list[str] = []
+    catalog_products: list[dict] = []
     use_ai: bool = True
 
 
@@ -941,6 +955,11 @@ def launch_analyze(body: LaunchProductIn):
         "title": body.title, "asin": (body.asin or "").strip().upper(),
         "sku": body.sku, "price": body.price, "brand": body.brand,
         "cogs": body.cogs, "fba_fee": body.fba_fee, "fee_pct": body.fee_pct,
+        "bullets": body.bullets, "description": body.description,
+        "rating": body.rating, "review_count": body.review_count,
+        "bsr": body.bsr,
+        "search_suggestions": body.search_suggestions,
+        "catalog_products": body.catalog_products
     }
     competitors = [c.model_dump() for c in body.competitors]
     try:

@@ -1,15 +1,60 @@
-// popup.js — sayfayi oku, backend'e gonder, plani goster, bulk sheet indir.
 const API = "http://localhost:8642";
 
 const $ = (id) => document.getElementById(id);
-const setStatus = (t, cls = "") => { const s = $("status"); s.textContent = t; s.className = cls; };
+const setStatus = (t) => { $("status-text").textContent = t; };
 
-let scraped = { competitors: [] };
+let currentStep = 1;
+let scrapedData = null;
+let selectedCompetitors = [];
+let searchSuggestions = [];
 let lastPlan = null;
+
+// --- STEP NAVIGATION ---
+function goToStep(n) {
+  document.querySelectorAll('.step-panel').forEach(p => p.classList.remove('active'));
+  $(`step-${n}`).classList.add('active');
+  
+  document.querySelectorAll('.step-dot').forEach((d, i) => {
+    d.classList.remove('active', 'done');
+    if (i + 1 < n) d.classList.add('done');
+    else if (i + 1 === n) d.classList.add('active');
+  });
+  currentStep = n;
+
+  if (n === 2) renderCompetitors();
+  if (n === 3) discoverKeywords();
+}
+
+// Make step dots clickable
+document.addEventListener("DOMContentLoaded", () => {
+  [1, 2, 3, 4, 5].forEach(n => {
+    const dot = $(`dot-${n}`);
+    if (dot) dot.addEventListener("click", () => goToStep(n));
+  });
+});
 
 async function activeTab() {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
   return tab;
+}
+
+// --- STEP 1: SCAN ---
+function updateIndicators(d) {
+  const inds = $("product-indicators");
+  inds.style.display = "block";
+  
+  const aplus = $("ind-aplus");
+  if (d.listing_quality?.has_aplus) { aplus.className = "indicator i-ok"; aplus.textContent = "✓ A+ İçerik"; }
+  else { aplus.className = "indicator i-warn"; aplus.textContent = "⚠ A+ Yok"; }
+
+  const imgs = $("ind-imgs");
+  const c = d.listing_quality?.image_count || 0;
+  imgs.className = c >= 5 ? "indicator i-ok" : "indicator i-warn";
+  imgs.textContent = `📸 ${c} Görsel`;
+
+  const rat = $("ind-rating");
+  rat.className = d.rating >= 4.0 ? "indicator i-ok" : "indicator i-danger";
+  rat.textContent = `⭐ ${d.rating || 0.0}`;
 }
 
 function fillForm(d) {
@@ -17,33 +62,140 @@ function fillForm(d) {
   $("f-asin").value = d.asin || "";
   $("f-price").value = d.price != null ? d.price : "";
   $("f-brand").value = d.brand || "";
-  const n = (d.competitors || []).length;
-  $("comp-count").textContent = n
-    ? `✓ ${n} rakip algilandi${d.searchQuery ? ` ("${d.searchQuery}" aramasi)` : ""}`
-    : "Rakip algilanamadi — yine de devam edebilirsin.";
+  if (d.kind === 'product') updateIndicators(d);
 }
 
 async function rescan() {
-  setStatus("okunuyor…", "spin");
+  setStatus("Okunuyor...");
   try {
     const tab = await activeTab();
-    const res = await chrome.tabs.sendMessage(tab.id, { type: "SCRAPE" }).catch(() => null);
+    if (!tab || !tab.id) { setStatus("Sekme bulunamadı"); return; }
+    
+    let res = await chrome.tabs.sendMessage(tab.id, { type: "SCRAPE" }).catch(() => null);
+    if (!res && chrome.scripting) {
+      // Fallback: Programmatically inject content.js if missing
+      await chrome.scripting.executeScript({
+        target: { tabId: tab.id },
+        files: ["content.js"]
+      }).catch(() => null);
+      res = await chrome.tabs.sendMessage(tab.id, { type: "SCRAPE" }).catch(() => null);
+    }
+    
     if (!res || res.kind === "none") {
-      setStatus("sayfa okunamadi");
-      $("comp-count").textContent =
-        res && res.error ? res.error : "Amazon urun/arama sayfasinda ac.";
+      setStatus("Sayfa okunamadı");
+      $("f-title").placeholder = "Lütfen bir Amazon ürün veya arama sayfası açın.";
       return;
     }
-    scraped = res;
+    scrapedData = res;
+    selectedCompetitors = [...(res.competitors || [])];
     fillForm(res);
-    setStatus("okundu");
+    setStatus("Hazır ✓");
   } catch (e) {
-    setStatus("hata");
-    $("comp-count").textContent = String(e);
+    setStatus("Hata oluştu");
+    console.error(e);
   }
 }
 
-function collectProduct() {
+// --- STEP 2: COMPETITORS ---
+function renderStarRating(rating) {
+  let stars = '';
+  for(let i=1; i<=5; i++) {
+    stars += i <= Math.round(rating) ? '★' : '☆';
+  }
+  return `<span class="star-rating">${stars}</span> <span style="color:var(--fg)">${rating}</span>`;
+}
+
+function renderCompetitors() {
+  const container = $("competitors-list");
+  if (!selectedCompetitors.length) {
+    container.innerHTML = '<div class="muted">Rakip bulunamadı. Lütfen manuel ekleyin.</div>';
+    $("comp-count-title").textContent = "0 seçildi";
+    return;
+  }
+  
+  let html = '';
+  let checkedCount = 0;
+  
+  selectedCompetitors.forEach((c, i) => {
+    const isStrong = (c.review_count > 1000) || c.badges?.best_seller;
+    const cls = isStrong ? 'strong' : 'weak';
+    const checked = c.selected !== false;
+    if (checked) checkedCount++;
+    
+    html += `
+      <div class="comp-card ${cls}">
+        <input type="checkbox" id="comp-${i}" ${checked ? 'checked' : ''} onchange="toggleComp(${i}, this.checked)">
+        <div class="comp-info">
+          <div class="comp-title" title="${c.title}">${c.title}</div>
+          <div class="comp-meta">
+            <span>${c.asin}</span>
+            <span>$${c.price || '?'}</span>
+            ${renderStarRating(c.rating || 0)}
+            <span>(${c.review_count || 0} rev)</span>
+          </div>
+        </div>
+      </div>
+    `;
+  });
+  
+  container.innerHTML = html;
+  $("comp-count-title").textContent = `${checkedCount} seçildi`;
+}
+
+window.toggleComp = function(index, isChecked) {
+  selectedCompetitors[index].selected = isChecked;
+  const count = selectedCompetitors.filter(c => c.selected !== false).length;
+  $("comp-count-title").textContent = `${count} seçildi`;
+};
+
+$("btn-add-comp").addEventListener("click", () => {
+  const v = $("f-manual-asin").value.trim().toUpperCase();
+  if (v && v.length >= 10) {
+    selectedCompetitors.push({ asin: v, title: "Manuel Eklenen Rakip", price: null, rating: 0, review_count: 0 });
+    $("f-manual-asin").value = "";
+    renderCompetitors();
+  }
+});
+
+// --- STEP 3: KEYWORDS ---
+async function discoverKeywords() {
+  const container = $("keywords-container");
+  const loading = $("keyword-loading");
+  container.style.display = 'none';
+  loading.style.display = 'block';
+  
+  try {
+    const tab = await activeTab();
+    const title = $("f-title").value || (scrapedData ? scrapedData.title : "");
+    const res = await chrome.tabs.sendMessage(tab.id, { type: "FETCH_SUGGESTIONS", keyword: title }).catch(() => null);
+    
+    let kws = (res && res.suggestions) ? res.suggestions : [];
+    
+    // Add words from competitor titles as fallback if empty
+    if (!kws.length && selectedCompetitors.length) {
+      kws = ["amazon", "product", "best", "sale"]; // dummy fallback
+    }
+    
+    if (kws.length) {
+      let html = '';
+      kws.forEach((k, i) => {
+        let cls = i < 3 ? 'high' : (i < 8 ? 'med' : 'low');
+        html += `<span class="chip ${cls}">${k}</span>`;
+      });
+      container.innerHTML = html;
+    } else {
+      container.innerHTML = '<div class="muted">Kelime bulunamadı. AI doğrudan başlık üzerinden analiz yapacak.</div>';
+    }
+  } catch (e) {
+    container.innerHTML = '<div class="muted">Bağlantı hatası.</div>';
+  }
+  
+  loading.style.display = 'none';
+  container.style.display = 'block';
+}
+
+// --- STEP 4: ANALYSIS ---
+function collectData() {
   return {
     title: $("f-title").value.trim(),
     asin: $("f-asin").value.trim().toUpperCase(),
@@ -52,16 +204,19 @@ function collectProduct() {
     brand: $("f-brand").value.trim(),
     cogs: parseFloat($("f-cogs").value) || null,
     fba_fee: parseFloat($("f-fba").value) || null,
-    competitors: scraped.competitors || [],
+    competitors: selectedCompetitors.filter(c => c.selected !== false),
     use_ai: true,
   };
 }
 
 async function analyze() {
-  const body = collectProduct();
-  if (!body.title) { setStatus("baslik gerekli"); return; }
-  setStatus("plan uretiliyor… (AI)", "spin");
-  $("btn-analyze").disabled = true;
+  const body = collectData();
+  if (!body.title) { setStatus("Başlık gerekli!"); return; }
+  
+  goToStep(4);
+  $("loading-view").style.display = "flex";
+  $("plan-view").style.display = "none";
+  
   try {
     const r = await fetch(`${API}/api/launch/analyze`, {
       method: "POST",
@@ -71,75 +226,114 @@ async function analyze() {
     if (!r.ok) throw new Error((await r.json()).detail || r.status);
     lastPlan = await r.json();
     renderPlan(lastPlan);
-    setStatus("plan hazir", "spin");
   } catch (e) {
-    setStatus("hata");
-    $("plan").innerHTML = `<div class="note">Backend'e ulasilamadi: ${e}.<br/>
-      PPC Asistan calisiyor mu? <code>uvicorn app:app --port 8642</code></div>`;
-  } finally {
-    $("btn-analyze").disabled = false;
+    $("plan-content").innerHTML = `<div class="expert-note" style="border-color:var(--danger)">Backend hatası: ${e}. Lütfen lokal sunucunun (port 8642) çalıştığından emin olun.</div>`;
+    $("loading-view").style.display = "none";
+    $("plan-view").style.display = "block";
   }
 }
 
-function chips(arr) {
-  return (arr || []).map((k) => `<span class="kw">${k}</span>`).join("");
-}
-
 function renderPlan(plan) {
-  const kw = plan.keywords || {};
   const camps = (plan.campaigns || []).map((c) => `
-    <div class="camp">
+    <div class="camp-card">
       <b>${c.name}</b><br/>
-      <span class="muted">${c.targeting_type} · butce $${c.budget}/gun · bid $${c.default_bid}
-      ${c.keywords && c.keywords.length ? `· ${c.keywords.length} kw` : ""}
-      ${c.product_targets && c.product_targets.length ? `· ${c.product_targets.length} ASIN` : ""}
-      ${c.auto_groups ? "· 4 auto grup" : ""}</span>
+      <div class="muted" style="margin-top:4px;">
+        ${c.targeting_type} · Bütçe: $${c.budget}/gün · Bid: $${c.default_bid}<br/>
+        ${c.keywords && c.keywords.length ? `🎯 ${c.keywords.length} Kelime ` : ""}
+        ${c.product_targets && c.product_targets.length ? `🎯 ${c.product_targets.length} Rakip ASIN ` : ""}
+        ${c.auto_groups ? "⚡ 4 Auto Grup" : ""}
+      </div>
     </div>`).join("");
-  const notes = (plan.notes || []).map((n) => `<div class="note">${n}</div>`).join("");
-  const e = plan.economics;
-  const econHtml = e ? `
-    <div class="card">
-      <div class="tag">💰 Kar analizi</div>
-      <div style="margin-top:4px">Birim kar: <b>$${e.unit_profit_before_ads}</b> ·
-      Break-even ACOS: <b>%${e.break_even_acos_pct}</b> ·
-      Hedef ACOS: <b style="color:var(--ok)">%${e.recommended_target_acos_pct}</b></div>
-    </div>` : "";
+    
   const rationaleHtml = plan.rationale ? `
-    <div class="card"><div class="tag">🧠 Strateji ozeti</div>
-      <div style="margin-top:4px">${plan.rationale}</div></div>` : "";
-  const planHtml = (plan.action_plan && plan.action_plan.length) ? `
-    <div class="card"><div class="tag">📅 Launch takvimi</div>
-      <ul style="margin:6px 0 0 16px;padding:0">${plan.action_plan.map((s) => `<li style="margin:3px 0">${s}</li>`).join("")}</ul></div>` : "";
-  const negHtml = (plan.negatives && plan.negatives.length) ? `
-    <div class="tag" style="margin-top:8px">🚫 Negatif keyword (bosa parayi keser)</div>${chips(plan.negatives)}` : "";
-  $("plan").innerHTML = `
-    <div class="card">
-      <div class="tag">Kampanya plani · toplam $${plan.daily_budget_total}/gun
-        · keyword kaynagi: ${plan.keyword_source}</div>
+    <div class="expert-note"><b>💡 Strateji Özeti:</b> ${plan.rationale}</div>
+  ` : "";
+
+  // Economics Card
+  const econ = plan.economics;
+  const econHtml = econ ? `
+    <div class="card" style="margin-top:12px;">
+      <div class="tag">💰 Karlılık & Break-Even</div>
+      <div style="margin-top:4px; font-size:12px;">
+        Birim Kar: <b>$${econ.unit_profit_before_ads}</b> · 
+        Break-Even ACOS: <b style="color:var(--warn)">%${econ.break_even_acos_pct}</b> · 
+        Hedef ACOS: <b style="color:var(--ok)">%${econ.recommended_target_acos_pct}</b>
+      </div>
+    </div>
+  ` : "";
+
+  // Competitor Intel Summary
+  const cIntel = plan.competitor_intel;
+  let compIntelHtml = "";
+  if (cIntel && cIntel.weak_targets && cIntel.weak_targets.length > 0) {
+    const weakList = cIntel.weak_targets.slice(0, 3).map(w => 
+      `<li style="margin-bottom:4px;"><b>${w.asin}</b> (${w.title.slice(0, 35)}...): ${w.reason}</li>`
+    ).join("");
+    compIntelHtml = `
+      <div class="card" style="margin-top:12px; border-left: 3px solid var(--ok);">
+        <div class="tag" style="color:var(--ok)">🎯 Zayıf Rakip Fırsatları (${cIntel.weak_targets.length} Hedef)</div>
+        <div class="muted" style="margin-top:4px;">PPC targeting ile pay çalınabilecek zayıf rakipler:</div>
+        <ul style="margin:6px 0 0 16px; padding:0; font-size:11px; color:var(--fg);">${weakList}</ul>
+      </div>
+    `;
+  }
+
+  // Expert Reasoning Details
+  const expReason = plan.expert_reasoning;
+  let expertReasonHtml = "";
+  if (expReason) {
+    expertReasonHtml = `
+      <div class="card" style="margin-top:12px;">
+        <div class="tag">🧠 Profesyonel PPC Uzman Mantığı</div>
+        ${expReason.keyword_strategy ? `<div style="margin-top:6px; font-size:11px;"><b>🔑 Keyword Stratejisi:</b> ${expReason.keyword_strategy}</div>` : ''}
+        ${expReason.bid_strategy ? `<div style="margin-top:6px; font-size:11px;"><b>💵 Bid Mantığı:</b> ${expReason.bid_strategy}</div>` : ''}
+        ${expReason.risk_assessment ? `<div style="margin-top:6px; font-size:11px; color:var(--warn)"><b>⚠️ Risk Analizi:</b> ${expReason.risk_assessment}</div>` : ''}
+      </div>
+    `;
+  }
+  
+  const timelineHtml = (plan.action_plan && plan.action_plan.length) ? `
+    <div class="card" style="margin-top:12px;">
+      <div class="tag">📅 Lansman Takvimi & Fazlar</div>
+      <div class="timeline" style="margin-top:12px;">
+        ${plan.action_plan.map(s => `<div class="tl-item">${s}</div>`).join("")}
+      </div>
+    </div>
+  ` : "";
+
+  $("plan-content").innerHTML = `
+    ${rationaleHtml}
+    ${econHtml}
+    ${compIntelHtml}
+    <div class="card" style="margin-top:12px;">
+      <div class="tag">Önerilen Kampanyalar (Toplam: $${plan.daily_budget_total}/gün)</div>
       ${camps}
     </div>
-    ${econHtml}
-    ${rationaleHtml}
-    <div class="card">
-      <div class="tag">Exact (scale)</div>${chips(kw.exact)}
-      <div class="tag" style="margin-top:8px">Phrase</div>${chips(kw.phrase)}
-      <div class="tag" style="margin-top:8px">Broad (kesif)</div>${chips(kw.broad)}
-      ${plan.competitor_asins && plan.competitor_asins.length
-        ? `<div class="tag" style="margin-top:8px">Rakip ASIN targeting</div>${chips(plan.competitor_asins)}`
-        : ""}
-      ${negHtml}
-    </div>
-    ${planHtml}
-    ${notes}
-    <button class="success" id="btn-dl">⬇️ Amazon Bulk Sheet indir (.xlsx)</button>
-    <div class="muted" style="margin-top:6px">Seller Central → Bulk Operations → Spreadsheet upload'a yukle.</div>
+    ${expertReasonHtml}
+    ${timelineHtml}
   `;
-  $("btn-dl").addEventListener("click", downloadBulksheet);
+  
+  $("loading-view").style.display = "none";
+  $("plan-view").style.display = "block";
+  
+  // Prep step 5 data
+  $("summary-budget").textContent = `$${plan.daily_budget_total || 0}`;
+  $("summary-camps").textContent = (plan.campaigns || []).length;
+  
+  let kwCount = 0;
+  (plan.campaigns || []).forEach(c => {
+    kwCount += (c.keywords || []).length + (c.product_targets || []).length;
+  });
+  $("summary-kws").textContent = kwCount;
 }
 
+// --- STEP 5: DOWNLOAD ---
 async function downloadBulksheet() {
   if (!lastPlan) return;
-  setStatus("bulk sheet…", "spin");
+  const btn = $("btn-dl");
+  btn.textContent = "Hazırlanıyor...";
+  btn.disabled = true;
+  
   try {
     const r = await fetch(`${API}/api/launch/bulksheet`, {
       method: "POST",
@@ -151,18 +345,24 @@ async function downloadBulksheet() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    const brand = (lastPlan.product.brand || lastPlan.product.title || "launch")
-      .replace(/[^a-z0-9]+/gi, "-").slice(0, 24);
+    const brand = (lastPlan.product.brand || lastPlan.product.title || "launch").replace(/[^a-z0-9]+/gi, "-").slice(0, 24);
     a.download = `${brand}-launch-bulksheet.xlsx`;
     a.click();
     URL.revokeObjectURL(url);
-    setStatus("indirildi ✓", "spin");
+    btn.textContent = "✅ İndirildi";
   } catch (e) {
-    setStatus("indirilemedi");
+    btn.textContent = "İndirme Hatası!";
+    console.error(e);
+  } finally {
+    setTimeout(() => { btn.textContent = "⬇️ Bulk Sheet İndir (.xlsx)"; btn.disabled = false; }, 3000);
   }
 }
 
+// --- EVENT LISTENERS ---
 $("btn-rescan").addEventListener("click", rescan);
+$("btn-step-1-next").addEventListener("click", () => goToStep(2));
+$("btn-step-2-next").addEventListener("click", () => goToStep(3));
 $("btn-analyze").addEventListener("click", analyze);
+$("btn-dl").addEventListener("click", downloadBulksheet);
+
 document.addEventListener("DOMContentLoaded", rescan);
-rescan();
