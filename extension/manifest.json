@@ -23,6 +23,8 @@
     "https://www.amazon.ae/*",
     "https://www.amazon.com.tr/*",
     "https://sellercentral.amazon.com/*",
+    "https://*.media-amazon.com/*",
+    "https://*.images-amazon.com/*",
     "https://completion.amazon.com/*",
     "http://localhost:8642/*"
   ],

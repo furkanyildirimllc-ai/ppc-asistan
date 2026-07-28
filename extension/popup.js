@@ -234,6 +234,18 @@ async function discoverKeywords() {
       kws = Array.from(compTokens).slice(0, 20);
     }
     
+    // STRICT RELEVANCE FILTER: Only keep keywords that share at least 1 meaningful token with the product title
+    const ownTokens = new Set(title.toLowerCase().replace(/[^a-z0-9\s]/g, ' ').split(/\s+/).filter(w => w.length > 2));
+    const stopWords = new Set(['the','and','for','with','set','pack','size','new','best','top','sale','prime']);
+    const cleanOwnTokens = new Set([...ownTokens].filter(w => !stopWords.has(w)));
+    
+    if (cleanOwnTokens.size > 0 && kws.length > 0) {
+      kws = kws.filter(kw => {
+        const kwWords = kw.toLowerCase().split(/\s+/);
+        return kwWords.some(w => cleanOwnTokens.has(w));
+      });
+    }
+    
     if (kws.length) {
       let html = '';
       kws.forEach((k, i) => {
@@ -242,7 +254,7 @@ async function discoverKeywords() {
       });
       container.innerHTML = html;
     } else {
-      container.innerHTML = '<div class="muted">Kelime bulunamadı. AI doğrudan başlık üzerinden analiz yapacak.</div>';
+      container.innerHTML = '<div class="muted">Ürününüzle doğrudan alakalı kelime süzüldü. AI doğrudan başlık üzerinden analiz yapacak.</div>';
     }
   } catch (e) {
     container.innerHTML = '<div class="muted">Bağlantı hatası.</div>';
