@@ -51,10 +51,13 @@
     background: rgba(11, 14, 20, 0.85);
     backdrop-filter: blur(24px);
     position: sticky; top: 0; z-index: 100;
-    flex-wrap: wrap; /* Ensure menu doesn't overflow */
+    flex-wrap: nowrap; /* Do not wrap, keep it a single line */
+    overflow-x: auto; /* Allow scrolling if screen is too small */
+    -ms-overflow-style: none; scrollbar-width: none; /* Hide scrollbar for a clean look */
     box-shadow: 0 4px 30px rgba(0, 0, 0, 0.3);
   }
-  .h-group { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+  header::-webkit-scrollbar { display: none; }
+  .h-group { display: flex; align-items: center; gap: 12px; flex-wrap: nowrap; flex-shrink: 0; }
   header h1 { font-size: 20px; font-weight: 700; display: flex; align-items: baseline; gap: 8px; letter-spacing: -0.3px; }
   header h1 span { color: var(--accent); font-weight: 800; text-shadow: 0 0 16px var(--accent-glow); }
   header h1 .ver { font-size: 11px; color: rgba(255,255,255,0.4); font-weight: 600; letter-spacing: 1.5px; text-transform: uppercase; background: rgba(255,255,255,0.05); padding: 2px 6px; border-radius: 4px; }
