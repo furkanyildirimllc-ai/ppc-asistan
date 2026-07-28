@@ -63,6 +63,16 @@ function fillForm(d) {
   $("f-price").value = d.price != null ? d.price : "";
   $("f-brand").value = d.brand || "";
   if (d.kind === 'product') updateIndicators(d);
+  
+  // Auto-estimate FBA fee if price is available
+  if (d.price && d.price > 0) {
+    const p = d.price;
+    // Standard FBA fee estimation: referral (15%) + fulfillment ($3.22-$6.10 based on price tier)
+    const fulfillment = p < 10 ? 3.22 : p < 25 ? 3.86 : p < 50 ? 5.26 : 6.10;
+    if (!$("f-fba").value) $("f-fba").value = fulfillment.toFixed(2);
+    // COGS rough estimate: ~25% of price if not set
+    if (!$("f-cogs").value) $("f-cogs").value = (p * 0.25).toFixed(2);
+  }
 }
 
 async function rescan() {
@@ -160,9 +170,12 @@ function renderCompetitors() {
     if (c.intel.isWeak) badges += '<span class="comp-badge weak">🎯 Kolay Hedef</span>';
     if (c.intel.isStrong) badges += '<span class="comp-badge strong">⚠️ Güçlü Rakip</span>';
     
+    const imgHtml = c.image ? `<img src="${c.image}" style="width:36px;height:36px;border-radius:6px;object-fit:cover;flex-shrink:0;background:#1e293b;">` : `<div style="width:36px;height:36px;border-radius:6px;background:#1e293b;display:flex;align-items:center;justify-content:center;font-size:14px;flex-shrink:0;">📦</div>`;
+    
     html += `
       <div class="comp-card ${cls}">
         <input type="checkbox" id="comp-${i}" ${checked ? 'checked' : ''} onchange="toggleComp(${i}, this.checked)">
+        ${imgHtml}
         <div class="comp-info">
           <div class="comp-title" title="${c.title}">${c.title}</div>
           <div class="comp-meta">

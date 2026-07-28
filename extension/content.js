@@ -161,11 +161,19 @@ function scrapeCompetitorsDeep() {
     const is_amazon_choice = !!card.querySelector(".ac-badge-wrapper, .ac-badge, [class*='choice']");
     const is_sponsored = !!txt(".puis-sponsored-label-text", card) || txt("span", card).toLowerCase().includes("sponsored");
     
+    // Get competitor image
+    let image = '';
+    const img = card.querySelector('img');
+    if (img) {
+      image = img.getAttribute('src') || img.getAttribute('data-a-dynamic-image')?.match(/"(https[^"]+)"/)?.[1] || '';
+    }
+    
     seen.add(asin);
     comps.push({ 
       asin, 
       title: title.slice(0, 200), 
       price, 
+      image,
       rating, 
       review_count: isNaN(review_count) ? 0 : review_count, 
       badges: { best_seller: is_best_seller, amazon_choice: is_amazon_choice, sponsored: is_sponsored } 
@@ -188,7 +196,14 @@ function scrapeSearchResults() {
     const reviewText = txt("span[aria-label*='rating']", el) || txt(".a-size-base", el) || txt("a[href*='customerReviews']", el);
     const review_count = reviewText ? parseInt(reviewText.replace(/[^0-9]/g, ""), 10) : 0;
     
-    if (title && title.length > 3) comps.push({ asin, title: title.slice(0, 200), price, rating, review_count: isNaN(review_count) ? 0 : review_count });
+    // Get competitor image
+    let image = '';
+    const img = el.querySelector('img');
+    if (img) {
+      image = img.getAttribute('src') || img.getAttribute('data-a-dynamic-image')?.match(/"(https[^"]+)"/)?.[1] || '';
+    }
+    
+    if (title && title.length > 3) comps.push({ asin, title: title.slice(0, 200), price, image, rating, review_count: isNaN(review_count) ? 0 : review_count });
   });
   
   if (comps.length > 0) {

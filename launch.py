@@ -9,6 +9,7 @@ Yeni listelenen bir urun icin:
 Bu modul mevcut bulksheet.BULK_HEADERS formatini yeniden kullanir; cikti
 Seller Central > Bulk Operations'a dogrudan yuklenebilir.
 """
+import concurrent.futures
 import io
 import re
 from datetime import datetime
@@ -76,15 +77,38 @@ def heuristic_keywords(title, competitors, max_kw=40, search_suggestions=None):
             if g in sug_lower:
                 freq[g] *= 2.5
 
-    # kendi basligindaki terimlere bonus
+    # kendi basligindaki terimlere bonus + alakasiz filtreleme
     own = set(_tokens(title))
+    
+    # Alakasiz keyword'leri filtrele: keyword'un en az 1 kelimesi
+    # urunun kendi basligindaki terimlerle ortusmeli VEYA
+    # search_suggestions'da yer almali
+    sug_set = set()
+    if search_suggestions:
+        for s in search_suggestions:
+            for t in _tokens(s):
+                sug_set.add(t)
+    
+    relevant_pool = own | sug_set  # kabul edilebilir kelime havuzu
+    
+    def _is_relevant(kw_str):
+        """Keyword'un en az 1 kelimesi urunle alakali mi?"""
+        kw_words = set(kw_str.split())
+        # tek kelimeler: dogrudan urun basliginda olmali
+        if len(kw_words) == 1:
+            return kw_str in relevant_pool
+        # cok kelimeli: en az 1 ortak kelime
+        return bool(kw_words & relevant_pool)
+    
     ranked = sorted(freq.items(),
                     key=lambda kv: (kv[1] + (0.5 if set(kv[0].split()) & own else 0)),
                     reverse=True)
     out, seen = [], set()
-    for kw, _ in ranked:
-        # alt-string tekrarlarini azalt
+    for kw, score in ranked:
         if kw in seen:
+            continue
+        # Alakasiz keyword'leri atla
+        if not _is_relevant(kw):
             continue
         seen.add(kw)
         out.append(kw)
@@ -171,11 +195,12 @@ Keyword'leri urun dilinde (genelde Ingilizce) yaz. Alakasiz cok-genel tek kelime
     import json
     client = Anthropic(api_key=config.ANTHROPIC_API_KEY)
     last_err = None
-    for attempt in range(3):
+    for attempt in range(2):
         try:
             resp = client.messages.create(
                 model=model or config.LAUNCH_MODEL,
-                max_tokens=3000,
+                max_tokens=2000,
+                timeout=20.0,
                 system="Sadece istenen JSON'u dondur. Aciklama, markdown fence veya ek metin yazma.",
                 messages=[{"role": "user", "content": prompt}],
             )
@@ -204,7 +229,7 @@ Keyword'leri urun dilinde (genelde Ingilizce) yaz. Alakasiz cok-genel tek kelime
             last_err = "bos keyword listesi"
         except Exception as e:
             last_err = str(e)
-    print(f"ai_strategy basarisiz (3 deneme): {last_err}")
+    print(f"ai_strategy basarisiz (2 deneme): {last_err}")
     return None
 
 
@@ -293,14 +318,18 @@ def build_plan(product, competitors=None, use_ai=True, model=None):
     kw_analysis = competitor_intel.reverse_engineer_keywords(title, competitors, search_suggestions)
     market_assess = competitor_intel.assess_market_opportunity(product, competitors, product.get("bsr"))
 
-    heur = heuristic_keywords(title, competitors, search_suggestions=search_suggestions)
-    ai = ai_strategy(
-        title, competitors, price, econ, model=model, 
-        product_data=product, 
-        keyword_analysis=kw_analysis,
-        competitor_intel_data=intel_data,
-        market_assessment=market_assess
-    ) if use_ai else None
+    with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
+        heur_future = executor.submit(heuristic_keywords, title, competitors, search_suggestions=search_suggestions)
+        ai_future = executor.submit(
+            ai_strategy, title, competitors, price, econ, 
+            model=model, product_data=product,
+            keyword_analysis=kw_analysis,
+            competitor_intel_data=intel_data,
+            market_assessment=market_assess
+        ) if use_ai else None
+        
+        heur = heur_future.result()
+        ai = ai_future.result() if ai_future else None
 
     negatives, rationale, action_plan, expert_reasoning, launch_phases = [], "", [], {}, {}
     if ai:
