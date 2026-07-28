@@ -191,7 +191,8 @@ Sadece gecerli JSON dondur, baska hicbir sey yazma:
     "week_5_plus": {{"focus": "...", "actions": ["..."], "budget_pct": 20}}
   }}
 }}
-Keyword'leri urun dilinde (genelde Ingilizce) yaz. Alakasiz cok-genel tek kelimeleri ele."""
+KRİTİK UYARI: Yalnızca doğrudan bu ürünle ALAKALI terimleri kullan. Örneğin ürün Şampuan (shampoo) ise deodorant, body wash, soap, lotion gibi FARKLI KATEGORİ kelimelerini KESİNLİKLE ele ve ekleme. Ürün başlığı ({title}) temel kategoridir.
+Keyword'leri urun dilinde (genelde Ingilizce) yaz. Alakasiz cok-genel tek kelimeleri ve baska kategori kelimelerini ele."""
     import json
     client = Anthropic(api_key=config.ANTHROPIC_API_KEY)
     last_err = None

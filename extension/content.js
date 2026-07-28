@@ -161,11 +161,24 @@ function scrapeCompetitorsDeep() {
     const is_amazon_choice = !!card.querySelector(".ac-badge-wrapper, .ac-badge, [class*='choice']");
     const is_sponsored = !!txt(".puis-sponsored-label-text", card) || txt("span", card).toLowerCase().includes("sponsored");
     
-    // Get competitor image
+    // Get competitor image with robust fallback
     let image = '';
-    const img = card.querySelector('img');
+    const img = card.querySelector('img[src*="images-I"], img[src*="media-amazon"], img');
     if (img) {
-      image = img.getAttribute('src') || img.getAttribute('data-a-dynamic-image')?.match(/"(https[^"]+)"/)?.[1] || '';
+      const dyn = img.getAttribute('data-a-dynamic-image');
+      if (dyn) {
+        try {
+          const parsed = JSON.parse(dyn);
+          const urls = Object.keys(parsed);
+          if (urls.length > 0) image = urls[0];
+        } catch(e) {
+          const m = dyn.match(/"(https:[^"]+)"/);
+          if (m) image = m[1];
+        }
+      }
+      if (!image) {
+        image = img.getAttribute('src') || img.getAttribute('data-src') || img.getAttribute('srcset')?.split(' ')[0] || '';
+      }
     }
     
     seen.add(asin);
