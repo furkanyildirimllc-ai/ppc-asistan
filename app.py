@@ -4,6 +4,7 @@ Calistir: .venv/bin/uvicorn app:app --port 8642
 import io
 import json
 import sqlite3
+import zipfile
 from datetime import datetime
 from pathlib import Path
 
@@ -947,6 +948,48 @@ def launch_analyze(body: LaunchProductIn):
     except Exception as e:
         raise HTTPException(500, f"Plan uretilemedi: {e}")
     return plan
+
+
+EXT_DIR = Path(__file__).parent / "extension"
+
+
+@app.get("/api/extension/files")
+def extension_files():
+    """Uzanti klasorundeki dosyalarin listesi (arayuzde tek tek indirmek icin)."""
+    if not EXT_DIR.is_dir():
+        raise HTTPException(404, "extension/ klasoru bulunamadi")
+    files = sorted(p for p in EXT_DIR.rglob("*") if p.is_file()
+                   and not p.name.startswith("."))
+    return {"files": [{"name": str(p.relative_to(EXT_DIR)), "bytes": p.stat().st_size}
+                      for p in files]}
+
+
+@app.get("/api/extension/file/{name:path}")
+def extension_file(name: str):
+    """Tek dosyayi indir. Path traversal'a karsi klasor disina cikilamaz."""
+    if not EXT_DIR.is_dir():
+        raise HTTPException(404, "extension/ klasoru bulunamadi")
+    target = (EXT_DIR / name).resolve()
+    if not str(target).startswith(str(EXT_DIR.resolve()) + "/") or not target.is_file():
+        raise HTTPException(404, "Dosya bulunamadi")
+    return FileResponse(target, media_type="text/plain", filename=target.name)
+
+
+@app.get("/api/extension/download")
+def extension_download():
+    """Uzantiyi tek .zip olarak indir -> ac -> chrome://extensions 'Load unpacked'."""
+    if not EXT_DIR.is_dir():
+        raise HTTPException(404, "extension/ klasoru bulunamadi")
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as z:
+        for p in sorted(EXT_DIR.rglob("*")):
+            if p.is_file() and not p.name.startswith("."):
+                z.write(p, Path("ppc-launch-extension") / p.relative_to(EXT_DIR))
+    buf.seek(0)
+    return StreamingResponse(
+        buf, media_type="application/zip",
+        headers={"Content-Disposition":
+                 'attachment; filename="ppc-launch-extension.zip"'})
 
 
 @app.post("/api/launch/bulksheet")

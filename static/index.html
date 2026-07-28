@@ -429,6 +429,24 @@
   .st-approved{background:rgba(52,211,153,.15);color:var(--green)}
   .st-rejected{background:rgba(248,113,113,.15);color:var(--red)}
   .st-pending{background:rgba(139,152,169,.15);color:var(--muted)}
+  /* launch/uzanti serit (ana ekran) */
+  .launch-strip{display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin:0 0 14px;
+    padding:12px 16px;border:1px solid rgba(96,165,250,.3);border-radius:9px;
+    background:linear-gradient(90deg,rgba(96,165,250,.10),rgba(167,139,250,.06))}
+  .launch-strip .ls-txt{flex:1;min-width:260px;font-size:12.5px;line-height:1.6}
+  .launch-strip .ls-txt b{display:block;font-size:13.5px;margin-bottom:2px}
+  .launch-strip .ls-txt span{color:var(--muted)}
+  /* baslangic kartlari (bos ekran) */
+  .start-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:14px;margin-top:14px}
+  .start-card{background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:20px}
+  .start-card .ic{font-size:26px;line-height:1}
+  .start-card h4{margin:9px 0 6px;font-size:14.5px}
+  .start-card p{color:var(--muted);font-size:12.5px;line-height:1.65;margin-bottom:14px}
+  /* uzanti dosya listesi */
+  .extfile{display:flex;align-items:center;gap:9px;padding:6px 0;border-top:1px dashed var(--border)}
+  .extfile:first-child{border-top:0}
+  .extfile code{flex:1;font-size:12px}
+  .extfile .sz{color:var(--muted);font-size:11px}
   /* launch dialog */
   .fgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:2px 14px}
   .fgrid label{margin:8px 0 4px}
@@ -466,6 +484,7 @@
   <button onclick="openBrandDialog()">+ Marka</button>
   <button onclick="openBrandDialog(true)" id="editBtn" style="display:none">⚙ Ayarlar</button>
   <button onclick="openLaunchDlg()" title="Sıfır geçmişli yeni ürün için kampanya kur">🚀 Yeni Ürün Launch</button>
+  <button onclick="openExtDlg()" title="Amazon sayfasından tek tıkla ürün çeken Chrome uzantısı">🧩 Chrome Uzantısı</button>
   <button onclick="helpDlg.showModal()">📖 Rehber</button>
   <div style="flex:1"></div>
   <div id="mgrBadge" class="mgr-badge" style="display:none" title="Denetçi Müdür — her AI çıktısını kontrol eder">🛡 Müdür: Standby</div>
@@ -475,6 +494,96 @@
   <button class="primary" id="bulkPrimary" style="display:none" onclick="openBulkWizard()" title="Adım adım Amazon'a yükle">📦 Amazon'a Yükle</button>
   <button id="exportBtn" style="display:none" onclick="exportFile()" title="Manuel referans için sade Excel">⬇ Excel (manuel)</button>
 </header>
+
+<!-- Chrome uzantisi - kurulum + indirme -->
+<dialog id="extDlg" style="max-width:780px">
+  <h3>🧩 Chrome Uzantısı — Amazon'dan tek tıkla ürün çek</h3>
+  <p class="muted small" style="margin-top:4px;margin-bottom:16px">
+    Uzantı, açık olan Amazon ürün sayfasından başlığı, ASIN'i, fiyatı ve arama
+    sonucundaki rakipleri otomatik okur; sonra buradaki Launch motoruna yollayıp
+    kampanya planı + bulk sheet üretir. Elle yazmakla aynı sonuç — sadece hızlı.
+  </p>
+
+  <div class="lp-sec">
+    <h5>1️⃣ Dosyaları indir</h5>
+    <div>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <button class="primary" onclick="downloadExtZip()">⬇ Uzantıyı indir (.zip)</button>
+        <span class="muted small">İndir → çift tıkla aç (klasöre çıkar) → 2. adıma geç</span>
+      </div>
+      <div class="muted small" style="margin-top:12px;margin-bottom:5px">
+        Zip açamıyorsan dosyaları tek tek de indirebilirsin — hepsini
+        <b>aynı klasöre</b> koy, isimleri değiştirme:
+      </div>
+      <div id="extFiles" class="small">yükleniyor…</div>
+    </div>
+  </div>
+
+  <div class="lp-sec">
+    <h5>2️⃣ Chrome'a yükle</h5>
+    <div>
+      <div class="lp-step"><div class="n">1</div><div>
+        Chrome'da adres çubuğuna <b>chrome://extensions</b> yaz, Enter.
+        <button class="cpy" onclick="copyText('chrome://extensions')">📋</button>
+        <span class="muted"> (bu linke tıklayarak gidilemez, Chrome izin vermez — elle yazman gerekiyor)</span>
+      </div></div>
+      <div class="lp-step"><div class="n">2</div><div>
+        Sağ üstteki <b>Developer mode / Geliştirici modu</b> anahtarını <b>aç</b>.
+      </div></div>
+      <div class="lp-step"><div class="n">3</div><div>
+        Sol üstte beliren <b>Load unpacked / Paketlenmemiş öğe yükle</b>'ye tıkla.
+      </div></div>
+      <div class="lp-step"><div class="n">4</div><div>
+        Zip'ten çıkan <b>ppc-launch-extension</b> klasörünü seç.
+        <span class="muted">(Klasörün içindeki <code>manifest.json</code>'ı değil, klasörün kendisini seç.)</span>
+      </div></div>
+      <div class="lp-step"><div class="n">5</div><div>
+        Listede <b>PPC Launch Asistan</b> göründüyse tamam. Araç çubuğunda görmek için
+        Chrome'un sağ üstündeki 🧩 puzzle ikonuna tıkla → uzantının yanındaki
+        <b>raptiyeyi</b> sabitle.
+      </div></div>
+    </div>
+  </div>
+
+  <div class="lp-sec">
+    <h5>3️⃣ Kullan</h5>
+    <div>
+      <div class="lp-step"><div class="n">1</div><div>
+        Bu sunucu <b>açık olmalı</b> — uzantı buraya bağlanıyor:
+        <code id="extBackend"></code>
+        <button class="cpy" onclick="copyText(location.origin)">📋</button>
+      </div></div>
+      <div class="lp-step"><div class="n">2</div><div>
+        Amazon'da <b>ürün sayfanı</b> (veya rakipleri görmek için bir <b>arama sonucu</b>
+        sayfasını) aç.
+      </div></div>
+      <div class="lp-step"><div class="n">3</div><div>
+        Uzantı ikonuna tıkla → ürün ve rakipler otomatik dolar. <b>COGS</b> ve
+        <b>FBA ücretini</b> gir (kâr ve break-even ACOS hesabı bunlara dayanıyor).
+      </div></div>
+      <div class="lp-step"><div class="n">4</div><div>
+        <b>"Rakip + Keyword araştır, plan kur"</b> → plan çıkar →
+        <b>"Amazon Bulk Sheet indir"</b>.
+      </div></div>
+      <div class="lp-step"><div class="n">5</div><div>
+        Seller Central → <b>Sponsored Ads → Bulk Operations → Spreadsheet upload</b>'a yükle.
+      </div></div>
+    </div>
+  </div>
+
+  <div class="muted small" style="margin-top:14px;padding:10px 13px;background:var(--panel2);border-radius:6px;line-height:1.7">
+    ℹ️ <b>Uzantı şart değil.</b> Aynı işi buradan da yapabilirsin:
+    <b>🚀 Yeni Ürün Launch</b> butonuna basıp ürün bilgilerini elle gir — motor,
+    manuel kurulum adımları ve bulk sheet birebir aynı.
+    <br>⚠️ Uzantı Chrome Web Store'da değil, kendi aracın olduğu için "paketlenmemiş"
+    yükleniyor. Chrome her açılışta "geliştirici modu uzantıları" uyarısı gösterebilir — normal.
+  </div>
+
+  <div class="actions" style="margin-top:16px">
+    <button onclick="openLaunchDlg();extDlg.close()">🚀 Uzantısız devam et</button>
+    <button class="primary" onclick="extDlg.close()">Tamam</button>
+  </div>
+</dialog>
 
 <!-- Launch - sifir gecmisli yeni urun icin kampanya kurulumu -->
 <dialog id="launchDlg" style="max-width:860px">
@@ -569,6 +678,17 @@
 
   <div id="uploadInfo" class="small muted" style="margin-bottom:8px"></div>
 
+  <!-- Raporu olmayan yeni urun icin giris noktalari -->
+  <div class="launch-strip">
+    <div class="ls-txt">
+      <b>🚀 Bu ürünün hiç reklam geçmişi yok mu?</b>
+      <span>Rapor beklemeden keyword, negatif, bid, bütçe ve kampanya yapısını kuralım —
+      manuel kurulum adımları + Amazon bulk sheet çıkar.</span>
+    </div>
+    <button class="primary" onclick="openLaunchDlg()">🚀 Yeni Ürün Launch</button>
+    <button onclick="openExtDlg()" title="Amazon sayfasından ürünü otomatik çeken uzantı">🧩 Uzantıyı indir & kur</button>
+  </div>
+
   <!-- Overview strip -->
   <div id="alarmStrip"></div>
 
@@ -633,10 +753,27 @@
 </div>
 
 <div class="wrap" id="empty">
-  <div class="card" style="text-align:center;padding:50px">
+  <div class="card" style="text-align:center;padding:44px 50px">
     <h2 style="margin-bottom:10px">Hoş geldin 👋</h2>
-    <p class="muted">Başlamak için sağ üstten bir marka ekle, sonra Amazon'dan indirdiğin<br>
-    <b>Search Term Report</b> ve <b>Targeting Report</b> dosyalarını sürükleyip bırak.</p>
+    <p class="muted">Reklamı <b>zaten dönen</b> bir ürünün varsa: sağ üstten marka ekle, sonra Amazon'dan<br>
+    indirdiğin <b>Search Term Report</b> ve <b>Targeting Report</b> dosyalarını sürükleyip bırak.</p>
+  </div>
+
+  <div class="start-grid">
+    <div class="start-card">
+      <div class="ic">🚀</div>
+      <h4>Yeni ürün — hiç reklam geçmişi yok</h4>
+      <p>Ürün bilgisini ve rakipleri gir; keyword, negatif, bid, bütçe ve kampanya
+         yapısını kuralım. Manuel kurulum adımları + Amazon bulk sheet çıkar.</p>
+      <button class="primary" onclick="openLaunchDlg()">🚀 Yeni Ürün Launch</button>
+    </div>
+    <div class="start-card">
+      <div class="ic">🧩</div>
+      <h4>Chrome uzantısı ile otomatik doldur</h4>
+      <p>Amazon ürün sayfasını aç, uzantı ikonuna tıkla — başlık, ASIN, fiyat ve
+         rakipler kendiliğinden gelsin. Kurulum 2 dakika, indirme linki içeride.</p>
+      <button onclick="openExtDlg()">⬇ Uzantıyı indir & kur</button>
+    </div>
   </div>
 </div>
 
@@ -1825,6 +1962,48 @@ async function deleteBrand(){
   await api(`/api/brands/${brandId}`,{method:'DELETE'});
   $('brandDlg').close();brandId=null;
   await loadBrands();
+}
+
+/* ============ CHROME UZANTISI — indirme + kurulum ============ */
+function openExtDlg(){
+  $('extBackend').textContent=location.origin;
+  $('extDlg').showModal();
+  loadExtFiles();
+}
+
+async function loadExtFiles(){
+  const box=$('extFiles');
+  try{
+    const d=await(await fetch('/api/extension/files')).json();
+    if(!d.files||!d.files.length){box.innerHTML='<span class="muted">Dosya bulunamadı.</span>';return;}
+    box.innerHTML=d.files.map(f=>`<div class="extfile">
+      <code>${esc(f.name)}</code>
+      <span class="sz">${(f.bytes/1024).toFixed(1)} KB</span>
+      <button class="cpy" onclick="downloadExtFile('${esc(f.name)}')">⬇ indir</button>
+    </div>`).join('');
+  }catch(e){
+    box.innerHTML='<span class="muted" role="alert">Dosya listesi alınamadı — sunucu çalışıyor mu?</span>';
+  }
+}
+
+function downloadExtFile(name){
+  const a=document.createElement('a');
+  a.href='/api/extension/file/'+name.split('/').map(encodeURIComponent).join('/');
+  a.download=name.split('/').pop();
+  a.click();
+}
+
+async function downloadExtZip(){
+  try{
+    const r=await api('/api/extension/download');
+    const blob=await r.blob();
+    const a=document.createElement('a');
+    a.href=URL.createObjectURL(blob);
+    a.download='ppc-launch-extension.zip';
+    a.click();
+    setTimeout(()=>URL.revokeObjectURL(a.href),4000);
+    toast('✅ Uzantı indirildi — zip\'i aç, sonra 2. adım');
+  }catch(e){toast('⚠ Uzantı indirilemedi');}
 }
 
 /* ============ LAUNCH — sifir gecmisli yeni urun ============ */

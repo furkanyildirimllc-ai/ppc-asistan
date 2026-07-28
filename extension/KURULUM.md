@@ -13,6 +13,10 @@ cd ppc-tool
 `claude-opus-5` — en güçlü; ucuzlatmak için `.env`'de `LAUNCH_MODEL=claude-sonnet-5` yap).
 
 ## 2) Uzantıyı yükle
+> En kolay yol: uygulamayı aç (`http://localhost:8642`) → üstteki
+> **🧩 Chrome Uzantısı** butonu → **Uzantıyı indir (.zip)**. Kurulum adımları
+> ekranda adım adım yazıyor. Aşağısı aynı işin manuel anlatımı.
+
 1. Chrome → `chrome://extensions`
 2. Sağ üstten **Developer mode** aç
 3. **Load unpacked** → bu `extension/` klasörünü seç
