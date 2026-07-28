@@ -486,6 +486,25 @@
   /* profit banner */
   .profit-banner{background:linear-gradient(90deg,rgba(52,211,153,.12),rgba(96,165,250,.08));border:1px solid rgba(52,211,153,.3);border-radius:8px;padding:10px 14px;margin:12px 0;font-size:13px;display:flex;gap:16px;flex-wrap:wrap;align-items:center}
   .profit-banner b{color:var(--green)}
+.launch-timeline{margin-top:16px}
+.lt-phase{border:1px solid var(--border);border-radius:10px;margin-bottom:12px;overflow:hidden}
+.lt-phase-head{padding:12px 16px;background:var(--panel2);display:flex;align-items:center;gap:10px;cursor:pointer;user-select:none}
+.lt-phase-head:hover{background:rgba(255,255,255,0.04)}
+.lt-phase-head .ph-icon{font-size:20px}
+.lt-phase-head .ph-title{font-weight:700;font-size:14px;flex:1}
+.lt-phase-head .ph-days{color:var(--accent);font-size:12px;font-weight:600}
+.lt-phase-body{padding:14px 16px;display:none}
+.lt-phase.open .lt-phase-body{display:block}
+.lt-phase.open .lt-phase-head .ph-arrow{transform:rotate(180deg)}
+.ph-arrow{transition:transform 0.2s;color:var(--muted)}
+.lt-task{display:flex;gap:10px;padding:8px 0;border-bottom:1px solid var(--border);align-items:flex-start}
+.lt-task:last-child{border-bottom:0}
+.lt-task input[type=checkbox]{accent-color:var(--accent);width:18px;height:18px;flex-shrink:0;margin-top:2px;cursor:pointer}
+.lt-task label{flex:1;font-size:13px;line-height:1.5;cursor:pointer;color:var(--text)}
+.lt-task label.done{text-decoration:line-through;color:var(--muted)}
+.lt-task .task-tip{color:var(--muted);font-size:11.5px;margin-top:2px;line-height:1.4}
+.lt-progress{height:6px;background:var(--panel2);border-radius:3px;overflow:hidden;margin:8px 0 4px}
+.lt-progress-bar{height:100%;background:linear-gradient(90deg,var(--accent),var(--green));border-radius:3px;transition:width 0.4s ease}
 </style>
 </head>
 <body>
@@ -2131,6 +2150,41 @@ function copyLaunchNeg(){
   toast(`${n.length} negatif kelime kopyalandı`);
 }
 
+function renderIntentGroups(plan) {
+  const ka = plan.keyword_analysis || {};
+  const ig = ka.intent_groups || {};
+  const is_ = ka.intent_summary || {};
+  if (!ig.high_intent && !ig.brand_competitor && !ig.product_attribute) return '';
+  
+  const intentMeta = [
+    { key: 'high_intent', icon: '🎯', label: 'Yüksek Alıcı Niyeti', color: 'var(--green)', desc: 'Satın almaya en yakın aramalar → Exact match öncelikli' },
+    { key: 'brand_competitor', icon: '🏷️', label: 'Marka / Rakip Terimleri', color: 'var(--purple)', desc: 'Rakip marka aramalarını yakala → ASIN targeting ile destekle' },
+    { key: 'product_attribute', icon: '📐', label: 'Ürün Özelliği (Boyut/Renk/Malzeme)', color: 'var(--blue)', desc: 'Spesifik özellik aramaları → Phrase match ideal' },
+    { key: 'comparison', icon: '⚖️', label: 'Karşılaştırma', color: 'var(--accent)', desc: 'Ürün karşılaştırma aramaları → Düşük hacim ama yüksek niyet' },
+    { key: 'generic', icon: '🔍', label: 'Genel Keşif', color: 'var(--muted)', desc: 'Geniş arama terimleri → Broad match, düşük bid' },
+  ];
+
+  let html = '<div class="lp-sec"><h5>🧠 Arama Niyetine Göre Keyword Grupları</h5><div>';
+  html += '<div class="muted small" style="margin-bottom:10px;line-height:1.5">Kelimeler sadece Exact/Phrase/Broad değil, <b>arama niyetine</b> göre de gruplanıyor. Bu sayede her gruba özel bid ve bütçe stratejisi uygulanabilir.</div>';
+
+  for (const m of intentMeta) {
+    const items = ig[m.key] || [];
+    const count = is_[m.key + '_count'] || items.length;
+    if (count === 0) continue;
+    html += `<div style="margin-bottom:10px;padding:8px 10px;border-radius:6px;border-left:3px solid ${m.color};background:var(--panel2)">
+      <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px">
+        <span style="font-size:16px">${m.icon}</span>
+        <b style="font-size:12.5px;color:${m.color}">${m.label}</b>
+        <span class="muted small" style="margin-left:auto">${count} kelime</span>
+      </div>
+      <div class="muted small" style="margin-bottom:5px">${m.desc}</div>
+      <div>${items.slice(0, 8).map(e => `<span class="kwchip">${esc(e.keyword)}</span>`).join('')}${count > 8 ? `<span class="muted small"> +${count - 8} daha</span>` : ''}</div>
+    </div>`;
+  }
+  html += '</div></div>';
+  return html;
+}
+
 function renderLaunchPlan(p){
   const e=p.economics||{}, kw=p.keywords||{}, camps=p.campaigns||[];
   const money=v=>v==null?'—':'$'+Number(v).toFixed(2);
@@ -2254,6 +2308,8 @@ function renderLaunchPlan(p){
       </div>
     </div>
 
+    ${renderIntentGroups(p)}
+
     <div class="lp-sec">
       <h5>🚫 Proaktif Negatifler (${(p.negatives||[]).length})
         <button class="cpy" style="margin-left:auto" onclick="copyLaunchNeg()">📋 kopyala</button></h5>
@@ -2285,10 +2341,96 @@ function renderLaunchPlan(p){
     ${(p.notes||[]).length?`<div class="lp-sec"><h5>📌 Notlar</h5><div class="small" style="line-height:1.7">
       ${p.notes.map(n=>`<div>${esc(n)}</div>`).join('')}</div></div>`:''}
 
+    <div class="lp-sec">
+      <h5>📅 14 Günlük Lansman Kontrol Listesi</h5>
+      <div>${renderLaunchChecklist(p)}</div>
+    </div>
+
     <div style="margin-top:16px;display:flex;gap:8px;align-items:center;flex-wrap:wrap">
       <button class="primary" onclick="downloadLaunchBulk()">📦 Amazon Bulk Sheet indir (.xlsx)</button>
       <span class="muted small">Seller Central → Sponsored Ads → Bulk Operations → Spreadsheet upload</span>
     </div>`;
+}
+
+function renderLaunchChecklist(plan) {
+  const e = plan.economics || {};
+  const beAcos = e.break_even_acos_pct || 30;
+  const phases = [
+    {
+      icon: '🚀', title: 'Gün 1-3: Lansman & Veri Toplama', days: '1-3',
+      tasks: [
+        { text: 'Kampanyaları Seller Central\'a yükle (Bulk Sheet veya manuel)', tip: 'Sponsored Ads → Bulk Operations → Spreadsheet upload' },
+        { text: 'Tüm kampanyaların "Enabled" ve ad group\'ların "Active" olduğunu doğrula', tip: 'Campaign Manager → Status sütununu kontrol et' },
+        { text: 'Bütçe alarmlarını kur — günlük bütçenin %80\'inde bildirim', tip: 'Budget rules veya günlük kontrol' },
+        { text: 'İlk 3 gün BID\'lere ve ACOS\'a dokunma — Amazon\'un öğrenme dönemi', tip: '⚠️ Sürekli bid değiştirmek öğrenme dönemini sıfırlar' },
+      ]
+    },
+    {
+      icon: '📊', title: 'Gün 4-7: İlk Analiz & Negatif Temizliği', days: '4-7',
+      tasks: [
+        { text: 'Search Term Report indir (son 7 gün)', tip: 'Advertising Reports → Search Term → Create Report' },
+        { text: '5+ tık alıp 0 sipariş veren arama terimlerini negatif exact yap', tip: 'Bu terimler bütçe yakıyor — hemen kes' },
+        { text: 'Auto kampanyadan gelen alakasız terimleri negatif exact ekle', tip: 'Örn: farklı renk, boyut veya kategori sorguları' },
+        { text: 'Impression almayan kampanyalar varsa bid\'i %15 artır', tip: 'Amazon seni göstermiyor demek — daha yüksek bid lazım' },
+      ]
+    },
+    {
+      icon: '🎯', title: 'Gün 7-10: Harvest & Traffic Sculpting', days: '7-10',
+      tasks: [
+        { text: 'Sipariş getiren arama terimlerini Exact kampanyaya taşı (harvest)', tip: 'Auto/Broad\'dan Exact\'a taşı → kaynak kampanyada negatif exact yap' },
+        { text: `ACOS > %${Math.round(beAcos)} olan kelimelerde bid'i RPC × hedef ACOS formülüyle düşür`, tip: `Break-even ACOS'un %${beAcos} — bunun üstü zarar` },
+        { text: 'ACOS < %' + Math.round(beAcos * 0.5) + ' olan kazanan kelimelerde bid\'i %10 artır', tip: 'Bu kelimeler kârlı — daha fazla trafik çek' },
+        { text: 'Placement Report kontrol et — Top of Search vs Rest of Search oranı', tip: 'Top of Search genelde daha yüksek CVR verir' },
+      ]
+    },
+    {
+      icon: '📈', title: 'Gün 10-14: Optimizasyon & Ölçekleme Kararı', days: '10-14',
+      tasks: [
+        { text: 'Kârlı Exact kelimelerin bid\'ini kademeli (+%10) artır', tip: 'Birden fazla artış yapma — 2-3 günde bir kontrol et' },
+        { text: 'Top of Search ACOS düşükse placement multiplier +%25 ekle', tip: 'Campaign Settings → Adjust bids by placement' },
+        { text: 'Kazanan kampanyanın günlük bütçesini %20-30 artır', tip: 'Bütçe erken tükeniyorsa zaten artırman lazım' },
+        { text: 'İlk 14 günlük verileri PPC Asistan\'a yükle — tam AI analiz al', tip: 'Search Term + Targeting raporlarını yükle → AI Strateji çalıştır' },
+        { text: 'Genel ACOS hedefinin altında mı kontrol et', tip: `Hedef ACOS: %${e.recommended_target_acos_pct || Math.round(beAcos * 0.7)}` },
+      ]
+    }
+  ];
+
+  let html = '<div class="launch-timeline">';
+  phases.forEach((ph, pi) => {
+    const isFirst = pi === 0;
+    html += `<div class="lt-phase${isFirst ? ' open' : ''}">
+      <div class="lt-phase-head" onclick="this.parentElement.classList.toggle('open')">
+        <span class="ph-icon">${ph.icon}</span>
+        <span class="ph-title">${ph.title}</span>
+        <span class="ph-days">Gün ${ph.days}</span>
+        <span class="ph-arrow">▼</span>
+      </div>
+      <div class="lt-phase-body">
+        <div class="lt-progress"><div class="lt-progress-bar" style="width:0%" id="ltProg${pi}"></div></div>`;
+    ph.tasks.forEach((t, ti) => {
+      const id = `ltTask${pi}_${ti}`;
+      html += `<div class="lt-task">
+        <input type="checkbox" id="${id}" onchange="updateLtProgress(${pi},${ph.tasks.length})">
+        <div><label for="${id}">${t.text}</label>
+        <div class="task-tip">${t.tip}</div></div>
+      </div>`;
+    });
+    html += '</div></div>';
+  });
+  html += '</div>';
+  return html;
+}
+
+function updateLtProgress(phaseIdx, total) {
+  const checks = document.querySelectorAll(`[id^="ltTask${phaseIdx}_"]`);
+  let done = 0;
+  checks.forEach(c => {
+    const lbl = c.nextElementSibling?.querySelector('label');
+    if (c.checked) { done++; if(lbl) lbl.classList.add('done'); }
+    else { if(lbl) lbl.classList.remove('done'); }
+  });
+  const bar = document.getElementById(`ltProg${phaseIdx}`);
+  if (bar) bar.style.width = Math.round(done / total * 100) + '%';
 }
 
 /* --- kopyalama --- */

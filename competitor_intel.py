@@ -134,11 +134,24 @@ def analyze_competitors(competitors: List[Dict[str, Any]], own_product: Dict[str
     }
 
 def reverse_engineer_keywords(own_title: str, competitors: List[Dict[str, Any]], search_suggestions: List[str] = None) -> Dict[str, Any]:
-    """Extract keywords from competitor titles, bullets, descriptions."""
+    """Extract keywords from competitor titles, bullets, descriptions with intent clustering."""
     search_suggestions = search_suggestions or []
     search_suggestions_lower = [s.lower() for s in search_suggestions]
     
     kw_sources = {}  # {kw: set_of_asins}
+    
+    # Rakip marka isimleri toplama
+    competitor_brands = set()
+    for comp in competitors:
+        brand = (comp.get('brand') or '').strip().lower()
+        if brand and len(brand) > 2:
+            competitor_brands.add(brand)
+        # Başlıktaki ilk 1-2 kelime genelde marka
+        title_words = (comp.get('title') or '').split()[:2]
+        for tw in title_words:
+            tw_clean = tw.strip().lower()
+            if len(tw_clean) > 2 and tw_clean not in _STOP:
+                competitor_brands.add(tw_clean)
     
     for comp in competitors:
         asin = comp.get('asin') or 'unknown'
@@ -155,29 +168,87 @@ def reverse_engineer_keywords(own_title: str, competitors: List[Dict[str, Any]],
                     kw_sources[g] = set()
                 kw_sources[g].add(asin)
 
+    # Intent sınıflandırma kuralları
+    _HIGH_INTENT_WORDS = {'buy', 'best', 'cheap', 'price', 'deal', 'discount',
+                          'top', 'rated', 'popular', 'recommended', 'affordable',
+                          'value', 'worth', 'order', 'purchase', 'sale'}
+    _COMPARISON_WORDS = {'vs', 'versus', 'compare', 'comparison', 'review',
+                         'reviews', 'alternative', 'alternatives', 'better', 'than'}
+    _ATTRIBUTE_WORDS = {'inch', 'oz', 'ounce', 'pack', 'set', 'ml', 'liter',
+                        'gallon', 'small', 'large', 'medium', 'xl', 'xxl',
+                        'black', 'white', 'blue', 'red', 'green', 'pink',
+                        'stainless', 'steel', 'plastic', 'glass', 'wood',
+                        'metal', 'silicone', 'leather', 'cotton', 'organic',
+                        'waterproof', 'portable', 'wireless', 'rechargeable',
+                        'electric', 'manual', 'automatic', 'adjustable',
+                        'men', 'women', 'kids', 'baby', 'adult', 'girls', 'boys'}
+
+    def _classify_intent(kw):
+        """Kelimeyi arama niyetine göre sınıflandır."""
+        words = set(kw.split())
+        # 1. Marka/Rakip terimi mi?
+        if words & competitor_brands:
+            return 'brand_competitor'
+        # 2. Yüksek alıcı niyeti mi?
+        if words & _HIGH_INTENT_WORDS:
+            return 'high_intent'
+        # 3. Karşılaştırma amaçlı mı?
+        if words & _COMPARISON_WORDS:
+            return 'comparison'
+        # 4. Ürün özelliği/nitelik mi? (boyut, renk, malzeme)
+        if words & _ATTRIBUTE_WORDS:
+            return 'product_attribute'
+        # 5. Uzun kuyruk (3+ kelime) = genelde daha spesifik niyet
+        if len(words) >= 3:
+            return 'high_intent'
+        return 'generic'
+
+    def _recommend_match(intent, found_count, in_autocomplete):
+        """Intent ve popülerliğe göre match tipi öner."""
+        if intent == 'high_intent':
+            return 'exact'
+        if intent == 'brand_competitor':
+            return 'exact'
+        if intent == 'comparison':
+            return 'phrase'
+        if intent == 'product_attribute':
+            return 'phrase' if found_count >= 2 else 'broad'
+        if in_autocomplete and found_count >= 2:
+            return 'phrase'
+        return 'broad'
+
     high_priority = []
     medium_priority = []
     niche_opportunities = []
     all_kws = []
     
+    # Intent bazlı gruplama
+    intent_groups = {
+        'high_intent': [],
+        'brand_competitor': [],
+        'product_attribute': [],
+        'comparison': [],
+        'generic': [],
+    }
+    
     for kw, asins in kw_sources.items():
         found_count = len(asins)
         in_autocomplete = kw in search_suggestions_lower
-        
-        # Intent belirleme
-        intent = "research"
-        if any(buy_word in kw.split() for buy_word in ['buy', 'cheap', 'price', 'best']):
-            intent = "purchase"
-        elif any(comp_word in kw.split() for comp_word in ['vs', 'compare', 'review']):
-            intent = "comparison"
+        intent = _classify_intent(kw)
+        match_rec = _recommend_match(intent, found_count, in_autocomplete)
             
         entry = {
             'keyword': kw,
             'found_in': found_count,
             'sources': list(asins),
             'intent': intent,
+            'recommended_match': match_rec,
+            'in_autocomplete': in_autocomplete,
             'reason': ''
         }
+        
+        # Intent grubuna ekle
+        intent_groups[intent].append(entry)
         
         if found_count >= 3 and in_autocomplete:
             entry['reason'] = "Autocomplete'de var ve çok rakipte bulundu"
@@ -192,16 +263,34 @@ def reverse_engineer_keywords(own_title: str, competitors: List[Dict[str, Any]],
             niche_opportunities.append(entry)
             all_kws.append(kw)
             
-    # Siralama (bulunma sayisina ve kelime uzunluguna gore)
+    # Sıralama
     high_priority.sort(key=lambda x: (x['found_in'], len(x['keyword'].split())), reverse=True)
     medium_priority.sort(key=lambda x: (x['found_in'], len(x['keyword'].split())), reverse=True)
     niche_opportunities.sort(key=lambda x: len(x['keyword'].split()), reverse=True)
+    
+    # Intent gruplarını da sırala
+    for group in intent_groups.values():
+        group.sort(key=lambda x: (x['found_in'], 1 if x['in_autocomplete'] else 0), reverse=True)
     
     return {
         'high_priority': high_priority,
         'medium_priority': medium_priority,
         'niche_opportunities': niche_opportunities,
-        'all_keywords_ranked': sorted(all_kws, key=lambda k: len(kw_sources.get(k, set())), reverse=True)
+        'all_keywords_ranked': sorted(all_kws, key=lambda k: len(kw_sources.get(k, set())), reverse=True),
+        'intent_groups': {
+            'high_intent': intent_groups['high_intent'][:15],
+            'brand_competitor': intent_groups['brand_competitor'][:10],
+            'product_attribute': intent_groups['product_attribute'][:15],
+            'comparison': intent_groups['comparison'][:10],
+            'generic': intent_groups['generic'][:20],
+        },
+        'intent_summary': {
+            'high_intent_count': len(intent_groups['high_intent']),
+            'brand_competitor_count': len(intent_groups['brand_competitor']),
+            'product_attribute_count': len(intent_groups['product_attribute']),
+            'comparison_count': len(intent_groups['comparison']),
+            'generic_count': len(intent_groups['generic']),
+        }
     }
 
 def assess_market_opportunity(own_product: Dict[str, Any], competitors: List[Dict[str, Any]], bsr_data: Dict[str, Any] = None) -> Dict[str, Any]:

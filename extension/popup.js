@@ -1,4 +1,4 @@
-const API = "http://localhost:8642";
+let API = "http://localhost:8642";
 
 const $ = (id) => document.getElementById(id);
 const setStatus = (t) => { $("status-text").textContent = t; };
@@ -105,6 +105,26 @@ function renderStarRating(rating) {
   return `<span class="star-rating">${stars}</span> <span style="color:var(--fg)">${rating}</span>`;
 }
 
+function scoreCompetitor(comp, ownPrice) {
+  let score = 50;
+  let reasons = [];
+  const price = comp.price || 0;
+  const rating = comp.rating || 0;
+  const reviews = comp.review_count || 0;
+  
+  if (ownPrice > 0 && price > 0) {
+    if (price > ownPrice * 1.2) { score += 20; reasons.push('Pahalı'); }
+    else if (price < ownPrice * 0.8) { score -= 15; reasons.push('Ucuz'); }
+  }
+  if (rating > 0 && rating < 4.0) { score += 25; reasons.push('Düşük puan'); }
+  else if (rating >= 4.5) { score -= 10; }
+  if (reviews < 50) { score += 15; reasons.push('Az yorum'); }
+  else if (reviews > 500) { score -= 20; reasons.push('Güçlü'); }
+  
+  score = Math.max(0, Math.min(100, score));
+  return { score, reasons, isWeak: score >= 65, isStrong: score <= 35 };
+}
+
 function renderCompetitors() {
   const container = $("competitors-list");
   if (!selectedCompetitors.length) {
@@ -113,14 +133,32 @@ function renderCompetitors() {
     return;
   }
   
+  const ownPrice = parseFloat($("f-price").value) || 0;
+  selectedCompetitors.forEach(c => {
+    c.intel = scoreCompetitor(c, ownPrice);
+  });
+  selectedCompetitors.sort((a, b) => b.intel.score - a.intel.score);
+  
   let html = '';
   let checkedCount = 0;
+  let weakCount = 0;
+  let strongCount = 0;
+  
+  selectedCompetitors.forEach(c => {
+    if (c.intel.isWeak) weakCount++;
+    if (c.intel.isStrong) strongCount++;
+  });
+  
+  html += `<div class="comp-summary">🎯 ${weakCount} kolay hedef, ⚠️ ${strongCount} güçlü rakip bulundu</div>`;
   
   selectedCompetitors.forEach((c, i) => {
-    const isStrong = (c.review_count > 1000) || c.badges?.best_seller;
-    const cls = isStrong ? 'strong' : 'weak';
+    const cls = c.intel.isStrong ? 'strong' : (c.intel.isWeak ? 'weak' : '');
     const checked = c.selected !== false;
     if (checked) checkedCount++;
+    
+    let badges = '';
+    if (c.intel.isWeak) badges += '<span class="comp-badge weak">🎯 Kolay Hedef</span>';
+    if (c.intel.isStrong) badges += '<span class="comp-badge strong">⚠️ Güçlü Rakip</span>';
     
     html += `
       <div class="comp-card ${cls}">
@@ -132,6 +170,7 @@ function renderCompetitors() {
             <span>$${c.price || '?'}</span>
             ${renderStarRating(c.rating || 0)}
             <span>(${c.review_count || 0} rev)</span>
+            ${badges}
           </div>
         </div>
       </div>
@@ -173,7 +212,13 @@ async function discoverKeywords() {
     
     // Add words from competitor titles as fallback if empty
     if (!kws.length && selectedCompetitors.length) {
-      kws = ["amazon", "product", "best", "sale"]; // dummy fallback
+      const compTokens = new Set();
+      selectedCompetitors.forEach(c => {
+        (c.title || '').toLowerCase().replace(/[^a-z0-9\s]/g, ' ').split(/\s+/).forEach(w => {
+          if (w.length > 2) compTokens.add(w);
+        });
+      });
+      kws = Array.from(compTokens).slice(0, 20);
     }
     
     if (kws.length) {
@@ -365,4 +410,33 @@ $("btn-step-2-next").addEventListener("click", () => goToStep(3));
 $("btn-analyze").addEventListener("click", analyze);
 $("btn-dl").addEventListener("click", downloadBulksheet);
 
-document.addEventListener("DOMContentLoaded", rescan);
+if ($("api-settings-toggle")) {
+  $("api-settings-toggle").addEventListener("click", () => {
+    const p = $("api-settings-panel");
+    p.style.display = p.style.display === "none" ? "block" : "none";
+  });
+}
+if ($("btn-save-api")) {
+  $("btn-save-api").addEventListener("click", () => {
+    const val = $("f-api-url").value.trim();
+    if (val) {
+      API = val;
+      if (typeof chrome !== 'undefined' && chrome.storage) {
+        chrome.storage.local.set({ppc_api_url: val});
+      }
+      $("api-settings-panel").style.display = "none";
+    }
+  });
+}
+
+document.addEventListener("DOMContentLoaded", () => {
+  if (typeof chrome !== 'undefined' && chrome.storage) {
+    chrome.storage.local.get('ppc_api_url', (stored) => {
+      if (stored.ppc_api_url) {
+        API = stored.ppc_api_url;
+        if ($("f-api-url")) $("f-api-url").value = API;
+      }
+    });
+  }
+  rescan();
+});
