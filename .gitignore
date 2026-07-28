@@ -5,3 +5,5 @@ __pycache__/
 ppc.db
 .DS_Store
 .claude/
+ppc.db-shm
+ppc.db-wal

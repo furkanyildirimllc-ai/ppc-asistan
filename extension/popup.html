@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="utf-8" />
+  <style>
+    :root { --bg:#0f172a; --card:#1e293b; --line:#334155; --fg:#e2e8f0;
+            --muted:#94a3b8; --acc:#38bdf8; --ok:#22c55e; --warn:#f59e0b; }
+    * { box-sizing: border-box; }
+    body { width: 380px; margin: 0; font: 13px/1.45 system-ui, sans-serif;
+           background: var(--bg); color: var(--fg); }
+    header { padding: 12px 14px; border-bottom: 1px solid var(--line);
+             display: flex; align-items: center; gap: 8px; }
+    header b { font-size: 14px; }
+    header small { color: var(--muted); margin-left: auto; }
+    .body { padding: 12px 14px; }
+    .card { background: var(--card); border: 1px solid var(--line);
+            border-radius: 10px; padding: 10px 12px; margin-bottom: 10px; }
+    label { display:block; color: var(--muted); font-size: 11px; margin: 6px 0 2px; }
+    input { width: 100%; padding: 6px 8px; border-radius: 6px; border: 1px solid var(--line);
+            background: #0b1220; color: var(--fg); font-size: 13px; }
+    .row { display: flex; gap: 8px; }
+    .row > div { flex: 1; }
+    button { width: 100%; padding: 9px; border: 0; border-radius: 8px; cursor: pointer;
+             font-weight: 600; font-size: 13px; margin-top: 8px; }
+    .primary { background: var(--acc); color: #04212e; }
+    .ghost { background: transparent; color: var(--acc); border: 1px solid var(--acc); }
+    .success { background: var(--ok); color: #052e16; }
+    button:disabled { opacity: .5; cursor: default; }
+    .muted { color: var(--muted); }
+    .kw { display: inline-block; background: #0b1220; border: 1px solid var(--line);
+          border-radius: 999px; padding: 2px 8px; margin: 2px 3px 0 0; font-size: 11px; }
+    .tag { font-size: 10px; color: var(--acc); text-transform: uppercase; letter-spacing: .04em; }
+    .camp { border-left: 3px solid var(--acc); padding-left: 8px; margin: 8px 0; }
+    .camp b { font-size: 12px; }
+    .note { background: #1c1408; border: 1px solid #422006; color: #fcd34d;
+            border-radius: 8px; padding: 8px; font-size: 11px; margin-top: 8px; }
+    .spin { color: var(--acc); }
+    a { color: var(--acc); }
+  </style>
+</head>
+<body>
+  <header>
+    <b>🚀 PPC Launch</b>
+    <small id="status">hazir</small>
+  </header>
+  <div class="body">
+    <div class="card" id="detect">
+      <div class="tag">Algilanan urun</div>
+      <label>Baslik</label><input id="f-title" placeholder="Amazon sayfasini ac veya elle gir" />
+      <div class="row">
+        <div><label>ASIN</label><input id="f-asin" placeholder="B0..." /></div>
+        <div><label>Fiyat ($)</label><input id="f-price" type="number" step="0.01" /></div>
+      </div>
+      <div class="row">
+        <div><label>SKU (seller)</label><input id="f-sku" placeholder="opsiyonel" /></div>
+        <div><label>Marka</label><input id="f-brand" placeholder="opsiyonel" /></div>
+      </div>
+      <div class="row">
+        <div><label>Maliyet/COGS ($)</label><input id="f-cogs" type="number" step="0.01" placeholder="kar hesabi icin" /></div>
+        <div><label>FBA ucreti ($)</label><input id="f-fba" type="number" step="0.01" placeholder="opsiyonel" /></div>
+      </div>
+      <div class="muted" id="comp-count" style="margin-top:6px"></div>
+      <button class="ghost" id="btn-rescan">↻ Sayfayi yeniden oku</button>
+      <button class="primary" id="btn-analyze">🔍 Rakip + Keyword arastir, plan kur</button>
+    </div>
+
+    <div id="plan"></div>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>

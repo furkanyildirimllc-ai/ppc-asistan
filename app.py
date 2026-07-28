@@ -11,6 +11,7 @@ import openpyxl
 from openpyxl.styles import Font, PatternFill
 from fastapi import FastAPI, UploadFile, HTTPException
 from fastapi.responses import FileResponse, StreamingResponse
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
 import parsers
@@ -19,10 +20,20 @@ import ai_agent
 import supervisor
 import insights
 import bulksheet
+import launch as launch_mod
 import chat as chat_mod
 
 DB_PATH = Path(__file__).parent / "ppc.db"
 app = FastAPI(title="PPC Asistan")
+
+# Chrome uzantisi (content script + popup) backend'e erisebilsin diye.
+# Uzanti origin'i chrome-extension://... olur; gelistirmede tumune izin veriyoruz.
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 
 def db():
@@ -897,3 +908,61 @@ def delete_product(pid: int):
     with db() as c:
         c.execute("DELETE FROM products WHERE id=?", (pid,))
     return {"ok": True}
+
+
+# ======================= LAUNCH (sifir urun PPC) =======================
+# Chrome uzantisi buraya baglanir: urunu tani -> keyword bul -> kampanya
+# plani -> bulk sheet. Mevcut "marka/rapor" akisindan bagimsizdir.
+
+class CompetitorIn(BaseModel):
+    asin: str | None = None
+    title: str | None = None
+    price: float | None = None
+
+
+class LaunchProductIn(BaseModel):
+    title: str
+    asin: str | None = None
+    sku: str | None = None
+    price: float | None = None
+    brand: str | None = None
+    cogs: float | None = None
+    fba_fee: float | None = None
+    fee_pct: float | None = 0.15
+    competitors: list[CompetitorIn] = []
+    use_ai: bool = True
+
+
+@app.post("/api/launch/analyze")
+def launch_analyze(body: LaunchProductIn):
+    """Urun + rakiplerden keyword + kampanya plani uretir (bulk sheet DEGIL)."""
+    product = {
+        "title": body.title, "asin": (body.asin or "").strip().upper(),
+        "sku": body.sku, "price": body.price, "brand": body.brand,
+        "cogs": body.cogs, "fba_fee": body.fba_fee, "fee_pct": body.fee_pct,
+    }
+    competitors = [c.model_dump() for c in body.competitors]
+    try:
+        plan = launch_mod.build_plan(product, competitors, use_ai=body.use_ai)
+    except Exception as e:
+        raise HTTPException(500, f"Plan uretilemedi: {e}")
+    return plan
+
+
+@app.post("/api/launch/bulksheet")
+def launch_bulksheet(plan: dict):
+    """Analyze'den donen plani (veya elle duzenlenmis halini) bulk sheet yapar."""
+    if not plan.get("campaigns"):
+        raise HTTPException(400, "Plan bos - once /api/launch/analyze cagir.")
+    try:
+        buf = launch_mod.build_bulksheet(plan)
+    except Exception as e:
+        raise HTTPException(500, f"Bulk sheet uretilemedi: {e}")
+    title = (plan.get("product", {}).get("brand")
+             or plan.get("product", {}).get("title", "launch"))
+    safe = "".join(ch for ch in title[:24] if ch.isalnum() or ch in " -_").strip() or "launch"
+    fname = f"{safe}_launch_bulksheet_{datetime.now():%Y%m%d}.xlsx"
+    return StreamingResponse(
+        buf, media_type="application/vnd.openxmlformats-officedocument"
+        ".spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="{fname}"'})

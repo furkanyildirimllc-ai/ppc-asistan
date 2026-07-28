@@ -1,0 +1,26 @@
+{
+  "manifest_version": 3,
+  "name": "PPC Launch Asistan",
+  "version": "0.1.0",
+  "description": "Yeni Amazon urununu tanir, rakip + keyword arastirir, launch PPC kampanya bulk sheet'i uretir.",
+  "permissions": ["activeTab", "scripting", "storage"],
+  "host_permissions": [
+    "https://www.amazon.com/*",
+    "https://sellercentral.amazon.com/*",
+    "http://localhost:8642/*"
+  ],
+  "action": {
+    "default_title": "PPC Launch Asistan",
+    "default_popup": "popup.html"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://www.amazon.com/*",
+        "https://sellercentral.amazon.com/*"
+      ],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ]
+}

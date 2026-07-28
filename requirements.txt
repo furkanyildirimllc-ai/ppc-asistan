@@ -5,3 +5,4 @@ anthropic>=0.40
 python-dotenv>=1.0
 python-multipart>=0.0.9
 json-repair>=0.30
+requests

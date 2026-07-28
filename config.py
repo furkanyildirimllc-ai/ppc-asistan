@@ -9,6 +9,8 @@ ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
 KEEPA_API_KEY = os.getenv("KEEPA_API_KEY", "")
 STRATEGY_MODEL = os.getenv("STRATEGY_MODEL", "claude-sonnet-4-6")
 SUPERVISOR_MODEL = os.getenv("SUPERVISOR_MODEL", "claude-fable-5")
+# Launch (sifir urun) keyword + strateji uretimi icin. En guclu model.
+LAUNCH_MODEL = os.getenv("LAUNCH_MODEL", "claude-opus-5")
 
 # AI cagrilarinda kullanilacak limitler
 MAX_STRATEGY_TOKENS = 8000
