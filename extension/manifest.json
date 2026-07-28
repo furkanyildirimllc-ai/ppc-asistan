@@ -3,7 +3,7 @@
   "name": "PPC Launch Pro",
   "version": "2.0.0",
   "description": "Profesyonel Amazon PPC Launch Asistanı - Rakip analizi, keyword keşfi, kampanya planı",
-  "permissions": ["activeTab", "scripting", "storage"],
+  "permissions": ["activeTab", "scripting", "storage", "downloads"],
   "host_permissions": [
     "https://www.amazon.com/*",
     "https://www.amazon.co.uk/*",

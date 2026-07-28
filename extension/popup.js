@@ -170,7 +170,7 @@ function renderCompetitors() {
     if (c.intel.isWeak) badges += '<span class="comp-badge weak">🎯 Kolay Hedef</span>';
     if (c.intel.isStrong) badges += '<span class="comp-badge strong">⚠️ Güçlü Rakip</span>';
     
-    const imgHtml = c.image ? `<img src="${c.image}" style="width:36px;height:36px;border-radius:6px;object-fit:cover;flex-shrink:0;background:#1e293b;">` : `<div style="width:36px;height:36px;border-radius:6px;background:#1e293b;display:flex;align-items:center;justify-content:center;font-size:14px;flex-shrink:0;">📦</div>`;
+    const imgHtml = c.image ? `<img src="${c.image}" style="width:56px;height:56px;border-radius:6px;object-fit:cover;flex-shrink:0;background:#1e293b;">` : `<div style="width:56px;height:56px;border-radius:6px;background:#1e293b;display:flex;align-items:center;justify-content:center;font-size:24px;flex-shrink:0;">📦</div>`;
     
     html += `
       <div class="comp-card ${cls}">
@@ -234,9 +234,9 @@ async function discoverKeywords() {
       kws = Array.from(compTokens).slice(0, 20);
     }
     
-    // STRICT RELEVANCE FILTER: Only keep keywords that share at least 1 meaningful token with the product title
+    // STRICT RELEVANCE FILTER
     const ownTokens = new Set(title.toLowerCase().replace(/[^a-z0-9\s]/g, ' ').split(/\s+/).filter(w => w.length > 2));
-    const stopWords = new Set(['the','and','for','with','set','pack','size','new','best','top','sale','prime']);
+    const stopWords = new Set(['the','and','for','with','set','pack','size','new','best','top','sale','prime','men','women','kids','pack','pcs','oz','ml','gram','kg','large','small','medium','black','white','blue','red']);
     const cleanOwnTokens = new Set([...ownTokens].filter(w => !stopWords.has(w)));
     
     if (cleanOwnTokens.size > 0 && kws.length > 0) {
@@ -412,14 +412,18 @@ async function downloadBulksheet() {
     });
     if (!r.ok) throw new Error(r.status);
     const blob = await r.blob();
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    const brand = (lastPlan.product.brand || lastPlan.product.title || "launch").replace(/[^a-z0-9]+/gi, "-").slice(0, 24);
-    a.download = `${brand}-launch-bulksheet.xlsx`;
-    a.click();
-    URL.revokeObjectURL(url);
-    btn.textContent = "✅ İndirildi";
+    const reader = new FileReader();
+    reader.onload = function() {
+      const dataUrl = reader.result;
+      const brand = (lastPlan.product.brand || lastPlan.product.title || "launch").replace(/[^a-z0-9]+/gi, "-").slice(0, 24);
+      chrome.downloads.download({
+        url: dataUrl,
+        filename: `${brand}-launch-bulksheet.xlsx`,
+        saveAs: true
+      });
+      btn.textContent = "✅ İndirildi";
+    };
+    reader.readAsDataURL(blob);
   } catch (e) {
     btn.textContent = "İndirme Hatası!";
     console.error(e);
