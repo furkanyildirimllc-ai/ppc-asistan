@@ -133,10 +133,19 @@ function scrapeCompetitorsDeep() {
       title = txt("h2 a span", card) || 
               txt("h2", card) || 
               txt("[class*='truncate']", card) || 
+              txt(".p13n-sc-truncate", card) ||
+              txt("[class*='line-clamp']", card) ||
               txt("[class*='title']", card) || 
               txt("span.a-size-medium", card) || 
               txt("span.a-size-base-plus", card) || 
+              txt("span.a-size-base", card) || 
               (a ? txt("span", a) : "");
+    }
+    
+    // Additional fallback for images
+    if (!title && card) {
+       const img = card.querySelector("img");
+       if (img) title = img.getAttribute("alt") || img.getAttribute("title") || "";
     }
     
     title = (title || "").trim().replace(/\s+/g, " ");
