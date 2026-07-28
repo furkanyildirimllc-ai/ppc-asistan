@@ -781,8 +781,28 @@ async function loadBrands(keep){
   await selectBrand(brandId);
 }
 
+// Marka degistiginde artan sayac. Yavas kalan bir istek geri donerse
+// (kullanici bu arada baska markaya gectiyse) ekrani EZMESIN diye kullanilir.
+let brandGen=0;
+// gen verilmezse (upload sonrasi yenileme gibi) kontrol atlanir.
+function brandStale(gen){return gen!==undefined&&gen!==brandGen;}
+
+// Onceki markaya ait ekranda kalabilecek her seyi temizle.
+function clearBrandView(){
+  ['kpiRibbon','metricGroups','alarmStrip','campAdvisor','hero','uploadInfo',
+   'aiBody','revBadge','aiMeta','recTable','tabs','tabGuide']
+    .forEach(k=>{const el=$(k);if(el)el.innerHTML='';});
+  ['trend','match','camp'].forEach(k=>destroyChart(k));
+  recs=[];
+  const cc=$('campCard');if(cc)cc.style.display='none';
+  const ap=$('aiPanel');if(ap)ap.style.display='none';
+  const cm=$('chatMsgs');if(cm)cm.innerHTML='';
+}
+
 async function selectBrand(id){
   brandId=id?Number(id):null;
+  const gen=++brandGen;
+  clearBrandView();
   $('main').style.display=brandId?'block':'none';
   $('empty').style.display=brandId?'none':'block';
   $('editBtn').style.display=brandId?'inline-block':'none';
@@ -797,18 +817,29 @@ async function selectBrand(id){
   const b=brands.find(x=>x.id==brandId)||{};
   $('bbName').textContent=b.name||'—';
   $('bbNameInline').textContent=b.name||'—';
-  await Promise.all([loadSummary(),loadRecs(),loadAILatest(),loadInsights()]);
+  // Chat acikken marka degisirse sohbet de yeni markaya gecsin.
+  if(typeof chatOpen!=='undefined'&&chatOpen){
+    $('chatBrand').textContent=b.name?`— ${b.name}`:'';
+    loadChatHistory(gen);
+  }
+  await Promise.all([loadSummary(gen),loadRecs(gen),loadAILatest(gen),loadInsights(gen)]);
 }
 
 let charts={};
-async function loadInsights(){
+async function loadInsights(gen){
   const errBox=(name,e)=>`<div class="hero-card hc-red" style="grid-column:1/-1"><h5>⚠ ${name} render hatasi</h5><pre style="font-size:11px;color:var(--muted);white-space:pre-wrap;margin-top:6px">${esc(String(e&&e.stack||e))}</pre></div>`;
+  const bid=brandId;
   try{
-    const r=await fetch(`/api/brands/${brandId}/insights`);
+    const r=await fetch(`/api/brands/${bid}/insights`);
+    if(brandStale(gen))return;
     if(!r.ok){$('hero').innerHTML=errBox('insights fetch',await r.text());return;}
     const d=await r.json();
+    if(brandStale(gen))return;
     if(d.empty){
       $('kpiRibbon').innerHTML='';$('metricGroups').innerHTML='';
+      // Eski markanin verisi ekranda kalmasin: alarm serit + kampanya danismani da temizlenir.
+      $('alarmStrip').innerHTML='';
+      renderCampAdvisor([]);
       // Eski chartlari temizle (stale chart sorunu)
       ['trend','match','camp'].forEach(k=>destroyChart(k));
       $('hero').innerHTML='<div class="hero-card hc-blue" style="grid-column:1/-1"><h5>Bilgi</h5><div class="sub">Rapor yükle, dashboard oluşsun.</div></div>';return;
@@ -1246,12 +1277,14 @@ function toggleChat(){
     loadChatHistory();
   }
 }
-async function loadChatHistory(){
-  if(!brandId)return;
+async function loadChatHistory(gen){
+  if(!brandId){const cb=$('chatMsgs');if(cb)cb.innerHTML='';return;}
+  const bid=brandId;
   const [msgs,ds]=await Promise.all([
-    fetch(`/api/brands/${brandId}/chat`).then(r=>r.json()),
-    fetch(`/api/brands/${brandId}/data-summary`).then(r=>r.ok?r.json():null),
+    fetch(`/api/brands/${bid}/chat`).then(r=>r.json()),
+    fetch(`/api/brands/${bid}/data-summary`).then(r=>r.ok?r.json():null),
   ]);
+  if(brandStale(gen)||bid!==brandId)return;
   const box=$('chatMsgs');
   let head='';
   if(ds){
@@ -1508,8 +1541,10 @@ async function openApplyDlg(){
 }
 
 
-async function loadSummary(){
-  const s=await(await api(`/api/brands/${brandId}/summary`)).json();
+async function loadSummary(gen){
+  const bid=brandId;
+  const s=await(await api(`/api/brands/${bid}/summary`)).json();
+  if(brandStale(gen))return;
   const b=brands.find(x=>x.id==brandId)||{};
   const ct=$('campTable');
   if(s.top_campaigns&&s.top_campaigns.length){
@@ -1524,8 +1559,11 @@ async function loadSummary(){
   } else $('campCard').style.display='none';
 }
 
-async function loadRecs(){
-  recs=await(await api(`/api/brands/${brandId}/recommendations`)).json();
+async function loadRecs(gen){
+  const bid=brandId;
+  const data=await(await api(`/api/brands/${bid}/recommendations`)).json();
+  if(brandStale(gen))return;
+  recs=data;
   renderTabs();renderTable();
 }
 
@@ -1747,18 +1785,26 @@ async function runAI(){
   }
 }
 
-async function loadAILatest(){
+async function loadAILatest(gen){
+  const bid=brandId;
   try{
-    const r=await fetch(`/api/brands/${brandId}/ai-strategy/latest`);
+    const r=await fetch(`/api/brands/${bid}/ai-strategy/latest`);
     const d=await r.json();
+    if(brandStale(gen))return;
     if(d.exists){
       $('aiPanel').style.display='block';
       renderAI(d);
       $('aiMeta').textContent='son üretim: '+d.created_at;
     }else{
+      // Bu markanin stratejisi yok -> onceki markanin paneli gorunmesin.
       $('aiPanel').style.display='none';
+      $('aiBody').innerHTML='';$('revBadge').innerHTML='';$('aiMeta').textContent='';
     }
-  }catch(e){}
+  }catch(e){
+    if(brandStale(gen))return;
+    $('aiPanel').style.display='none';
+    $('aiBody').innerHTML='';$('revBadge').innerHTML='';$('aiMeta').textContent='';
+  }
 }
 
 function esc(s){return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
