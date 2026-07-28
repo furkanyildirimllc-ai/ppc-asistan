@@ -89,17 +89,19 @@ def heuristic_keywords(title, competitors, max_kw=40, search_suggestions=None):
             for t in _tokens(s):
                 sug_set.add(t)
     
-    relevant_pool = own | sug_set  # kabul edilebilir kelime havuzu
-    
+    # ST STRICT CATEGORY RELEVANCE CHECK
+    # Root product tokens (excluding generic size/brand/stop words)
+    generic_words = {'the','and','for','with','set','pack','size','new','best','top','sale','prime','men','women','kids','pack','pcs','oz','ml','gram','kg','large','small','medium','black','white','blue','red'}
+    root_tokens = set(t for t in own if t not in generic_words and len(t) > 2)
+
     def _is_relevant(kw_str):
-        """Keyword'un en az 1 kelimesi urunle alakali mi?"""
+        """Keyword'un en az 1 kelimesi urun ana kategorisiyle birebir eslesmeli."""
+        if not root_tokens:
+            return True
         kw_words = set(kw_str.split())
-        # tek kelimeler: dogrudan urun basliginda olmali
-        if len(kw_words) == 1:
-            return kw_str in relevant_pool
-        # cok kelimeli: en az 1 ortak kelime
-        return bool(kw_words & relevant_pool)
-    
+        # En az bir kok kelime urun basliginda olmali
+        return bool(kw_words & root_tokens)
+
     ranked = sorted(freq.items(),
                     key=lambda kv: (kv[1] + (0.5 if set(kv[0].split()) & own else 0)),
                     reverse=True)
@@ -107,7 +109,6 @@ def heuristic_keywords(title, competitors, max_kw=40, search_suggestions=None):
     for kw, score in ranked:
         if kw in seen:
             continue
-        # Alakasiz keyword'leri atla
         if not _is_relevant(kw):
             continue
         seen.add(kw)
