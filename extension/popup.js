@@ -543,10 +543,23 @@ function collectData() {
 // Strateji secici
 $("strategy-picker").addEventListener("click", (ev) => {
   const b = ev.target.closest(".strat-btn");
-  if (!b) return;
+  if (!b || b.dataset.strategy === bidStrategy) return;
   bidStrategy = b.dataset.strategy;
   document.querySelectorAll(".strat-btn").forEach(x => x.classList.remove("active"));
   b.classList.add("active");
+
+  // KRITIK: indirme, kayitli plandaki bid'leri oldugu gibi kullanir. Strateji
+  // degistirip yeniden analiz etmezsen ESKI bid'lerle dosya inerdi - sessizce
+  // yanlis dosya. Bu yuzden plan gecersiz kilinir.
+  if (lastPlan) {
+    lastPlan = null;
+    const pc = $("plan-content");
+    if (pc) pc.innerHTML = `<div class="feas tight"><b>⚠️ Strateji değişti.</b>
+      Bid'ler yeniden hesaplanmalı — "AI Analizi Başlat" ile planı yenile,
+      yoksa indirilen dosya eski bid'leri taşır.</div>`;
+    $("plan-view").style.display = "block";
+    setStatus("Strateji değişti, yeniden analiz gerekli");
+  }
   saveState();
 });
 
@@ -752,7 +765,11 @@ async function downloadBulksheet() {
     const p = lastPlan.product || {};
     const brand = (p.brand || p.title || "launch")
       .replace(/[^a-z0-9]+/gi, "-").slice(0, 24) || "launch";
-    const filename = `${brand}-launch-bulksheet.xlsx`;
+    // Strateji dosya adina yazilir: hangi bid seviyesiyle uretildigi sonradan
+    // tahmin edilmesin, dosyanin uzerinde yazsin.
+    const stratTag = { profit: "karli", balanced: "dengeli",
+                       aggressive: "pazarpayi" }[lastPlan.bid_strategy] || "";
+    const filename = `${brand}-launch${stratTag ? "-" + stratTag : ""}-bulksheet.xlsx`;
     // Chrome, chrome.downloads'a data: URL kabul etmez; blob: URL sart.
     const url = URL.createObjectURL(blob);
 
