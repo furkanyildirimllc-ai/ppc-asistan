@@ -326,6 +326,7 @@
   <header>
     <b>🚀 PPC Launch Pro</b>
     <small id="status-text">Hazır</small>
+    <div style="cursor:pointer;" id="btn-reset" title="Her şeyi sıfırla ve baştan başla">🔄</div>
     <div style="cursor:pointer;" id="api-settings-toggle">⚙️</div>
   </header>
   <div id="api-settings-panel" style="display:none; padding: 10px 16px; background: #0b1220; border-bottom: 1px solid var(--line);">
@@ -446,6 +447,8 @@
         <div class="spinner"></div>
         <b style="font-size:16px;">AI Planı Oluşturuluyor...</b>
         <div class="muted" style="margin-top:8px">Rakipler analiz ediliyor, CPC tahminleri yapılıyor ve optimal bütçe dağıtımı hesaplanıyor.</div>
+        <div id="loading-timer" class="muted" style="margin-top:10px; font-size:11px;">Geçen süre: 0 sn</div>
+        <button class="ghost" id="btn-cancel-analyze" style="width:auto; padding:6px 14px; margin-top:12px;">İptal</button>
       </div>
       
       <div id="plan-view" style="display: none;">

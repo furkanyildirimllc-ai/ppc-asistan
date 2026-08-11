@@ -427,6 +427,66 @@ async function discoverKeywords() {
   container.style.display = 'block';
 }
 
+// Zaman asimi olmayan fetch, sunucu dusunce sonsuza kadar bekler ve arayuz
+// "uretiliyor" ekraninda kilitlenir. Her istek bir sureye baglanir.
+let activeAbort = null;   // kullanici iptal edebilsin diye disari acilir
+
+async function fetchWithTimeout(url, opts, ms, onTick) {
+  const ctrl = new AbortController();
+  activeAbort = ctrl;
+  const started = Date.now();
+  const tick = onTick && setInterval(
+    () => onTick(Math.round((Date.now() - started) / 1000)), 1000);
+  const timer = setTimeout(() => ctrl.abort(), ms);
+  try {
+    return await fetch(url, { ...opts, signal: ctrl.signal });
+  } catch (e) {
+    if (e.name === "AbortError") {
+      throw new Error(`Sunucu ${Math.round(ms / 1000)} saniyede yanıt vermedi. ` +
+                      `Sunucunun çalıştığını kontrol et (${API}).`);
+    }
+    throw new Error(`Sunucuya ulaşılamadı (${API}). Çalışıyor mu?`);
+  } finally {
+    clearTimeout(timer);
+    if (tick) clearInterval(tick);
+    activeAbort = null;
+  }
+}
+
+// Sifirlama: takilan bir istek, bozuk kayitli durum ya da yanlis urun
+// verisiyle ugrasmak yerine temiz baslamak icin tek dugme.
+async function resetAll() {
+  if (activeAbort) { try { activeAbort.abort(); } catch (_) {} }
+  try { await chrome.storage.local.remove("ppc_state"); } catch (_) {}
+  scrapedData = null;
+  selectedCompetitors = [];
+  searchSuggestions = [];
+  lastPlan = null;
+  bidStrategy = "profit";
+  document.querySelectorAll(".strat-btn").forEach(x =>
+    x.classList.toggle("active", x.dataset.strategy === "profit"));
+  FORM_FIELDS.forEach(id => { const el = $(id); if (el) el.value = ""; });
+  const pc = $("plan-content"); if (pc) pc.innerHTML = "";
+  $("plan-view").style.display = "none";
+  $("loading-view").style.display = "none";
+  const ds = $("discover-status"); if (ds) { ds.style.display = "none"; ds.textContent = ""; }
+  const cl = $("competitors-list"); if (cl) cl.innerHTML = "";
+  goToStep(1);
+  setStatus("Sıfırlandı, yeniden taranıyor...");
+  await rescan();
+}
+
+if ($("btn-reset")) {
+  $("btn-reset").addEventListener("click", resetAll);
+}
+
+if ($("btn-cancel-analyze")) {
+  $("btn-cancel-analyze").addEventListener("click", () => {
+    if (activeAbort) activeAbort.abort();
+    goToStep(3);
+  });
+}
+
 // FastAPI 422'de detail bir nesne listesidir; duz string'e cevrilmezse
 // mesaj "[object Object]" olarak gorunur.
 async function errText(r) {
@@ -520,10 +580,14 @@ async function analyze() {
   $("plan-view").style.display = "none";
   
   try {
-    const r = await fetch(`${API}/api/launch/analyze`, {
+    const r = await fetchWithTimeout(`${API}/api/launch/analyze`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
+    }, 240000, (sec) => {
+      const el = $("loading-timer");
+      if (el) el.textContent = `Geçen süre: ${sec} sn` +
+        (sec > 90 ? " — AI analizi normalde 40-90 sn sürer." : "");
     });
     if (!r.ok) throw new Error(await errText(r));
     lastPlan = await r.json();
@@ -651,11 +715,11 @@ async function downloadBulksheet() {
   btn.disabled = true;
   
   try {
-    const r = await fetch(`${API}/api/launch/bulksheet`, {
+    const r = await fetchWithTimeout(`${API}/api/launch/bulksheet`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(lastPlan),
-    });
+    }, 120000);
     if (!r.ok) throw new Error(await errText(r));
     const blob = await r.blob();
     if (!blob || blob.size === 0) throw new Error("Bos dosya");
