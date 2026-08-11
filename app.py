@@ -13,7 +13,7 @@ from openpyxl.styles import Font, PatternFill
 from fastapi import FastAPI, UploadFile, HTTPException
 from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 
 import parsers
 import analysis
@@ -23,6 +23,8 @@ import insights
 import bulksheet
 import launch as launch_mod
 import chat as chat_mod
+import market_intel
+import brain
 
 DB_PATH = Path(__file__).parent / "ppc.db"
 app = FastAPI(title="PPC Asistan")
@@ -113,6 +115,9 @@ def init_db():
             ("fba_fee", "ALTER TABLE brands ADD COLUMN fba_fee REAL DEFAULT 0"),
             ("harvest_campaign", "ALTER TABLE brands ADD COLUMN harvest_campaign TEXT DEFAULT ''"),
             ("harvest_ad_group", "ALTER TABLE brands ADD COLUMN harvest_ad_group TEXT DEFAULT ''"),
+            # Rakip marka tespiti otomatik tahmindir; kullanici duzeltmesi burada saklanir
+            ("competitor_brands", "ALTER TABLE brands ADD COLUMN competitor_brands TEXT DEFAULT ''"),
+            ("not_brands", "ALTER TABLE brands ADD COLUMN not_brands TEXT DEFAULT ''"),
         ]:
             if col not in cols:
                 c.execute(ddl)
@@ -142,6 +147,8 @@ class BrandIn(BaseModel):
     fba_fee: float = 0
     harvest_campaign: str = ""
     harvest_ad_group: str = ""
+    competitor_brands: str = ""
+    not_brands: str = ""
 
 
 def _profit_calc_single(sp, cogs, fee_pct, fba):
@@ -243,12 +250,14 @@ def create_brand(body: BrandIn):
             cur = c.execute(
                 "INSERT INTO brands(name,target_acos,min_clicks_neg,"
                 "min_orders_harvest,bid_change_cap,sell_price,cogs,"
-                "amazon_fee_pct,fba_fee,harvest_campaign,harvest_ad_group) "
-                "VALUES(?,?,?,?,?,?,?,?,?,?,?)",
+                "amazon_fee_pct,fba_fee,harvest_campaign,harvest_ad_group,"
+                "competitor_brands,not_brands) "
+                "VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)",
                 (body.name.strip(), body.target_acos, body.min_clicks_neg,
                  body.min_orders_harvest, body.bid_change_cap,
                  body.sell_price, body.cogs, body.amazon_fee_pct, body.fba_fee,
-                 body.harvest_campaign.strip(), body.harvest_ad_group.strip()))
+                 body.harvest_campaign.strip(), body.harvest_ad_group.strip(),
+                 body.competitor_brands.strip(), body.not_brands.strip()))
         except sqlite3.IntegrityError:
             raise HTTPException(400, "Bu isimde marka zaten var")
         return {"id": cur.lastrowid}
@@ -260,12 +269,14 @@ def update_brand(brand_id: int, body: BrandIn):
         c.execute(
             "UPDATE brands SET name=?,target_acos=?,min_clicks_neg=?,"
             "min_orders_harvest=?,bid_change_cap=?,sell_price=?,cogs=?,"
-            "amazon_fee_pct=?,fba_fee=?,harvest_campaign=?,harvest_ad_group=? "
+            "amazon_fee_pct=?,fba_fee=?,harvest_campaign=?,harvest_ad_group=?,"
+            "competitor_brands=?,not_brands=? "
             "WHERE id=?",
             (body.name.strip(), body.target_acos, body.min_clicks_neg,
              body.min_orders_harvest, body.bid_change_cap,
              body.sell_price, body.cogs, body.amazon_fee_pct, body.fba_fee,
              body.harvest_campaign.strip(), body.harvest_ad_group.strip(),
+             body.competitor_brands.strip(), body.not_brands.strip(),
              brand_id))
     _regenerate(brand_id)
     return {"ok": True}
@@ -750,6 +761,193 @@ def get_insights(brand_id: int):
     return data
 
 
+# ---------- Gunluk is listesi ("bugun ne yapmaliyim?") ----------
+
+@app.get("/api/brands/{brand_id}/today")
+def today(brand_id: int):
+    """Tum motorlari okuyup tek oncelikli is listesi verir."""
+    ctx = _market_context(brand_id)
+    brand = ctx["brand"]
+    profit = _profit_calc(brand, ctx["products"] or None)
+
+    opp = None
+    if ctx["queries"]:
+        opp = market_intel.analyze(
+            ctx["queries"], search_terms=ctx["search_terms"], catalog=ctx["catalog"],
+            basket=ctx["basket"], brand_name=brand["name"], profit=profit,
+            known_brands=_split_list(brand.get("competitor_brands")),
+            not_brands=_split_list(brand.get("not_brands")))
+        opp["period"] = ctx["period"]
+
+    with db() as c:
+        rec_rows = [dict(r) for r in c.execute(
+            "SELECT type,campaign,keyword,current_value,suggested_value,metrics "
+            "FROM recommendations WHERE brand_id=? AND status='pending'", (brand_id,))]
+    for r in rec_rows:
+        try:
+            r["metrics"] = json.loads(r.get("metrics") or "{}")
+        except Exception:
+            r["metrics"] = {}
+
+    return brain.today(recs=rec_rows, opp=opp, brand=brand, has={
+        "ba_query": bool(ctx["queries"]),
+        "ba_catalog": bool(ctx["catalog"]),
+        "economics": bool(profit),
+    })
+
+
+# ---------- Firsat Radari (Brand Analytics) ----------
+
+def _split_list(s):
+    return [p.strip().lower() for p in str(s or "").replace("\n", ",").split(",")
+            if p.strip()]
+
+
+def _market_context(brand_id):
+    """Firsat analizi icin gereken tum veriyi tek yerde toplar."""
+    with db() as c:
+        row = c.execute("SELECT * FROM brands WHERE id=?", (brand_id,)).fetchone()
+        if not row:
+            raise HTTPException(404, "Marka bulunamadi")
+        brand = dict(row)
+        # Ceyreklik rapor daha genis veri tabanidir; yoksa aylik ile calis
+        queries = _load_rows(c, brand_id, "ba_search_query")
+        period = "quarterly"
+        if not queries:
+            queries = _load_rows(c, brand_id, "ba_search_query_month")
+            period = "monthly"
+        catalog = _load_rows(c, brand_id, "ba_catalog")
+        basket = _load_rows(c, brand_id, "ba_market_basket")
+        sts = _load_rows(c, brand_id, "search_term")
+        prods = [dict(r) for r in c.execute(
+            "SELECT * FROM products WHERE brand_id=?", (brand_id,))]
+    return {"brand": brand, "queries": queries, "period": period,
+            "catalog": catalog, "basket": basket, "search_terms": sts,
+            "products": prods}
+
+
+@app.get("/api/brands/{brand_id}/opportunities")
+def get_opportunities(brand_id: int, min_volume: int = 200,
+                      min_relevance: float = 0.34, limit: int = 50):
+    ctx = _market_context(brand_id)
+    if not ctx["queries"]:
+        return {
+            "empty": True,
+            "message": ("Brand Analytics arama terimi raporu yuklenmemis. "
+                        "Seller Central > Marka > Marka Analizi > Arama Terimi "
+                        "Performansi (Marka Gorunumu) raporunu indirip normal "
+                        "rapor gibi yukleyin."),
+        }
+    brand = ctx["brand"]
+    profit = _profit_calc(brand, ctx["products"] or None)
+    res = market_intel.analyze(
+        ctx["queries"], search_terms=ctx["search_terms"], catalog=ctx["catalog"],
+        basket=ctx["basket"], brand_name=brand["name"], profit=profit,
+        min_volume=min_volume, min_relevance=min_relevance, limit_per_bucket=limit,
+        known_brands=_split_list(brand.get("competitor_brands")),
+        not_brands=_split_list(brand.get("not_brands")))
+    res["period"] = ctx["period"]
+    res["profit"] = profit
+    res["has_ad_data"] = bool(ctx["search_terms"])
+    res["brand_lists"] = {
+        "competitor_brands": _split_list(brand.get("competitor_brands")),
+        "not_brands": _split_list(brand.get("not_brands")),
+    }
+    return res
+
+
+class BrandListIn(BaseModel):
+    add: list[str] = []          # rakip marka olarak isaretle
+    remove: list[str] = []       # "bu marka degil" olarak isaretle
+
+
+@app.post("/api/brands/{brand_id}/competitor-brands")
+def edit_competitor_brands(brand_id: int, body: BrandListIn):
+    """Rakip marka listesini duzenler.
+
+    Otomatik tespit guvenilir degil (hacim/sorgu sayisi markayi jenerikten
+    ayiramiyor), bu yuzden kullanici duzeltmesi asil mekanizmadir.
+    """
+    with db() as c:
+        row = c.execute("SELECT competitor_brands,not_brands FROM brands WHERE id=?",
+                        (brand_id,)).fetchone()
+        if not row:
+            raise HTTPException(404, "Marka bulunamadi")
+        known = set(_split_list(row["competitor_brands"]))
+        nots = set(_split_list(row["not_brands"]))
+        for t in body.add:
+            t = t.strip().lower()
+            if t:
+                known.add(t)
+                nots.discard(t)
+        for t in body.remove:
+            t = t.strip().lower()
+            if t:
+                nots.add(t)
+                known.discard(t)
+        c.execute("UPDATE brands SET competitor_brands=?,not_brands=? WHERE id=?",
+                  (",".join(sorted(known)), ",".join(sorted(nots)), brand_id))
+    return {"ok": True, "competitor_brands": sorted(known), "not_brands": sorted(nots)}
+
+
+class OppExport(BaseModel):
+    queries: list[str] = []
+    bucket: str = "WHITESPACE"
+    match: str = "exact"
+    asin: str = ""
+    sku: str = ""
+    tiers: int = 3
+
+
+@app.post("/api/brands/{brand_id}/opportunities/plan")
+def opportunities_plan(brand_id: int, body: OppExport):
+    """Secilen firsat kelimelerinden kampanya plani uretir (indirmeden once onizleme)."""
+    ctx = _market_context(brand_id)
+    if not ctx["queries"]:
+        raise HTTPException(400, "Brand Analytics raporu yuklenmemis")
+    brand = ctx["brand"]
+    res = market_intel.analyze(
+        ctx["queries"], search_terms=ctx["search_terms"], catalog=ctx["catalog"],
+        basket=ctx["basket"], brand_name=brand["name"],
+        profit=_profit_calc(brand, ctx["products"] or None),
+        limit_per_bucket=500,
+        known_brands=_split_list(brand.get("competitor_brands")),
+        not_brands=_split_list(brand.get("not_brands")))
+    pool = res["buckets"].get(body.bucket.upper(), [])
+    if body.queries:
+        want = {q.strip().lower() for q in body.queries}
+        pool = [o for o in pool if o["query"] in want]
+    if not pool:
+        raise HTTPException(400, "Secilen kelimeler bu kovada bulunamadi")
+
+    asin = body.asin.strip().upper()
+    if not asin and ctx["catalog"]:
+        # En cok satan ASIN'i varsayilan yap
+        asin = max(ctx["catalog"], key=lambda c: c.get("purchases") or 0).get("asin", "")
+    plan = market_intel.build_campaign_plan(
+        pool, asin=asin, sku=body.sku.strip(), period=ctx["period"],
+        match=body.match.lower(), tiers=max(1, min(body.tiers, 6)),
+        campaign_prefix=f"{body.bucket.upper()}",
+        negatives=[n["query"] for n in res.get("negatives", [])])
+    if not plan:
+        raise HTTPException(400, "Gecerli bid hesaplanamadi - marka ekonomisini kontrol edin")
+    return plan
+
+
+@app.post("/api/brands/{brand_id}/opportunities/export")
+def opportunities_export(brand_id: int, body: OppExport):
+    """Secilen firsatlari Amazon'a yuklenebilir bulksheet olarak indirir."""
+    plan = opportunities_plan(brand_id, body)
+    buf = launch_mod.build_bulksheet(plan)
+    with db() as c:
+        name = c.execute("SELECT name FROM brands WHERE id=?", (brand_id,)).fetchone()[0]
+    fname = f"{name}_firsat_{body.bucket.lower()}_{datetime.now():%Y%m%d}.xlsx"
+    return StreamingResponse(
+        buf, media_type="application/vnd.openxmlformats-officedocument"
+        ".spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="{fname}"'})
+
+
 # ---------- Amazon Bulksheet Export ----------
 
 @app.get("/api/brands/{brand_id}/export-bulksheet")
@@ -915,6 +1113,39 @@ def delete_product(pid: int):
 # Chrome uzantisi buraya baglanir: urunu tani -> keyword bul -> kampanya
 # plani -> bulk sheet. Mevcut "marka/rapor" akisindan bagimsizdir.
 
+def _loose_int(v):
+    """Scraping'den '1,234' / 1234.0 / '' gibi degerler gelir; 422 yerine coerce."""
+    if v is None or v == "":
+        return None
+    if isinstance(v, bool):
+        return None
+    if isinstance(v, (int, float)):
+        return int(v)
+    digits = "".join(ch for ch in str(v) if ch.isdigit())
+    return int(digits) if digits else None
+
+
+def _loose_float(v):
+    if v is None or v == "":
+        return None
+    if isinstance(v, (int, float)) and not isinstance(v, bool):
+        return float(v)
+    cleaned = "".join(ch for ch in str(v).replace(",", ".") if ch.isdigit() or ch == ".")
+    try:
+        return float(cleaned)
+    except ValueError:
+        return None
+
+
+def _loose_list(v):
+    """None veya tek string gelirse listeye cevir."""
+    if v is None:
+        return []
+    if isinstance(v, str):
+        return [v] if v.strip() else []
+    return v
+
+
 class CompetitorIn(BaseModel):
     asin: str | None = None
     title: str | None = None
@@ -926,6 +1157,16 @@ class CompetitorIn(BaseModel):
     description: str | None = None
     is_best_seller: bool = False
     is_amazon_choice: bool = False
+    # Otomatik kesiften gelen sinyaller (uzanti doldurur)
+    bought_past_month: int | None = None   # satis hizi
+    keyword_overlap: int | None = None     # kac ana kelimede siralaniyor
+    avg_rank: float | None = None          # o kelimelerde ortalama sirasi
+
+    _c_ints = field_validator("review_count", "bsr_rank", "bought_past_month",
+                              "keyword_overlap", mode="before")(_loose_int)
+    _c_floats = field_validator("price", "rating", "avg_rank",
+                                mode="before")(_loose_float)
+    _c_lists = field_validator("bullets", mode="before")(_loose_list)
 
 
 class LaunchProductIn(BaseModel):
@@ -946,6 +1187,22 @@ class LaunchProductIn(BaseModel):
     search_suggestions: list[str] = []
     catalog_products: list[dict] = []
     use_ai: bool = True
+    bid_strategy: str = "profit"   # profit | balanced | aggressive
+
+    _p_ints = field_validator("review_count", mode="before")(_loose_int)
+    _p_floats = field_validator(
+        "price", "cogs", "fba_fee", "fee_pct", "rating", mode="before")(_loose_float)
+    _p_lists = field_validator(
+        "bullets", "search_suggestions", "catalog_products", "competitors",
+        mode="before")(_loose_list)
+
+    @field_validator("bsr", mode="before")
+    @classmethod
+    def _p_bsr(cls, v):
+        # Scraping bazen "#1,234 in Beauty" gibi duz string dondurur.
+        if v is None or isinstance(v, dict):
+            return v
+        return {"raw": str(v)}
 
 
 @app.post("/api/launch/analyze")
@@ -963,7 +1220,8 @@ def launch_analyze(body: LaunchProductIn):
     }
     competitors = [c.model_dump() for c in body.competitors]
     try:
-        plan = launch_mod.build_plan(product, competitors, use_ai=body.use_ai)
+        plan = launch_mod.build_plan(product, competitors, use_ai=body.use_ai,
+                                     bid_strategy=body.bid_strategy)
     except Exception as e:
         raise HTTPException(500, f"Plan uretilemedi: {e}")
     return plan

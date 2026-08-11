@@ -30,6 +30,40 @@ def _aov(search_terms):
     return sales / orders if orders else 30.0
 
 
+def account_cvr(rows):
+    """Hesabin kendi olculmus donusum orani (siparis / tiklama).
+
+    Istatistiksel esikler bundan turetilir: kategori varsayimi degil, markanin
+    gercek verisi. Veri yoksa temkinli bir varsayilan doner.
+    """
+    clicks = sum(r.get("clicks", 0) for r in rows)
+    orders = sum(r.get("orders", 0) for r in rows)
+    if clicks < 50 or orders <= 0:
+        return 0.10
+    return max(0.01, min(0.50, orders / clicks))
+
+
+def zero_order_confidence(clicks, cvr):
+    """0 siparis gercekten kotu performans mi, yoksa sans eseri mi?
+
+    Hesabin ortalama CVR'ina sahip IYI bir kelimenin `clicks` tiklamada hic
+    siparis almama olasiligi (1-cvr)^clicks'tir. Guven = 1 - bu olasilik.
+    Ornek: CVR %10, 12 tik -> guven sadece %72 (yani 10 kelimeden ~3'unu
+    haksiz yere keserdik). 30 tik -> %96.
+    """
+    if clicks <= 0 or cvr <= 0:
+        return 0.0
+    return 1.0 - (1.0 - cvr) ** clicks
+
+
+def clicks_for_confidence(cvr, target=0.95):
+    """Hedeflenen guvene ulasmak icin gereken minimum tiklama sayisi."""
+    if cvr <= 0 or cvr >= 1:
+        return 30
+    import math
+    return max(5, int(math.ceil(math.log(1 - target) / math.log(1 - cvr))))
+
+
 def run_all(brand, search_terms, targets, placements=None, campaigns=None):
     recs = []
     aov = _aov(search_terms) if search_terms else 30.0
@@ -42,7 +76,7 @@ def run_all(brand, search_terms, targets, placements=None, campaigns=None):
     recs += bids(brand, targets, aov)
     recs += placement_recs(brand, placements or [])
     if campaigns:
-        recs += campaign_budgets(brand, campaigns)
+        recs += campaign_budgets(brand, campaigns, aov)
     return recs
 
 
@@ -139,6 +173,7 @@ def negatives(brand, search_terms):
     min_clicks = brand["min_clicks_neg"] * 1.5 # Daha esnek (1.5x click)
     tacos = brand["target_acos"]
     aov = _aov(search_terms)
+    acc_cvr = account_cvr(search_terms)
     # REVENUE FIRST: Israf toleransini artir (1.5 yerine 2.5 kati)
     spend_cap = tacos * aov * 2.5  
     agg = {}
@@ -157,18 +192,27 @@ def negatives(brand, search_terms):
         by_spend = a["spend"] >= spend_cap
         if not (by_clicks or by_spend):
             continue
-        # Confidence & Auto-Apply Logic for Negatives
+        # Guven artik uydurma bir sabit degil: hesabin kendi CVR'ina gore
+        # "bu kadar tiklamada 0 siparis" ne kadar anlamli, onu olcuyoruz.
+        stat_conf = zero_order_confidence(a["clicks"], acc_cvr)
+        confidence = int(round(stat_conf * 100))
+        # Harcama zaten hedef CPA'nin kat kat ustundeyse tiklama az olsa da
+        # para kaybi kesin; guveni bu yonde destekle.
         if by_spend and a["spend"] >= spend_cap * 1.5:
-            confidence = 99
-            auto_apply = True
-        elif by_clicks and a["clicks"] >= min_clicks * 1.5:
-            confidence = 95
-            auto_apply = True
-        else:
-            confidence = 85
-            auto_apply = False
+            confidence = max(confidence, 90)
+        # Otomatik uygulama iki yoldan biriyle hak edilir:
+        #  a) istatistiksel: 0 siparis artik sans eseri olamaz
+        #  b) ekonomik: terim hedef CPA'nin kat kat ustunu yakmis; bundan
+        #     sonraki tik donusse bile o terim zarardan cikmaz
+        auto_apply = (stat_conf >= 0.95) or (a["spend"] >= spend_cap * 2.0)
+        if stat_conf < 0.80 and not by_spend:
+            # Gurultu: iyi bir kelimeyi haksiz yere kesme riski %20'den yuksek.
+            continue
 
-        trigger = (f"{int(a['clicks'])} tik (esnek esik: {int(min_clicks)})" if by_clicks
+        need = clicks_for_confidence(acc_cvr)
+        trigger = (f"{int(a['clicks'])} tik, 0 siparis - hesap CVR'i "
+                   f"%{_f(acc_cvr*100,1)} iken bu %{confidence} guvenle gercek "
+                   f"kotu performans (guvenli esik {need} tik)" if by_clicks
                    else f"${_f(a['spend'])} harcama > tolerans limiti (${_f(spend_cap)})")
         recs.append({
             "type": "negative",
@@ -396,6 +440,7 @@ def bids(brand, targets, aov):
     # REVENUE FIRST: Asagi yonlu kesintileri limitli tut (%10), agresif dususlerden kacin.
     cap = brand.get("bid_change_cap", 0.10)
     target_cpa = tacos * aov
+    acc_cvr = account_cvr(targets)
     recs = []
     for t in targets:
         if t["match_type"] not in ("EXACT", "PHRASE", "BROAD") \
@@ -439,13 +484,20 @@ def bids(brand, targets, aov):
 
         if orders == 0 and spend >= target_cpa * 1.5:
             # REVENUE FIRST: Toleransi artirdik (target_cpa * 1.5).
+            # 0 siparis tek basina kanit degil; az tiklamada tamamen normaldir.
+            stat_conf = zero_order_confidence(clicks, acc_cvr)
+            if stat_conf < 0.80 and spend < target_cpa * 3.0:
+                continue
             new_bid = max(0.15, _f((aov / clicks) * tacos))
             rtype = "bid_down"
             reason = (f"${_f(spend)} harcama (hedef CPA asildi), "
-                      f"0 siparis. Formul: (AOV ${_f(aov)} / {int(clicks)} tik) x "
+                      f"0 siparis. {int(clicks)} tikta bunun gercek kotu "
+                      f"performans olma guveni %{int(stat_conf*100)} "
+                      f"(hesap CVR'i %{_f(acc_cvr*100,1)}). "
+                      f"Formul: (AOV ${_f(aov)} / {int(clicks)} tik) x "
                       f"%{_f(tacos*100,0)}.")
-            confidence = 90 if spend >= target_cpa * 2.0 else 75
-            auto_apply = (confidence >= 90)
+            confidence = max(50, min(95, int(stat_conf * 100)))
+            auto_apply = (stat_conf >= 0.95)
         elif acos is not None and acos > tacos * 1.30:
             # REVENUE FIRST: ACOS %30 uzerine cikana kadar dokunma (ciro icin).
             ideal = rpc * tacos
@@ -594,9 +646,13 @@ def placement_recs(brand, placements):
     return recs
 
 
-def campaign_budgets(brand, campaigns):
+def campaign_budgets(brand, campaigns, aov=30.0):
     """Ciro Odakli: Kazanan kampanyalara aninda butce takviyesi."""
     tacos = brand["target_acos"]
+    # Sifir satisli kampanyanin harcamasini kiyaslamak icin esik. Modulun geri
+    # kalaninda (anomalies, bids) kullanilan ayni tanim: hedef ACOS x sepet
+    # tutari = bir siparise verilebilecek makul maliyet.
+    target_cpa = tacos * aov
     recs = []
     for c in campaigns:
         spend = c.get("spend", 0)

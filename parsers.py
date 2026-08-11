@@ -13,6 +13,13 @@ SIGNATURES = [
     ("targeting", {"Targeting", "Top-of-search Impression Share"}),
     ("placement", {"Placement", "Bidding strategy"}),
     ("campaign", {"Budget Amount", "Targeting Type"}),
+    # Brand Analytics (Seller Central > Marka Analizi) raporlari.
+    # Bunlar reklam raporu DEGIL - pazarin tamamini gosterir: her arama
+    # teriminde toplam talep + senin marka payin. Reklam raporunda olmayan
+    # "rakipler ne kadar aliyor" bilgisi burada.
+    ("ba_search_query", {"Search Query", "Search Query Volume"}),
+    ("ba_catalog", {"ASIN Title", "Impressions: Impressions"}),
+    ("ba_market_basket", {"#1 Purchase Combination: ASIN"}),
 ]
 
 REPORT_LABELS = {
@@ -22,6 +29,10 @@ REPORT_LABELS = {
     "placement": "Placement Raporu",
     "campaign": "Kampanya Raporu",
     "bulk_ids": "Bulk Operations (Campaign/Ad Group ID eslemesi)",
+    "ba_search_query": "Brand Analytics - Arama Terimi Performansi (Ceyrek)",
+    "ba_search_query_month": "Brand Analytics - Arama Terimi Performansi (Ay)",
+    "ba_catalog": "Brand Analytics - Katalog Performansi",
+    "ba_market_basket": "Brand Analytics - Sepet Analizi",
 }
 
 ASIN_RE = re.compile(r"^b0[a-z0-9]{8}$", re.IGNORECASE)
@@ -66,8 +77,22 @@ def _read_sheet(ws):
     return headers, out
 
 
+META_RE = re.compile(r'([^,=]+)=\["([^"]*)"\]')
+
+
+def _parse_meta_line(cells):
+    """Brand Analytics CSV'lerinin ilk satiri veri degil, filtre ozetidir:
+    'Reporting Range=["Quarterly"],Select year=["2026"],Select quarter=["2"]'
+    Bunu dict'e cevirir. Normal rapor satiriysa None doner."""
+    line = ",".join(str(c) for c in cells)
+    if "=[" not in line:
+        return None
+    pairs = META_RE.findall(line)
+    return {k.strip(): v.strip() for k, v in pairs} if pairs else None
+
+
 def read_rows(filename, content: bytes):
-    """Dosyayi header listesi + dict satirlari olarak dondurur.
+    """Dosyayi header listesi + dict satirlari + meta olarak dondurur.
 
     Amazon'un 'Bulk operations > Download spreadsheet' dosyasi COK SEKMELIDIR
     (Portfolios, Sponsored Products Campaigns, Sponsored Brands Campaigns, ...)
@@ -80,11 +105,21 @@ def read_rows(filename, content: bytes):
         reader = csv.reader(io.StringIO(text))
         rows = [r for r in reader if any(c.strip() for c in r)]
         if not rows:
-            return [], []
+            return [], [], {}
+        meta = _parse_meta_line(rows[0])
+        if meta:
+            rows = rows[1:]
+            if not rows:
+                return [], [], meta
         headers = [h.strip() for h in rows[0]]
-        return headers, [dict(zip(headers, r)) for r in rows[1:]]
+        return headers, [dict(zip(headers, r)) for r in rows[1:]], (meta or {})
     wb = openpyxl.load_workbook(io.BytesIO(content), data_only=True)
     headers, out = _read_sheet(wb.active)
+    meta = _parse_meta_line(headers)
+    if meta and out:
+        # Ilk satir meta ise gercek basliklar ikinci satirda
+        headers = [str(h).strip() if h is not None else "" for h in out[0].values()]
+        out = [dict(zip(headers, r.values())) for r in out[1:]]
     if detect_type(headers) is None:
         for name in wb.sheetnames:
             if wb[name] is wb.active:
@@ -94,7 +129,7 @@ def read_rows(filename, content: bytes):
                 headers, out = h2, r2
                 break
     wb.close()
-    return headers, out
+    return headers, out, (meta or {})
 
 
 def detect_type(headers):
@@ -112,11 +147,23 @@ def detect_type(headers):
 
 def parse(filename, content: bytes):
     """-> (report_type, normalized_rows)"""
-    headers, rows = read_rows(filename, content)
+    headers, rows, meta = read_rows(filename, content)
     rtype = detect_type(headers)
     if rtype is None:
         raise ValueError(
             f"Rapor tipi taninamadi. Kolonlar: {', '.join(headers[:8])}...")
+    if rtype == "ba_search_query":
+        # Ayni kolonlarla hem aylik hem ceyreklik dosya gelir. Ayri tiplerde
+        # sakla ki biri digerinin ustune yazmasin (trend karsilastirmasi icin
+        # ikisi de lazim).
+        period = (meta.get("Reporting Range") or "").lower()
+        if period.startswith("month"):
+            rtype = "ba_search_query_month"
+        return rtype, [_norm_ba_query(r, meta) for r in rows if r.get("Search Query")]
+    if rtype == "ba_catalog":
+        return rtype, [_norm_ba_catalog(r, meta) for r in rows if r.get("ASIN")]
+    if rtype == "ba_market_basket":
+        return rtype, [_norm_ba_basket(r) for r in rows if r.get("ASIN")]
     if rtype == "search_term":
         return rtype, [_norm_search_term(r) for r in rows]
     if rtype == "targeting":
@@ -129,6 +176,89 @@ def parse(filename, content: bytes):
         return rtype, [_norm_bulk_ids(r) for r in rows]
     # impression share: simdilik saklamiyoruz
     return rtype, []
+
+
+def _norm_ba_query(r, meta):
+    """Brand Analytics 'Search Query Performance' satiri.
+
+    ONEMLI: Bu dosyada 'Share %' kolonlari zaten 0-100 arasi yuzde olarak gelir
+    (18.54 = %18.54). _pct() kullanma - 1'den kucuk gercek yuzdeleri (orn %0.9)
+    orana cevirip bozar.
+    """
+    vol = _num(r.get("Search Query Volume"))
+    clicks_total = _num(r.get("Clicks: Total Count"))
+    pur_total = _num(r.get("Purchases: Total Count"))
+    return {
+        "query": str(r.get("Search Query") or "").strip().lower(),
+        "score": _num(r.get("Search Query Score")),
+        "volume": vol,
+        "period": (meta.get("Reporting Range") or "").lower(),
+        "imp_total": _num(r.get("Impressions: Total Count")),
+        "imp_brand": _num(r.get("Impressions: Brand Count")),
+        "imp_share": _num(r.get("Impressions: Brand Share %")),
+        "clicks_total": clicks_total,
+        "click_rate": _num(r.get("Clicks: Click Rate %")),
+        "clicks_brand": _num(r.get("Clicks: Brand Count")),
+        "click_share": _num(r.get("Clicks: Brand Share %")),
+        "cart_total": _num(r.get("Cart Adds: Total Count")),
+        "cart_brand": _num(r.get("Cart Adds: Brand Count")),
+        "cart_share": _num(r.get("Cart Adds: Brand Share %")),
+        "pur_total": pur_total,
+        "pur_brand": _num(r.get("Purchases: Brand Count")),
+        "pur_share": _num(r.get("Purchases: Brand Share %")),
+        # Fiyat karsilastirmasi: pazar ne fiyata satiyor vs sen ne fiyata
+        "market_price": _num(r.get("Purchases: Price (Median)")),
+        "brand_price": _num(r.get("Purchases: Brand Price (Median)")),
+        "click_price": _num(r.get("Clicks: Price (Median)")),
+        "brand_click_price": _num(r.get("Clicks: Brand Price (Median)")),
+        # Pazarin tiklamadan satisa donusum orani - bid hesabinin temeli
+        "market_cvr": round(pur_total / clicks_total * 100, 2) if clicks_total else 0.0,
+        "is_asin": bool(ASIN_RE.match(str(r.get("Search Query") or "").strip())),
+    }
+
+
+def _norm_ba_catalog(r, meta):
+    """Brand Analytics 'Search Catalog Performance' - ASIN bazli huni."""
+    clicks = _num(r.get("Clicks: Clicks"))
+    pur = _num(r.get("Purchases: Purchases"))
+    return {
+        "asin": str(r.get("ASIN") or "").strip().upper(),
+        "title": str(r.get("ASIN Title") or "").strip(),
+        "category": str(r.get("Category") or "").strip(),
+        "impressions": _num(r.get("Impressions: Impressions")),
+        "clicks": clicks,
+        "ctr": _num(r.get("Clicks: Click Rate (CTR)")),
+        "cart_adds": _num(r.get("Cart Adds: Cart Adds")),
+        "purchases": pur,
+        "search_sales": _num(r.get("Purchases: Search Traffic Sales")),
+        "cvr": _num(r.get("Purchases: Conversion Rate %")),
+        "price": _num(r.get("Purchases: Price (Median)")
+                      or r.get("Impressions: Price (Median)")),
+        "rating": _num(r.get("Impressions: Rating (Median)")),
+        "click_to_purchase": round(pur / clicks * 100, 2) if clicks else 0.0,
+    }
+
+
+def _norm_ba_basket(r):
+    """Brand Analytics 'Market Basket' - birlikte alinan urunler.
+    Product targeting ve bundle kampanyalari icin kullanilir."""
+    combos = []
+    for i in (1, 2, 3):
+        asin = str(r.get(f"#{i} Purchase Combination: ASIN") or "").strip().upper()
+        if not asin:
+            continue
+        combos.append({
+            "asin": asin,
+            "title": str(r.get(f"#{i} Purchase Combination: Product Title") or "").strip(),
+            "pct": _num(r.get(f"#{i} Purchase Combination: Combination %")),
+        })
+    return {
+        "asin": str(r.get("ASIN") or "").strip().upper(),
+        "title": str(r.get("Product Title") or "").strip(),
+        "brand": str(r.get("Brand Name") or "").strip(),
+        "orders": _num(r.get("Number of Orders")),
+        "combos": combos,
+    }
 
 
 def _base_metrics(r):

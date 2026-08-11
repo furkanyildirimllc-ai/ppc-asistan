@@ -8,6 +8,60 @@ let scrapedData = null;
 let selectedCompetitors = [];
 let searchSuggestions = [];
 let lastPlan = null;
+let bidStrategy = "profit";   // profit | balanced | aggressive
+
+// --- STATE PERSISTENCE ---
+// Chrome popup'i disariya tiklayinca / sayfayi kaydirinca kapanir ve DOM ile
+// tum JS degiskenleri sifirlanir. Bunu engellemek mumkun degil; bu yuzden her
+// degisiklikte durumu chrome.storage'a yazip acilista geri yukluyoruz.
+const FORM_FIELDS = ["f-title", "f-asin", "f-price", "f-sku", "f-brand", "f-cogs", "f-fba"];
+let restoring = false;
+
+function saveState() {
+  if (restoring) return;
+  const form = {};
+  FORM_FIELDS.forEach(id => { const el = $(id); if (el) form[id] = el.value; });
+  try {
+    chrome.storage.local.set({
+      ppc_state: {
+        currentStep, form, scrapedData, selectedCompetitors,
+        searchSuggestions, lastPlan, bidStrategy,
+      }
+    });
+  } catch (_) {}
+}
+
+async function restoreState() {
+  let s;
+  try { s = (await chrome.storage.local.get("ppc_state")).ppc_state; } catch (_) { return false; }
+  if (!s) return false;
+  restoring = true;
+  try {
+    FORM_FIELDS.forEach(id => {
+      const el = $(id);
+      if (el && s.form && s.form[id] != null) el.value = s.form[id];
+    });
+    scrapedData = s.scrapedData || null;
+    selectedCompetitors = s.selectedCompetitors || [];
+    searchSuggestions = s.searchSuggestions || [];
+    lastPlan = s.lastPlan || null;
+    if (s.bidStrategy) {
+      bidStrategy = s.bidStrategy;
+      document.querySelectorAll(".strat-btn").forEach(x =>
+        x.classList.toggle("active", x.dataset.strategy === bidStrategy));
+    }
+    if (scrapedData) {
+      if (scrapedData.kind === "product") updateIndicators(scrapedData);
+      setStatus("Kaldığın yerden ✓");
+    }
+    if (lastPlan) renderPlan(lastPlan);
+  } finally {
+    restoring = false;
+  }
+  // renderPlan step 4 panelini doldurur; kullaniciyi birakip gittigi adima don.
+  if (s.currentStep && s.currentStep > 1) goToStep(s.currentStep);
+  return true;
+}
 
 // --- STEP NAVIGATION ---
 function goToStep(n) {
@@ -23,6 +77,7 @@ function goToStep(n) {
 
   if (n === 2) renderCompetitors();
   if (n === 3) discoverKeywords();
+  saveState();
 }
 
 // Make step dots clickable
@@ -100,6 +155,7 @@ async function rescan() {
     selectedCompetitors = [...(res.competitors || [])];
     fillForm(res);
     setStatus("Hazır ✓");
+    saveState();
   } catch (e) {
     setStatus("Hata oluştu");
     console.error(e);
@@ -130,6 +186,13 @@ function scoreCompetitor(comp, ownPrice) {
   else if (rating >= 4.5) { score -= 10; }
   if (reviews < 50) { score += 15; reasons.push('Az yorum'); }
   else if (reviews > 500) { score -= 20; reasons.push('Güçlü'); }
+
+  // Kesifle gelen sinyal: cok kelimede ust siralarda cikan urun gercek rakiptir,
+  // kolay hedef degildir. Tek kelimede goruluyorsa nis/tesadufi olabilir.
+  const overlap = comp.keyword_overlap || 0;
+  if (overlap >= 3) { score -= 15; reasons.push(`${overlap} kelimede rakip`); }
+  else if (overlap === 1) { score += 5; }
+  if (comp.avg_rank && comp.avg_rank <= 5) { score -= 10; reasons.push('İlk sıralarda'); }
   
   score = Math.max(0, Math.min(100, score));
   return { score, reasons, isWeak: score >= 65, isStrong: score <= 35 };
@@ -169,12 +232,24 @@ function renderCompetitors() {
     let badges = '';
     if (c.intel.isWeak) badges += '<span class="comp-badge weak">🎯 Kolay Hedef</span>';
     if (c.intel.isStrong) badges += '<span class="comp-badge strong">⚠️ Güçlü Rakip</span>';
+    // Kesif sinyali: kac ana kelimede karsina cikti, ortalama kacinci sirada
+    if (c.keyword_overlap) {
+      const t = (c.seen_for || []).join(", ");
+      badges += `<span class="comp-badge overlap" title="${t}">🔁 ${c.keyword_overlap} kelimede` +
+                (c.avg_rank ? ` · ort. ${c.avg_rank}. sıra` : "") + `</span>`;
+    }
     
-    const imgHtml = c.image ? `<img src="${c.image}" style="width:56px;height:56px;border-radius:6px;object-fit:cover;flex-shrink:0;background:#1e293b;">` : `<div style="width:56px;height:56px;border-radius:6px;background:#1e293b;display:flex;align-items:center;justify-content:center;font-size:24px;flex-shrink:0;">📦</div>`;
+    // Gorsel her zaman bir yer tutucunun UZERINE binir. Boylece gorsel yoksa
+    // ya da yuklenemezse kirik ikon degil, duzgun bir kutu gorunur.
+    const imgHtml = `
+      <div class="comp-thumb">
+        <span class="comp-thumb-ph">📦</span>
+        ${c.image ? `<img data-thumb src="${c.image}" alt="">` : ""}
+      </div>`;
     
     html += `
       <div class="comp-card ${cls}">
-        <input type="checkbox" id="comp-${i}" ${checked ? 'checked' : ''} onchange="toggleComp(${i}, this.checked)">
+        <input type="checkbox" id="comp-${i}" data-comp-idx="${i}" ${checked ? 'checked' : ''}>
         ${imgHtml}
         <div class="comp-info">
           <div class="comp-title" title="${c.title}">${c.title}</div>
@@ -192,13 +267,87 @@ function renderCompetitors() {
   
   container.innerHTML = html;
   $("comp-count-title").textContent = `${checkedCount} seçildi`;
+
+  // Inline onerror MV3 CSP'sinde calismaz; yuklenemeyen gorseli JS ile gizle
+  // ki altindaki yer tutucu ortaya ciksin (kirik ikon gorunmesin).
+  container.querySelectorAll("img[data-thumb]").forEach(img => {
+    const hide = () => { img.style.display = "none"; };
+    img.addEventListener("error", hide);
+    if (img.complete && img.naturalWidth === 0) hide();
+  });
 }
 
-window.toggleComp = function(index, isChecked) {
-  selectedCompetitors[index].selected = isChecked;
-  const count = selectedCompetitors.filter(c => c.selected !== false).length;
+// Inline onchange MV3 CSP'sinde calismaz -> delegasyonla dinle.
+$("competitors-list").addEventListener("change", (ev) => {
+  const el = ev.target;
+  if (!el || el.dataset.compIdx === undefined) return;
+  const c = selectedCompetitors[Number(el.dataset.compIdx)];
+  if (!c) return;
+  c.selected = el.checked;
+  const count = selectedCompetitors.filter(x => x.selected !== false).length;
   $("comp-count-title").textContent = `${count} seçildi`;
-};
+  saveState();
+});
+
+// Rakipleri urunun ana kelimelerinde arama yaparak kesfeder.
+async function discoverCompetitors() {
+  const btn = $("btn-discover");
+  const status = $("discover-status");
+  const title = $("f-title").value.trim();
+  if (!title) { setStatus("Önce ürün başlığı gerekli"); return; }
+
+  btn.disabled = true;
+  btn.textContent = "🔍 Aranıyor...";
+  status.style.display = "block";
+  status.textContent = "Ana kelimeler çıkarılıyor, Amazon'da aranıyor...";
+
+  try {
+    const tab = await activeTab();
+    if (!tab || !tab.id) throw new Error("Sekme bulunamadı");
+    const res = await chrome.tabs.sendMessage(tab.id, {
+      type: "DISCOVER_COMPETITORS",
+      title,
+      asin: $("f-asin").value.trim().toUpperCase(),
+      keywords: searchSuggestions.slice(0, 2),
+    }).catch(() => null);
+
+    if (!res || !res.competitors) throw new Error("Tarama yanıt vermedi");
+    if (!res.competitors.length) {
+      status.textContent = "Rakip bulunamadı. " +
+        (res.errors && res.errors.length ? res.errors[0] : "Amazon sayfasında olduğundan emin ol.");
+      return;
+    }
+
+    // Kesfedilenleri mevcut listeyle birlestir (ASIN'e gore tekille).
+    const byAsin = new Map(selectedCompetitors.map(c => [c.asin, c]));
+    let added = 0;
+    res.competitors.forEach(c => {
+      if (byAsin.has(c.asin)) {
+        Object.assign(byAsin.get(c.asin), {
+          keyword_overlap: c.keyword_overlap, avg_rank: c.avg_rank, seen_for: c.seen_for,
+        });
+      } else {
+        byAsin.set(c.asin, c);
+        added++;
+      }
+    });
+    selectedCompetitors = Array.from(byAsin.values());
+    renderCompetitors();
+    saveState();
+
+    const qs = (res.queries || []).join(", ");
+    status.innerHTML = `✅ <b>${added}</b> yeni rakip eklendi (toplam ${selectedCompetitors.length}).` +
+      (qs ? `<br/>Aranan kelimeler: ${qs}` : "") +
+      (res.errors && res.errors.length ? `<br/>⚠️ ${res.errors.length} arama başarısız.` : "");
+  } catch (e) {
+    status.textContent = "Tarama hatası: " + e.message;
+  } finally {
+    btn.disabled = false;
+    btn.textContent = "🔍 Rakipleri Otomatik Tara";
+  }
+}
+
+$("btn-discover").addEventListener("click", discoverCompetitors);
 
 $("btn-add-comp").addEventListener("click", () => {
   const v = $("f-manual-asin").value.trim().toUpperCase();
@@ -206,6 +355,7 @@ $("btn-add-comp").addEventListener("click", () => {
     selectedCompetitors.push({ asin: v, title: "Manuel Eklenen Rakip", price: null, rating: 0, review_count: 0 });
     $("f-manual-asin").value = "";
     renderCompetitors();
+    saveState();
   }
 });
 
@@ -225,13 +375,26 @@ async function discoverKeywords() {
     
     // Add words from competitor titles as fallback if empty
     if (!kws.length && selectedCompetitors.length) {
-      const compTokens = new Set();
+      // Tek tek kelime dokmek yerine rakip basliklarindan anlamli ikili/uclu
+      // obekler cikar. Noktalama ve stop-word SINIR olur; yoksa
+      // "shampoo for thin, fine hair" -> "shampoo thin" gibi sahte terim uretir.
+      const STOP = new Set(['for','with','and','the','of','to','in','on','by','from','your','our','plus','pack','set','count']);
+      const freq = new Map();
       selectedCompetitors.forEach(c => {
-        (c.title || '').toLowerCase().replace(/[^a-z0-9\s]/g, ' ').split(/\s+/).forEach(w => {
-          if (w.length > 2) compTokens.add(w);
-        });
+        (c.title || '').toLowerCase()
+          .replace(/[^a-z0-9\s,;:/()\-]/g, ' ')
+          .split(/[,;:/()]|\s-\s/)
+          .forEach(seg => {
+            const w = seg.split(/\s+/).filter(x => x.length > 2 && !STOP.has(x));
+            for (let n = 2; n <= 3; n++) {
+              for (let i = 0; i + n <= w.length; i++) {
+                const g = w.slice(i, i + n).join(' ');
+                freq.set(g, (freq.get(g) || 0) + 1);
+              }
+            }
+          });
       });
-      kws = Array.from(compTokens).slice(0, 20);
+      kws = [...freq.entries()].sort((a, b) => b[1] - a[1]).map(e => e[0]).slice(0, 20);
     }
     
     // STRICT RELEVANCE FILTER
@@ -264,6 +427,18 @@ async function discoverKeywords() {
   container.style.display = 'block';
 }
 
+// FastAPI 422'de detail bir nesne listesidir; duz string'e cevrilmezse
+// mesaj "[object Object]" olarak gorunur.
+async function errText(r) {
+  let d;
+  try { d = (await r.json()).detail; } catch (_) { return `Sunucu ${r.status}`; }
+  if (typeof d === "string") return d;
+  if (Array.isArray(d)) {
+    return d.map(e => `${(e.loc || []).slice(1).join(".")}: ${e.msg}`).join(" | ");
+  }
+  return d ? JSON.stringify(d) : `Sunucu ${r.status}`;
+}
+
 // --- STEP 4: ANALYSIS ---
 function collectData() {
   return {
@@ -276,7 +451,35 @@ function collectData() {
     fba_fee: parseFloat($("f-fba").value) || null,
     competitors: selectedCompetitors.filter(c => c.selected !== false),
     use_ai: true,
+    bid_strategy: bidStrategy,
   };
+}
+
+// Strateji secici
+$("strategy-picker").addEventListener("click", (ev) => {
+  const b = ev.target.closest(".strat-btn");
+  if (!b) return;
+  bidStrategy = b.dataset.strategy;
+  document.querySelectorAll(".strat-btn").forEach(x => x.classList.remove("active"));
+  b.classList.add("active");
+  saveState();
+});
+
+function renderFeasibility(f) {
+  if (!f || !f.headline) return "";
+  const icon = f.status === "ok" ? "✅" : f.status === "tight" ? "⚠️" : "🚫";
+  const tips = (f.advice || []).map(a => `<li>${a}</li>`).join("");
+  return `
+    <div class="feas ${f.status}">
+      <b>${icon} ${f.headline}</b>
+      <div class="feas-nums">
+        <span>Ödenebilir bid: <b>$${f.affordable_bid}</b></span>
+        <span>Pazar CPC (tahmini): <b>$${f.market_cpc_estimate}</b></span>
+        <span>Karşılama: <b>%${f.ratio_pct}</b></span>
+      </div>
+      ${tips ? `<ul>${tips}</ul>` : ""}
+      <div class="muted" style="margin-top:5px; font-size:10px;">${f.note || ""}</div>
+    </div>`;
 }
 
 async function analyze() {
@@ -293,9 +496,10 @@ async function analyze() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
     });
-    if (!r.ok) throw new Error((await r.json()).detail || r.status);
+    if (!r.ok) throw new Error(await errText(r));
     lastPlan = await r.json();
     renderPlan(lastPlan);
+    saveState();
   } catch (e) {
     $("plan-content").innerHTML = `<div class="expert-note" style="border-color:var(--danger)">Backend hatası: ${e}. Lütfen lokal sunucunun (port 8642) çalıştığından emin olun.</div>`;
     $("loading-view").style.display = "none";
@@ -372,6 +576,7 @@ function renderPlan(plan) {
   ` : "";
 
   $("plan-content").innerHTML = `
+    ${renderFeasibility(plan.bid_feasibility)}
     ${rationaleHtml}
     ${econHtml}
     ${compIntelHtml}
@@ -399,8 +604,19 @@ function renderPlan(plan) {
 
 // --- STEP 5: DOWNLOAD ---
 async function downloadBulksheet() {
-  if (!lastPlan) return;
   const btn = $("btn-dl");
+  if (!lastPlan) {
+    // Popup yeniden acildiysa bellekteki plan gitmis olur; kayitliyi geri yukle.
+    try {
+      const s = (await chrome.storage.local.get("ppc_state")).ppc_state;
+      if (s && s.lastPlan) lastPlan = s.lastPlan;
+    } catch (_) {}
+  }
+  if (!lastPlan) {
+    btn.textContent = "Önce Analiz Et";
+    setTimeout(() => { btn.textContent = "⬇️ Bulk Sheet İndir (.xlsx)"; }, 3000);
+    return;
+  }
   btn.textContent = "Hazırlanıyor...";
   btn.disabled = true;
   
@@ -410,23 +626,28 @@ async function downloadBulksheet() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(lastPlan),
     });
-    if (!r.ok) throw new Error(r.status);
+    if (!r.ok) throw new Error(await errText(r));
     const blob = await r.blob();
-    const reader = new FileReader();
-    reader.onload = function() {
-      const dataUrl = reader.result;
-      const brand = (lastPlan.product.brand || lastPlan.product.title || "launch").replace(/[^a-z0-9]+/gi, "-").slice(0, 24);
-      chrome.downloads.download({
-        url: dataUrl,
-        filename: `${brand}-launch-bulksheet.xlsx`,
-        saveAs: true
-      });
-      btn.textContent = "✅ İndirildi";
-    };
-    reader.readAsDataURL(blob);
+    if (!blob || blob.size === 0) throw new Error("Bos dosya");
+
+    const p = lastPlan.product || {};
+    const brand = (p.brand || p.title || "launch")
+      .replace(/[^a-z0-9]+/gi, "-").slice(0, 24) || "launch";
+    const filename = `${brand}-launch-bulksheet.xlsx`;
+    // Chrome, chrome.downloads'a data: URL kabul etmez; blob: URL sart.
+    const url = URL.createObjectURL(blob);
+
+    // Anchor birincil yol: saveAs dialogu popup'i kapatmaz, blob URL yasar.
+    // chrome.downloads + saveAs:true kullanilirsa popup kapanir, blob revoke olur
+    // ve indirme sessizce basarisiz olur.
+    const a = document.createElement("a");
+    a.href = url; a.download = filename;
+    document.body.appendChild(a); a.click(); a.remove();
+    btn.textContent = "✅ İndirildi";
+    setTimeout(() => URL.revokeObjectURL(url), 60000);
   } catch (e) {
     btn.textContent = "İndirme Hatası!";
-    console.error(e);
+    console.error("Bulksheet indirme hatasi:", e);
   } finally {
     setTimeout(() => { btn.textContent = "⬇️ Bulk Sheet İndir (.xlsx)"; btn.disabled = false; }, 3000);
   }
@@ -438,6 +659,12 @@ $("btn-step-1-next").addEventListener("click", () => goToStep(2));
 $("btn-step-2-next").addEventListener("click", () => goToStep(3));
 $("btn-analyze").addEventListener("click", analyze);
 $("btn-dl").addEventListener("click", downloadBulksheet);
+
+// Adim gecis butonlari: inline onclick MV3 CSP'sinde calismaz, burada baglaniyor.
+[1, 2, 3, 4, 5].forEach((n) => {
+  const b = $(`btn-goto-${n}`);
+  if (b) b.addEventListener("click", () => goToStep(n));
+});
 
 if ($("api-settings-toggle")) {
   $("api-settings-toggle").addEventListener("click", () => {
@@ -467,5 +694,13 @@ document.addEventListener("DOMContentLoaded", () => {
       }
     });
   }
-  rescan();
+  // Once kayitli durumu geri yukle; yoksa sayfayi tara. Boylece popup
+  // kapanip acildiginda yapilanlar kaybolmaz.
+  restoreState().then((restored) => { if (!restored) rescan(); });
+});
+
+// Form alanlarindaki her degisiklik aninda saklansin.
+FORM_FIELDS.forEach((id) => {
+  const el = $(id);
+  if (el) el.addEventListener("input", saveState);
 });

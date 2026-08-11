@@ -51,13 +51,17 @@
     background: rgba(11, 14, 20, 0.85);
     backdrop-filter: blur(24px);
     position: sticky; top: 0; z-index: 100;
-    flex-wrap: nowrap; /* Do not wrap, keep it a single line */
-    overflow-x: auto; /* Allow scrolling if screen is too small */
-    -ms-overflow-style: none; scrollbar-width: none; /* Hide scrollbar for a clean look */
+    /* Sarmali olmali: 11 buton 1440px ekrana sigmiyordu ve overflow-x:auto +
+       gizli scrollbar yuzunden "Amazon'a Yukle" gibi ANA aksiyonlar ekran
+       disinda kalip hic kesfedilemiyordu. */
+    flex-wrap: wrap; row-gap: 10px;
     box-shadow: 0 4px 30px rgba(0, 0, 0, 0.3);
   }
-  header::-webkit-scrollbar { display: none; }
-  .h-group { display: flex; align-items: center; gap: 12px; flex-wrap: nowrap; flex-shrink: 0; }
+  .h-group { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  @media (max-width: 900px){
+    header{padding:12px 16px}
+    header h1{font-size:17px}
+  }
   header h1 { font-size: 20px; font-weight: 700; display: flex; align-items: baseline; gap: 8px; letter-spacing: -0.3px; }
   header h1 span { color: var(--accent); font-weight: 800; text-shadow: 0 0 16px var(--accent-glow); }
   header h1 .ver { font-size: 11px; color: rgba(255,255,255,0.4); font-weight: 600; letter-spacing: 1.5px; text-transform: uppercase; background: rgba(255,255,255,0.05); padding: 2px 6px; border-radius: 4px; }
@@ -118,6 +122,36 @@
     border-color: var(--accent); color: var(--accent);
     background: rgba(245, 158, 11, 0.05); box-shadow: 0 0 24px var(--accent-glow);
   }
+  /* Firsat Radari - yonlendirme panelleri */
+  .opp-plan { display:grid; grid-template-columns:repeat(auto-fit,minmax(230px,1fr));
+    gap:8px; margin:12px 0 4px; }
+  .opp-step { border:1px solid rgba(255,255,255,0.09); border-radius:8px; padding:10px 12px;
+    background:rgba(255,255,255,0.02); cursor:pointer; transition:.13s;
+    display:flex; flex-direction:column; }
+  .opp-step:hover { background:rgba(96,165,250,0.09); border-color:rgba(96,165,250,0.45);
+    transform:translateY(-1px) }
+  .opp-step.on { border-color:#60a5fa; background:rgba(96,165,250,0.13);
+    box-shadow:0 0 0 1px rgba(96,165,250,0.35) }
+  .opp-step .rk { font-size:11px; font-weight:700; color:#60a5fa; letter-spacing:.4px }
+  .opp-step h6 { margin:3px 0 5px; font-size:13px }
+  .opp-step .mt { font-size:10.5px; color:var(--muted); margin-top:6px }
+  .opp-step .go { margin-top:auto; padding-top:7px; font-size:11px; font-weight:600;
+    color:#60a5fa; opacity:.75 }
+  .opp-step.on .go { opacity:1 }
+  .opp-book { border:1px solid rgba(96,165,250,0.25); border-radius:8px; padding:12px 14px;
+    margin:10px 0; background:rgba(96,165,250,0.05); }
+  .opp-book ol { margin:8px 0 0 0; padding-left:2px; list-style:none }
+  .opp-book li { font-size:12.5px; line-height:1.65; margin-bottom:7px;
+    padding-left:10px; border-left:2px solid rgba(96,165,250,0.3) }
+  .act { font-size:11px; line-height:1.5; margin-top:4px; padding-left:7px;
+    border-left:2px solid transparent }
+  .act.bad  { border-left-color:#f87171; color:#fca5a5 }
+  .act.warn { border-left-color:#fbbf24; color:#fcd34d }
+  .act.info { border-left-color:#60a5fa; color:#93c5fd }
+  .act.good { border-left-color:#4ade80; color:#86efac }
+  /* Firsat Radari - verisi olmayan markada tek satirlik ipucu */
+  .opp-hint { border: 1px dashed rgba(255,255,255,0.14); border-radius: 8px;
+    padding: 9px 13px; margin: 10px 0 4px; font-size: 12.5px; line-height: 1.6; }
   /* tabs */
   .tabs { display: flex; gap: 10px; margin: 20px 0 16px; flex-wrap: wrap }
   .tab {
@@ -269,6 +303,62 @@
   .pbar div{display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:600;color:#111;transition:.2s}
   .pbar-tos{background:var(--green)} .pbar-pp{background:var(--blue)} .pbar-rest{background:var(--muted)}
   /* Section header - profesyonel divider */
+  /* ---- Gorunum sekmeleri (uygulama coklu sayfa) ---- */
+  .viewnav{position:sticky;top:var(--hdr,64px);z-index:40;display:flex;gap:6px;
+    flex-wrap:wrap;align-items:center;padding:9px 0;margin:8px 0 14px;
+    background:var(--bg,#0b0f17);border-bottom:1px solid var(--border)}
+  .viewnav button{position:relative;padding:8px 15px;font-size:12.5px;font-weight:600;
+    border-radius:8px;background:transparent;border:1px solid transparent;
+    color:var(--muted);cursor:pointer;transition:.16s;white-space:nowrap;
+    display:inline-flex;align-items:center;gap:7px}
+  .viewnav button:hover{background:rgba(255,255,255,.05);color:var(--text)}
+  .viewnav button.on{background:rgba(96,165,250,.14);border-color:rgba(96,165,250,.45);
+    color:#bfdbfe}
+  /* aktif sekmenin alt cizgisi - hangi sayfadasin net olsun */
+  .viewnav button.on::after{content:'';position:absolute;left:14px;right:14px;bottom:-10px;
+    height:2px;background:var(--accent);border-radius:2px}
+  .viewnav .cnt{font-size:10.5px;font-weight:700;padding:1px 7px;border-radius:9px;
+    background:rgba(255,255,255,.1);color:var(--text)}
+  .viewnav button.on .cnt{background:rgba(96,165,250,.35);color:#fff}
+  .viewnav .cnt.alert{background:rgba(248,113,113,.25);color:#fca5a5}
+  .viewnav .sp{flex:1}
+
+  /* Sayfa gecisi: gorunum degisince kisa bir yukselerek belirme */
+  .view{display:none}
+  .view.on{display:block;animation:viewIn .26s cubic-bezier(.22,.9,.3,1)}
+  @keyframes viewIn{from{opacity:0;transform:translateY(9px)}to{opacity:1;transform:none}}
+  @media (prefers-reduced-motion:reduce){
+    .view.on{animation:none}
+  }
+
+  /* ---- Bugun ne yapmaliyim (beyin) ---- */
+  .today-hero{display:flex;gap:20px;flex-wrap:wrap;align-items:center;
+    border:1px solid rgba(96,165,250,.28);border-radius:10px;padding:13px 16px;
+    background:linear-gradient(90deg,rgba(96,165,250,.10),rgba(52,211,153,.05));
+    margin-bottom:12px}
+  .today-hero .big{font-size:21px;font-weight:800}
+  .today-item{display:flex;gap:13px;align-items:flex-start;padding:12px 14px;
+    border:1px solid var(--border);border-radius:9px;margin-bottom:8px;
+    background:rgba(255,255,255,.02);transition:.14s}
+  .today-item:hover{border-color:rgba(96,165,250,.45);background:rgba(96,165,250,.06)}
+  .today-item .rk{flex-shrink:0;width:25px;height:25px;border-radius:50%;
+    background:rgba(96,165,250,.18);color:#93c5fd;font-weight:800;font-size:12px;
+    display:flex;align-items:center;justify-content:center}
+  .today-item.data .rk{background:rgba(251,191,36,.18);color:#fcd34d}
+  .today-item .bd{flex:1;min-width:0}
+  .today-item h6{font-size:13.5px;margin:0 0 3px}
+  .today-item .why{font-size:12px;color:var(--muted);line-height:1.55}
+  .today-item .act{font-size:11.5px;color:#93c5fd;margin-top:5px;border:0;padding:0}
+  .today-item .rt{flex-shrink:0;text-align:right;min-width:96px}
+  .today-item .amt{font-size:15px;font-weight:800;color:#4ade80}
+  .today-item .amt.save{color:#fcd34d}
+  .today-item .tags{font-size:10.5px;color:var(--muted);margin-top:3px}
+  .today-item .go{margin-top:6px;font-size:11px;padding:3px 10px}
+  /* Basa don */
+  #toTop{position:fixed;right:18px;bottom:88px;z-index:60;display:none;
+    width:38px;height:38px;border-radius:50%;border:1px solid var(--border);
+    background:rgba(20,26,38,.92);color:var(--text);cursor:pointer;font-size:15px}
+  #toTop:hover{border-color:var(--accent);color:var(--accent)}
   .sec-h{display:flex;align-items:center;gap:10px;margin:22px 0 12px}
   .sec-h b{font-size:13px;letter-spacing:.3px;color:var(--text);text-transform:uppercase;font-weight:700}
   .sec-h::before{content:'';display:inline-block;width:4px;height:14px;background:var(--accent);border-radius:2px;margin-right:4px}
@@ -522,7 +612,8 @@
     <div id="mgrBadge" class="mgr-badge" style="display:none" title="Denetçi Müdür — her AI çıktısını kontrol eder">🛡 Müdür: Standby</div>
     <button id="histBtn" style="display:none" onclick="openHistory()">⟲ Geçmiş</button>
     <button id="aiBtn" style="display:none" onclick="runAI()">🤖 AI Strateji</button>
-    <button id="applyBtn" style="display:none" onclick="openApplyDlg()">📋 Rehber</button>
+    <button id="applyBtn" style="display:none" onclick="openApplyDlg()"
+      title="Onayladığın önerileri Amazon'da nasıl uygularsın">📋 Uygulama Adımları</button>
     <button class="primary" id="bulkPrimary" style="display:none" onclick="openBulkWizard()" title="Adım adım Amazon'a yükle">📦 Amazon'a Yükle</button>
     <button id="exportBtn" style="display:none" onclick="exportFile()" title="Manuel referans için sade Excel">⬇ Excel (manuel)</button>
   </div>
@@ -705,7 +796,8 @@
       <div class="bb-name" id="bbName">—</div>
     </div>
     <div id="dropTop" class="drop-top">
-      <div>📂 <b>Raporları buraya sürükle</b> veya tıkla — Search Term / Targeting / Placement / Campaign</div>
+      <div>📂 <b>Raporları buraya sürükle</b> veya tıkla — Search Term / Targeting / Placement / Campaign
+        <span style="opacity:.75">· + Brand Analytics (Arama Terimi / Katalog / Sepet)</span></div>
       <div class="muted small" style="margin-top:3px">CSV veya XLSX · <b id="bbNameInline">—</b> markasına yüklenecek</div>
       <input type="file" id="fileInTop" multiple accept=".csv,.xlsx" style="display:none">
     </div>
@@ -724,68 +816,87 @@
     <button onclick="openExtDlg()" title="Amazon sayfasından ürünü otomatik çeken uzantı">🧩 Uzantıyı indir & kur</button>
   </div>
 
+  <!-- Gorunum sekmeleri: uygulama tek uzun sayfa degil, ayri sayfalar -->
+  <nav class="viewnav" id="viewNav"></nav>
+
   <!-- Overview strip -->
   <div id="alarmStrip"></div>
 
   <!-- KPI Ribbon -->
   <div id="kpiRibbon" class="kpi-ribbon"></div>
 
-  <!-- Section: sağlık & öne çıkanlar -->
-  <div class="sec-h"><b>Performans Özeti</b><span class="sub">sağlık skoru ve kritik alanlar</span><span class="line"></span></div>
-  <div class="hero" id="hero"></div>
+  <!-- ===== GORUNUM: Firsat Radari ===== -->
+  <section class="view" data-view="opp">
+    <div id="oppSecH" class="sec-h" style="display:none"><b>📈 Fırsat Radarı</b><span class="sub">Brand Analytics — pazarda para var ama sen orada yoksun</span><span class="line"></span></div>
+    <div id="oppPanel"></div>
+  </section>
 
-  <!-- Kâr banner -->
-  <div id="profitBanner"></div>
+  <!-- ===== GORUNUM: Genel Bakis ===== -->
+  <section class="view" data-view="home">
+    <div class="sec-h"><b>🧠 Bugün Ne Yapmalıyım?</b><span class="sub">tüm modüller tek listede — en çok para getiren önce</span><span class="line"></span></div>
+    <div id="todayPanel"></div>
 
-  <!-- Section: derinlemesine metrikler -->
-  <div class="sec-h"><b>Portföy Metrikleri</b><span class="sub">yapı, dağılım, en iyi / en kötü</span><span class="line"></span></div>
-  <div class="metric-groups" id="metricGroups"></div>
-
-  <!-- Section: kampanya bazlı öneriler -->
-  <div class="sec-h"><b>🎯 Kampanya Bazlı Öneriler</b><span class="sub">yüksek harcamalı ve acil olanlar önce — her kampanyaya spesifik aksiyonlar</span><span class="line"></span></div>
-  <div id="campAdvisor"></div>
-
-  <!-- Section: grafikler -->
-  <div class="sec-h"><b>Görsel Analiz</b><span class="sub">trend, dağılım, kampanya karşılaştırma</span><span class="line"></span></div>
-  <div class="charts" id="charts">
-    <div class="chart-card"><h5>📈 Trend (Yükleme Bazında)</h5><div class="chart-wrap"><canvas id="chTrend"></canvas></div></div>
-    <div class="chart-card"><h5>🎯 Match Type Dağılımı</h5><div class="chart-wrap"><canvas id="chMatch"></canvas></div></div>
-    <div class="chart-card"><h5>🏆 En Yüksek Harcama Kampanyaları</h5><div class="chart-wrap"><canvas id="chCamp"></canvas></div></div>
-  </div>
-
-
-  <div class="tabs" id="tabs"></div>
-
-  <div class="card" id="recPanel">
-    <div style="display:flex;gap:10px;margin-bottom:10px;align-items:center;flex-wrap:wrap">
-      <b id="recTitle"></b>
-      <div style="flex:1"></div>
-      <button class="cpy" onclick="copyAllKeywords()">📋 Kelimeleri Kopyala</button>
-      <button class="cpy" onclick="copyTSV()">📋 Tablo (TSV) Kopyala</button>
-      <button class="ok" onclick="bulkAction('approved', 'tab')" style="border-radius: 6px 0 0 6px">✓ Sekmeyi Onayla</button>
-      <button class="no" onclick="bulkAction('rejected', 'tab')" style="border-radius: 0 6px 6px 0; margin-left:-1px; margin-right: 12px">✗ Sekmeyi Reddet</button>
-      <button class="primary" onclick="bulkAction('approved', 'all')" style="padding-left: 20px; padding-right: 20px">🚀 TÜMÜNÜ ONAYLA (HER ŞEYİ)</button>
+    <div class="sec-h"><b>Performans Özeti</b><span class="sub">sağlık skoru ve kritik alanlar</span><span class="line"></span></div>
+    <div class="hero" id="hero"></div>
+    <div id="profitBanner"></div>
+    <div class="sec-h"><b>Portföy Metrikleri</b><span class="sub">yapı, dağılım, en iyi / en kötü</span><span class="line"></span></div>
+    <div class="metric-groups" id="metricGroups"></div>
+    <div class="card" style="margin-top:16px" id="campCard">
+      <b>En Çok Harcayan Kampanyalar</b>
+      <div style="overflow-x:auto"><table class="topcamps" id="campTable"></table></div>
     </div>
-    <div class="guide" id="tabGuide"></div>
-    <div style="overflow-x:auto"><table id="recTable"></table></div>
-  </div>
+  </section>
 
-  <div id="aiPanel" class="card">
-    <div style="display:flex;align-items:center;gap:12px;margin-bottom:10px">
-      <b style="font-size:15px">🤖 AI Strateji Raporu</b>
-      <span id="revBadge"></span>
-      <div style="flex:1"></div>
-      <span class="muted small" id="aiMeta"></span>
+  <!-- ===== GORUNUM: Kampanya Onerileri ===== -->
+  <section class="view" data-view="camp">
+    <div class="sec-h"><b>🎯 Kampanya Bazlı Öneriler</b><span class="sub">yüksek harcamalı ve acil olanlar önce — her kampanyaya spesifik aksiyonlar</span><span class="line"></span></div>
+    <div id="campAdvisor"></div>
+  </section>
+
+  <!-- ===== GORUNUM: Grafikler ===== -->
+  <section class="view" data-view="charts">
+    <div class="sec-h"><b>Görsel Analiz</b><span class="sub">trend, dağılım, kampanya karşılaştırma</span><span class="line"></span></div>
+    <div class="charts" id="charts">
+      <div class="chart-card"><h5>📈 Trend (Yükleme Bazında)</h5><div class="chart-wrap"><canvas id="chTrend"></canvas></div></div>
+      <div class="chart-card"><h5>🎯 Match Type Dağılımı</h5><div class="chart-wrap"><canvas id="chMatch"></canvas></div></div>
+      <div class="chart-card"><h5>🏆 En Yüksek Harcama Kampanyaları</h5><div class="chart-wrap"><canvas id="chCamp"></canvas></div></div>
     </div>
-    <div id="aiLoad"><span class="spin"></span> AI stratejisi üretiliyor + denetçi kontrol ediyor... (30-90 sn)</div>
-    <div id="aiBody"></div>
-  </div>
+  </section>
 
-  <div class="card" style="margin-top:16px" id="campCard">
-    <b>En Çok Harcayan Kampanyalar</b>
-    <div style="overflow-x:auto"><table class="topcamps" id="campTable"></table></div>
-  </div>
+  <!-- ===== GORUNUM: Oneri Listesi ===== -->
+  <section class="view" data-view="recs">
+    <div class="sec-h"><b>✅ Öneri Listesi</b><span class="sub">onayla / reddet — sonra Amazon'a aktar</span><span class="line"></span></div>
+    <div class="tabs" id="tabs"></div>
+    <div class="card" id="recPanel">
+      <div style="display:flex;gap:10px;margin-bottom:10px;align-items:center;flex-wrap:wrap">
+        <b id="recTitle"></b>
+        <div style="flex:1"></div>
+        <button class="cpy" onclick="copyAllKeywords()">📋 Kelimeleri Kopyala</button>
+        <button class="cpy" onclick="copyTSV()">📋 Tablo (TSV) Kopyala</button>
+        <button class="ok" onclick="bulkAction('approved', 'tab')" style="border-radius: 6px 0 0 6px">✓ Sekmeyi Onayla</button>
+        <button class="no" onclick="bulkAction('rejected', 'tab')" style="border-radius: 0 6px 6px 0; margin-left:-1px; margin-right: 12px">✗ Sekmeyi Reddet</button>
+        <button class="primary" onclick="bulkAction('approved', 'all')" style="padding-left: 20px; padding-right: 20px">🚀 TÜMÜNÜ ONAYLA (HER ŞEYİ)</button>
+      </div>
+      <div class="guide" id="tabGuide"></div>
+      <div style="overflow-x:auto"><table id="recTable"></table></div>
+    </div>
+  </section>
+
+  <!-- ===== GORUNUM: AI Strateji ===== -->
+  <section class="view" data-view="ai">
+    <div id="aiPanel" class="card">
+      <div style="display:flex;align-items:center;gap:12px;margin-bottom:10px">
+        <b style="font-size:15px">🤖 AI Strateji Raporu</b>
+        <span id="revBadge"></span>
+        <div style="flex:1"></div>
+        <span class="muted small" id="aiMeta"></span>
+      </div>
+      <div id="aiLoad"><span class="spin"></span> AI stratejisi üretiliyor + denetçi kontrol ediyor... (30-90 sn)</div>
+      <div id="aiBody"></div>
+    </div>
+  </section>
 </div>
+<button id="toTop" onclick="scrollTo({top:0,behavior:'smooth'})" title="Başa dön">↑</button>
 
 <div class="wrap" id="empty">
   <div class="card" style="text-align:center;padding:44px 50px">
@@ -1051,9 +1162,11 @@ function clearBrandView(){
   // renderHero/renderProInsights tarafindan dinamik olusturuluyor - bunlar da temizlenmeli.
   ['kpiRibbon','metricGroups','alarmStrip','campAdvisor','hero','uploadInfo',
    'aiBody','revBadge','aiMeta','recTable','tabs','tabGuide',
-   'priorityHolder','proHolder']
+   'priorityHolder','proHolder','oppPanel','todayPanel']
     .forEach(k=>{const el=$(k);if(el)el.innerHTML='';});
   ['trend','match','camp'].forEach(k=>destroyChart(k));
+  // Onceki markanin firsat verisi yeni markaya sizmasin
+  oppData=null; oppSel=new Set(); setOppVisible(false);
   recs=[];
   const cc=$('campCard');if(cc)cc.style.display='none';
   const ap=$('aiPanel');if(ap)ap.style.display='none';
@@ -1083,7 +1196,414 @@ async function selectBrand(id){
     $('chatBrand').textContent=b.name?`— ${b.name}`:'';
     loadChatHistory(gen);
   }
-  await Promise.all([loadSummary(gen),loadRecs(gen),loadAILatest(gen),loadInsights(gen)]);
+  await Promise.all([loadSummary(gen),loadRecs(gen),loadAILatest(gen),
+                     loadInsights(gen),loadOpportunities(gen)]);
+  if(!brandStale(gen)){ initSecs(); loadToday(gen); }
+}
+
+// ---------- Firsat Radari ----------
+let oppData=null, oppBucket='WHITESPACE', oppSel=new Set(), oppProd='', oppShow=15;
+
+const OPP_META={
+  WHITESPACE:{t:'🟢 Boşluk',d:'Pazar aktif, sen bu kelimede hiç yoksun. En büyük ciro potansiyeli — yeni kampanya aç.'},
+  SCALE:{t:'🔵 Büyüt',d:'Tıklama payın gösterim payından büyük: listingin güçlü ama yeterince görünmüyorsun. Bid/bütçe artır.'},
+  CONQUEST:{t:'🟠 Rakip Marka',d:'Rakip marka araması. Geçerli hamle ama düşük CVR bekle — küçük bütçeyle test et.'},
+  RETRY:{t:'🟡 Tekrar Dene',d:'Payın yok ama daha önce reklam verip tutturamamışsın. Yeniden açmadan önce sebebini çöz.'},
+  LEAK:{t:'🔴 Kaçak',d:'Trafiği alıyorsun ama satamıyorsun. Bu bir bid sorunu DEĞİL — listing/fiyat işi.'},
+  DEFEND:{t:'🛡 Savun',d:'Bu kelimelerde lidersin. Bid’i koru, rakiplere kaptırma.'},
+};
+
+async function loadOpportunities(gen){
+  const bid=brandId;
+  try{
+    const r=await fetch(`/api/brands/${bid}/opportunities`);
+    if(brandStale(gen))return;
+    const d=await r.json();
+    if(brandStale(gen))return;
+    if(!r.ok){setOppVisible(false);$('oppPanel').innerHTML='';return;}
+    oppData=d; oppSel=new Set();
+    if(d.empty){
+      // Verisi olmayan markada koca kart basma - dashboard'i asagiya iter.
+      // Tek satirlik ipucu yeter: yolu kapatma, nereden alinacagini soyle.
+      setOppVisible(false);
+      $('oppPanel').innerHTML=`<div class="opp-hint">📈 <b>Fırsat Radarı kapalı</b> —
+        bu markaya Brand Analytics raporu yüklenmemiş.
+        <span class="muted">Seller Central › Marka › Marka Analizi › <b>Arama Terimi Performansı (Marka Görünümü)</b>
+        raporunu indirip yukarıdaki alana sürükle. Katalog ve Sepet raporları da işe yarar.</span></div>`;
+      return;
+    }
+    if(!(oppData.buckets[oppBucket]||[]).length){
+      oppBucket=Object.keys(OPP_META).find(k=>(oppData.buckets[k]||[]).length)||'WHITESPACE';
+    }
+    setOppVisible(true);
+    renderOpportunities();
+  }catch(e){
+    if(brandStale(gen))return;
+    setOppVisible(false);
+    $('oppPanel').innerHTML=`<div class="opp-hint muted">Fırsat analizi yüklenemedi: ${esc(String(e))}</div>`;
+  }
+}
+
+function setOppVisible(on){
+  const h=$('oppSecH'); if(h)h.style.display=on?'':'none';
+  buildViewNav();
+}
+
+function renderOpportunities(){
+  const d=oppData; if(!d||d.empty)return;
+  const s=d.summary, pot=s.whitespace_potential||{};
+  const per=(d.period==='monthly')?'aylık':'çeyreklik';
+  const money=v=>'$'+Number(v||0).toLocaleString('en-US',{maximumFractionDigits:0});
+
+  const tabs=Object.keys(OPP_META).map(k=>{
+    const n=(d.buckets[k]||[]).length; if(!n)return '';
+    return `<div class="tab ${k===oppBucket?'active':''}" onclick="oppBucket='${k}';oppSel=new Set();oppShow=15;renderOpportunities()">${OPP_META[k].t}<span class="n">${n}</span></div>`;
+  }).join('');
+
+  // Urun filtresi: hangi kelimenin hangi urune reklam verecegini gozle
+  // dogrulayabilmek icin. Yanlis eslesmis kelimeyi burada gorup atlarsin.
+  const all=d.buckets[oppBucket]||[];
+  const prods=[...new Map(all.filter(o=>o.product_asin)
+    .map(o=>[o.product_asin,{asin:o.product_asin,title:o.product_title||'',
+      n:all.filter(x=>x.product_asin===o.product_asin).length}])).values()]
+    .sort((a,b)=>b.n-a.n);
+  if(oppProd && !prods.some(p=>p.asin===oppProd)) oppProd='';
+  const list=oppProd?all.filter(o=>o.product_asin===oppProd):all;
+
+  const prodBar=prods.length?`<div style="display:flex;gap:6px;flex-wrap:wrap;margin:10px 0 6px;align-items:center">
+    <span class="muted small">Ürün:</span>
+    <button class="cpy" style="${oppProd?'':'outline:1px solid #60a5fa'}" onclick="oppProd='';oppSel=new Set();oppShow=15;renderOpportunities()">Tümü (${all.length})</button>
+    ${prods.map(p=>`<button class="cpy" style="${oppProd===p.asin?'outline:1px solid #60a5fa':''}"
+      title="${esc(p.title)}" onclick="oppProd='${p.asin}';oppSel=new Set();oppShow=15;renderOpportunities()">${esc(p.title.split('-')[0].split('|')[0].trim().slice(0,26)||p.asin)} (${p.n})</button>`).join('')}
+  </div>`:'';
+
+  // Her satirda gerekce + uyari satirlari var; 50 satir tek seferde ~6.500px
+  // ediyordu. Once en degerli 15'i, gerisi istege bagli.
+  const shown=list.slice(0,oppShow);
+  const rows=shown.map((o,i)=>{
+    const gap=o.price_gap;
+    const gapTxt=gap==null?'—':(gap>0?`<span style="color:#f87171">+$${gap.toFixed(2)} pahalı</span>`:`<span style="color:#4ade80">$${Math.abs(gap).toFixed(2)} ucuz</span>`);
+    const hist=o.ad_history?`<span title="Bu kelimede zaten reklam veriyorsun">⚠ ${o.ad_history.clicks} tık / $${o.ad_history.spend.toFixed(0)}${o.ad_history.acos!=null?` · ACOS %${o.ad_history.acos}`:' · satış yok'}</span>`:'<span class="muted">hiç reklam yok</span>';
+    const sel=oppSel.has(o.query)?'checked':'';
+    return `<tr>
+      <td><input type="checkbox" ${sel} onchange="toggleOpp('${esc(o.query).replace(/'/g,"\\'")}')"></td>
+      <td><b>${esc(o.query)}</b><div class="muted small">${esc(o.reason)}</div>
+        ${(o.actions||[]).map(a=>a.suspect_brands
+          ?`<div class="act ${a.level}">${esc(a.text)}
+             ${a.suspect_brands.map(b=>`<button class="cpy" style="padding:1px 6px;font-size:10px;margin-left:4px"
+               onclick="oppBrandEdit('${esc(b)}',null)">✓ "${esc(b)}" marka</button>`).join('')}</div>`
+          :`<div class="act ${a.level}">${esc(a.text)}</div>`).join('')}</td>
+      <td class="small">${o.product_asin?`<span title="${esc(o.product_title||'')}&#10;eşleşen: ${(o.product_match||[]).join(', ')}">${esc((o.product_title||'').split('-')[0].split('|')[0].trim().slice(0,24)||o.product_asin)}</span><div class="muted" style="font-size:10px">${o.product_asin}</div>`:'<span class="muted">—</span>'}</td>
+      <td style="text-align:right">${Number(o.volume).toLocaleString('en-US')}</td>
+      <td style="text-align:right">%${o.imp_share} / %${o.click_share} / %${o.pur_share}</td>
+      <td style="text-align:right">%${o.market_cvr_pct} → <b>%${o.expected_cvr_pct}</b></td>
+      <td style="text-align:right"><b>$${o.start_bid}</b><div class="muted small">max $${o.max_bid}</div></td>
+      <td style="text-align:right">${gapTxt}</td>
+      <td style="text-align:right"><b>${money(o.est_revenue)}</b><div class="muted small">${money(o.est_spend)} harcama</div></td>
+      <td class="small">${hist}</td>
+    </tr>`;
+  }).join('');
+
+  // Oncelik plani: hangi kovadan baslamali. Sadece "Tumu" gorunumunde goster,
+  // urun filtresi acikken kullanici zaten tek ise odaklanmis durumda.
+  const plan=(d.action_plan||[]).length?`<div class="opp-plan">${d.action_plan.map(a=>{
+    const on=a.bucket===oppBucket;
+    return `<div class="opp-step ${on?'on':''}" onclick="oppGoto('${a.bucket}')">
+      <div class="rk">${a.rank}. ADIM · ${OPP_META[a.bucket]?OPP_META[a.bucket].t:a.bucket}</div>
+      <h6>${esc(a.title)}</h6>
+      <div class="muted small">${esc(a.detail)}</div>
+      <div class="mt">Efor: <b>${esc(a.effort)}</b> · Risk: <b>${esc(a.risk)}</b></div>
+      <div class="go">${on?'✓ Şu an bu adımdasın — tablo aşağıda':'→ Bu adımı aç'}</div>
+    </div>`;}).join('')}</div>`:'';
+
+  const pb=(d.playbooks||{})[oppBucket];
+  const book=pb?`<div class="opp-book">
+    <b>📋 ${esc(pb.title)}</b>
+    <div class="muted small" style="margin-top:4px">${esc(pb.why)}</div>
+    <ol>${pb.steps.map(s=>`<li>${esc(s)}</li>`).join('')}</ol></div>`:'';
+
+  // Negatif keyword paneli: hicbir urune uymayan terimler. Reklam gecmisinde
+  // para harcanmis olanlar "acil" - su anda akan kanama.
+  const ng=d.negatives||[], ns=s.negatives||{};
+  const negBox=ng.length?`<div style="margin-top:16px;border-top:1px solid rgba(255,255,255,0.08);padding-top:12px">
+    <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+      <b>🚫 Negatif keyword önerileri</b>
+      ${ns.urgent_count?`<span style="color:#f87171;font-weight:700">${ns.urgent_count} terimde şu an para yanıyor · $${Number(ns.total_waste).toFixed(2)} israf</span>`:''}
+      <div style="flex:1"></div>
+      <button class="cpy" onclick="oppCopyNeg(true)">📋 Sadece acil olanları kopyala</button>
+      <button class="cpy" onclick="oppCopyNeg(false)">📋 Hepsini kopyala (${ns.total_count||ng.length})</button>
+    </div>
+    <div class="muted small" style="margin-top:5px">Hiçbir ürününle eşleşmeyen terimler.
+      Phrase/broad kampanyalarına <b>negative exact</b> olarak ekle. Bulksheet'i phrase veya
+      broad indirirsen bunlar otomatik dahil edilir.</div>
+    <div style="overflow-x:auto;margin-top:8px;max-height:280px;overflow-y:auto"><table><tbody>
+      ${ng.slice(0,40).map(n=>`<tr>
+        <td>${n.urgent?'<span style="color:#f87171">●</span> ':'<span class="muted">○</span> '}<b>${esc(n.query)}</b></td>
+        <td style="text-align:right" class="small">${Number(n.volume||0).toLocaleString('en-US')}</td>
+        <td style="text-align:right" class="small">${n.wasted_spend>0?`<span style="color:#f87171">$${n.wasted_spend.toFixed(2)} · ${n.wasted_clicks} tık</span>`:'<span class="muted">—</span>'}</td>
+        <td class="small muted">${esc(n.why)}</td></tr>`).join('')}
+    </tbody></table></div></div>`:'';
+
+  // Rakip marka listesi editoru. Otomatik tespit guvenilir degil - hacim ve
+  // sorgu sayisi markayi jenerikten ayiramiyor. Asil mekanizma bu liste.
+  const bl=d.brand_lists||{competitor_brands:[],not_brands:[]};
+  const det=s.competitor_brands_detected||[];
+  const brandBox=`<div style="margin-top:14px;border-top:1px solid rgba(255,255,255,0.08);padding-top:12px">
+    <b>🏷 Rakip marka listesi</b>
+    <div class="muted small" style="margin-top:4px">Bu listedekiler <b>Rakip Marka</b> kovasına
+      gider: düşük CVR beklentisi, küçük bütçe. Veriden marka adını jenerik kelimeden
+      kesin ayıramıyoruz (<i>nizoral</i> 600K/2 sorgu ile <i>accessories</i> 309K/2 sorgu
+      aynı görünüyor), o yüzden <b>sadece senin onayladıkların uygulanır</b> —
+      aşağıdaki öneriler tıklayana kadar hiçbir şeyi değiştirmez.</div>
+    <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px;align-items:center">
+      ${det.length?det.map(t=>`<span class="cpy" style="cursor:default;outline:1px solid rgba(74,222,128,.4)">${esc(t)}
+        <b style="cursor:pointer;color:#f87171;margin-left:5px" title="Listeden çıkar"
+           onclick="oppBrandEdit(null,'${esc(t)}')">×</b></span>`).join(''):'<span class="muted small">Henüz rakip marka işaretlemedin.</span>'}
+    </div>
+    ${(s.competitor_brands_suspect||[]).length?`<div style="margin-top:9px">
+      <div class="muted small">💡 <b>Öneriler</b> — bunlar marka olabilir. Marka olanlara tıkla
+        (hacim yüksekten düşüğe sıralı, tanımadığını atla):</div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:5px">
+        ${s.competitor_brands_suspect.map(x=>`<span class="cpy" style="cursor:pointer;opacity:.85"
+          title="${Number(x.volume).toLocaleString('en-US')} arama hacmi — marka ise tıkla"
+          onclick="oppBrandEdit('${esc(x.token)}',null)">${esc(x.token)} <b style="color:#4ade80">+</b></span>`).join('')}
+      </div></div>`:''}
+    ${bl.not_brands.length?`<div class="muted small" style="margin-top:6px">Marka değil olarak işaretlediklerin:
+      ${bl.not_brands.map(t=>`<span class="cpy" style="cursor:pointer" title="Geri al"
+        onclick="oppBrandEdit('${esc(t)}',null)">${esc(t)} ↺</span>`).join(' ')}</div>`:''}
+    <div style="display:flex;gap:6px;margin-top:8px">
+      <input id="oppBrandIn" placeholder="Kaçan rakip markayı yaz (örn. neutrogena, toppik)"
+        style="padding:6px;flex:1;max-width:340px"
+        onkeydown="if(event.key==='Enter')oppBrandEdit($('oppBrandIn').value,null)">
+      <button class="cpy" onclick="oppBrandEdit($('oppBrandIn').value,null)">+ Rakip marka ekle</button>
+    </div>
+  </div>`;
+
+  const canExport=['WHITESPACE','CONQUEST','RETRY'].includes(oppBucket);
+  $('oppPanel').innerHTML=`
+  <div class="card">
+    <div style="display:flex;gap:18px;flex-wrap:wrap;align-items:center;margin-bottom:12px">
+      <div><span class="lbl">BOŞLUK POTANSİYELİ (${per})</span><br><b style="font-size:20px;color:#4ade80">${money(pot.period_revenue)}</b>
+        <span class="muted small"> ciro · ${money(pot.period_spend)} harcama · ACOS %${pot.blended_acos_pct??'—'}</span></div>
+      <div style="flex:1"></div>
+      <div class="muted small" style="max-width:420px;text-align:right">
+        Hedef ACOS <b>%${s.economics.target_acos_pct}</b> · break-even <b>%${s.economics.break_even_acos_pct}</b>
+        <br>Kanıtlanmış CVR tavanın: <b>%${s.brand_proven_cvr_pct}</b>
+      </div>
+    </div>
+    ${s.product_matching?'':`<div class="act warn" style="border-left-width:3px;padding:8px 10px;margin:10px 0;font-size:12px">
+      ⚠ <b>Ürün eşleştirme kapalı</b> — bu markaya <b>Katalog Performansı</b> raporu yüklenmemiş.
+      Kelimeler hangi ürüne ait olduğu bilinmeden öneriliyor, alakasız kelime çıkma riski yüksek
+      ve bulksheet hepsini tek ASIN'e bağlar. Marka Analizi › <b>Arama Katalog Performansı</b>
+      raporunu da yükle.</div>`}
+    ${plan}
+    <div id="oppTableTop" class="tabs" style="margin:0 0 12px;scroll-margin-top:70px">${tabs}</div>
+    <div class="guide">${OPP_META[oppBucket].d}</div>
+    ${book}
+    ${prodBar}
+    ${canExport?`<div style="display:flex;gap:8px;align-items:center;margin:10px 0;flex-wrap:wrap">
+      <button class="cpy" onclick="oppSelectAll(true)" title="Bu filtredeki tüm kelimeler (ekranda görünmeyenler dahil)">Tümünü seç (${list.length})</button>
+      <button class="cpy" onclick="oppSelectAll(false)">Temizle</button>
+      <span class="muted small" id="oppSelCount">${oppSel.size} seçili</span>
+      <div style="flex:1"></div>
+      <select id="oppMatch" style="padding:6px">
+        <option value="exact">Exact (kontrollü)</option>
+        <option value="phrase">Phrase (keşif)</option>
+        <option value="broad">Broad (geniş)</option>
+      </select>
+      <input id="oppSku" placeholder="SKU (boşsa ASIN)" style="padding:6px;width:150px">
+      <button class="primary" onclick="oppExport()">⬇ Bulksheet indir</button>
+    </div>`:`<div class="muted small" style="margin:10px 0">Bu kova bulksheet üretmez — mevcut kampanyalarda aksiyon gerektirir.</div>`}
+    <div style="overflow-x:auto"><table>
+      <thead><tr>
+        <th style="width:28px"></th><th>Arama terimi</th>
+        <th title="Bu kelime hangi ürüne reklam verecek">Ürün</th><th style="text-align:right">Hacim</th>
+        <th style="text-align:right" title="Gösterim / Tıklama / Satın alma payın">Payın (G/T/S)</th>
+        <th style="text-align:right" title="Pazar CVR → senin için beklenen CVR">CVR</th>
+        <th style="text-align:right">Başlangıç bid</th><th style="text-align:right">Fiyat farkı</th>
+        <th style="text-align:right">Tahmini ${per} ciro</th><th>Reklam geçmişi</th>
+      </tr></thead><tbody>${rows}</tbody></table></div>
+    ${list.length>oppShow?`<div style="text-align:center;margin-top:8px">
+      <button class="cpy" onclick="oppShow+=25;renderOpportunities()">
+        ↓ ${list.length-oppShow} tane daha göster</button>
+      <span class="muted small" style="margin-left:8px">${oppShow} / ${list.length}</span></div>`
+      :(oppShow>15&&list.length>15?`<div style="text-align:center;margin-top:8px">
+        <button class="cpy" onclick="oppShow=15;renderOpportunities()">↑ Daralt</button></div>`:'')}
+    <div class="muted small" style="margin-top:10px">${esc(s.assumptions.note)}</div>
+    ${brandBox}
+    ${negBox}
+    ${(d.basket||[]).length?`<div style="margin-top:14px"><b>🧺 Sepet analizi — product targeting adayları</b>
+      <div style="overflow-x:auto;margin-top:6px"><table><tbody>${d.basket.slice(0,10).map(b=>
+        `<tr><td class="small">${esc(b.source_title.slice(0,44))}</td><td class="small">→ ${esc(b.target_title.slice(0,44))}</td>
+         <td style="text-align:right">%${b.combination_pct}</td><td class="small">${esc(b.play)}</td>
+         <td><button class="cpy" onclick="copyTxt('${b.target_asin}')">${b.target_asin}</button></td></tr>`).join('')}
+      </tbody></table></div></div>`:''}
+  </div>`;
+}
+
+// Oncelik kartina tiklayinca: o kovaya gec, filtreleri sifirla ve tabloyu
+// gorunur yap. Sadece sekme degistirmek yetmiyordu - kartlar tablonun
+// uzerinde oldugu icin kullanici bir sey oldugunu fark etmiyordu.
+function oppGoto(bucket){
+  oppBucket=bucket; oppSel=new Set(); oppProd=''; oppShow=15;
+  renderOpportunities();
+  const t=$('oppTableTop');
+  if(t)t.scrollIntoView({behavior:'smooth',block:'start'});
+  toast(`${(OPP_META[bucket]||{}).t||bucket} — ${(oppData.buckets[bucket]||[]).length} kelime`);
+}
+
+function toggleOpp(q){ oppSel.has(q)?oppSel.delete(q):oppSel.add(q);
+  const el=$('oppSelCount'); if(el)el.textContent=`${oppSel.size} seçili`; }
+function oppSelectAll(on){
+  // Sadece EKRANDA GORUNEN (urun filtresinden gecen) kelimeleri sec - yoksa
+  // filtreyle gizlenmis kelimeler de bulksheet'e girer.
+  const all=oppData.buckets[oppBucket]||[];
+  const list=oppProd?all.filter(o=>o.product_asin===oppProd):all;
+  oppSel=on?new Set(list.map(o=>o.query)):new Set();
+  renderOpportunities();
+}
+function copyTxt(t){navigator.clipboard.writeText(t).then(()=>toast('Kopyalandı: '+t));}
+
+async function oppBrandEdit(add,remove){
+  const body={add:add?[add]:[],remove:remove?[remove]:[]};
+  if(!body.add.length&&!body.remove.length){toast('Marka adı gir');return;}
+  const r=await fetch(`/api/brands/${brandId}/competitor-brands`,
+    {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+  if(!r.ok){toast('Kaydedilemedi');return;}
+  toast(add?`"${add}" rakip marka olarak eklendi`:`"${remove}" listeden çıkarıldı`);
+  await loadOpportunities();   // siniflandirma degisti, yeniden hesapla
+}
+
+function oppCopyNeg(onlyUrgent){
+  const ng=(oppData.negatives||[]).filter(n=>!onlyUrgent||n.urgent);
+  if(!ng.length){toast('Liste boş');return;}
+  navigator.clipboard.writeText(ng.map(n=>n.query).join('\n'))
+    .then(()=>toast(`${ng.length} negatif keyword kopyalandı`));
+}
+
+async function oppExport(){
+  if(!oppSel.size){toast('Önce kelime seç');return;}
+  const body={queries:[...oppSel],bucket:oppBucket,
+              match:$('oppMatch').value,sku:($('oppSku').value||'').trim()};
+  const r=await fetch(`/api/brands/${brandId}/opportunities/export`,
+    {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+  if(!r.ok){toast('Hata: '+(await r.text()).slice(0,120));return;}
+  const blob=await r.blob(), a=document.createElement('a');
+  a.href=URL.createObjectURL(blob);
+  a.download=`firsat_${oppBucket.toLowerCase()}.xlsx`; a.click();
+  URL.revokeObjectURL(a.href);
+  toast(`${oppSel.size} kelime bulksheet olarak indirildi`);
+}
+
+/* ---------- Gorunum yonlendiricisi ----------
+   Uygulama tek uzun sayfa degil: her arac kendi sayfasinda. Adres cubugundaki
+   #hash ile calisir, boylece tarayici geri tusu ve yer imi de dogru calisir. */
+const VIEWS=[
+  {k:'home',  lbl:'📊 Genel Bakış'},
+  {k:'opp',   lbl:'📈 Fırsat Radarı'},
+  {k:'recs',  lbl:'✅ Öneriler'},
+  {k:'camp',  lbl:'🎯 Kampanyalar'},
+  {k:'charts',lbl:'📉 Grafikler'},
+  {k:'ai',    lbl:'🤖 AI Strateji'},
+];
+let curView='home';
+
+function viewCount(k){
+  try{
+    if(k==='recs') return {n:(recs||[]).length};
+    if(k==='opp'){
+      if(!oppData||oppData.empty)return null;
+      const c=oppData.summary.counts||{};
+      const n=Object.values(c).reduce((a,b)=>a+b,0);
+      const w=(oppData.summary.negatives||{}).urgent_count||0;
+      return n?{n,alert:w>0,tip:w?`${w} terimde para yanıyor`:''}:null;
+    }
+    if(k==='camp'){const n=$('campAdvisor').querySelectorAll('.card,.camp-card').length;return n?{n}:null;}
+  }catch(e){}
+  return null;
+}
+
+function buildViewNav(){
+  const nav=$('viewNav'); if(!nav)return;
+  nav.innerHTML=VIEWS.map(v=>{
+    if(v.k==='opp'&&$('oppSecH')&&$('oppSecH').style.display==='none'&&(!oppData||oppData.empty))
+      return '';   // Brand Analytics yoksa sekmeyi hic gosterme
+    const c=viewCount(v.k);
+    return `<button data-v="${v.k}" class="${v.k===curView?'on':''}"
+      ${c&&c.tip?`title="${esc(c.tip)}"`:''} onclick="showView('${v.k}')">
+      ${v.lbl}${c?`<span class="cnt ${c.alert?'alert':''}">${c.n}</span>`:''}</button>`;
+  }).join('');
+}
+
+function showView(k,push=true){
+  if(!VIEWS.some(v=>v.k===k))k='home';
+  curView=k;
+  document.querySelectorAll('#main .view').forEach(el=>
+    el.classList.toggle('on',el.dataset.view===k));
+  buildViewNav();
+  if(push&&location.hash!=='#'+k)history.pushState({v:k},'','#'+k);
+  // Gizli div'de olusan chart 0 boyutunda kalir - gorununce yeniden olcsun
+  if(k==='charts')setTimeout(()=>{try{Object.values(charts).forEach(c=>c&&c.resize())}catch(e){}},60);
+  scrollTo({top:0,behavior:'smooth'});
+}
+
+addEventListener('popstate',()=>showView((location.hash||'#home').slice(1),false));
+
+/* ---------- Bugun ne yapmaliyim (beyin) ---------- */
+async function loadToday(gen){
+  const bid=brandId;
+  try{
+    const r=await fetch(`/api/brands/${bid}/today`);
+    if(brandStale(gen))return;
+    const d=await r.json();
+    if(brandStale(gen)||!r.ok)return;
+    const s=d.summary||{}, items=d.items||[];
+    const m=v=>'$'+Number(v||0).toLocaleString('tr-TR',{maximumFractionDigits:0});
+    if(!items.length){
+      $('todayPanel').innerHTML=`<div class="card"><b>✅ Şu an acil bir iş yok.</b>
+        <div class="muted small" style="margin-top:4px">Yeni rapor yükleyince liste tazelenir.</div></div>`;
+      return;
+    }
+    $('todayPanel').innerHTML=`
+      <div class="today-hero">
+        <div><div class="lbl">AYLIK CİRO POTANSİYELİ</div><div class="big" style="color:#4ade80">${m(s.monthly_gain)}</div></div>
+        <div><div class="lbl">AYLIK TASARRUF</div><div class="big" style="color:#fcd34d">${m(s.monthly_save)}</div></div>
+        <div style="flex:1"></div>
+        <div class="muted small" style="max-width:290px;text-align:right">
+          ${items.length} iş sıraya alındı. Yukarıdan başla — liste
+          <b>en kolay ve en kesin kazanç</b> önce gelecek şekilde sıralı.</div>
+      </div>
+      ${items.map(i=>`<div class="today-item ${i.impact_kind==='veri'?'data':''}">
+        <div class="rk">${i.rank}</div>
+        <div class="bd">
+          <h6>${esc(i.title)}</h6>
+          <div class="why">${esc(i.why)}</div>
+          <div class="act">→ ${esc(i.action)}</div>
+        </div>
+        <div class="rt">
+          ${i.impact?`<div class="amt ${i.impact_kind==='tasarruf'?'save':''}">${m(i.impact)}</div>
+            <div class="tags">${i.impact_kind==='tasarruf'?'tasarruf/ay':'ciro/ay'}</div>`
+           :`<div class="tags" style="font-size:11px">${esc(i.impact_kind)}</div>`}
+          <div class="tags">⏱ ${esc(i.effort)}</div>
+          <button class="cpy go" onclick="showView('${i.view}')">Git →</button>
+        </div>
+      </div>`).join('')}`;
+  }catch(e){ if(!brandStale(gen)) $('todayPanel').innerHTML=''; }
+}
+
+function syncHdr(){
+  const h=document.querySelector('header');
+  if(h)document.documentElement.style.setProperty('--hdr',h.offsetHeight+'px');
+}
+addEventListener('resize',syncHdr);
+addEventListener('scroll',()=>{
+  const t=$('toTop'); if(t)t.style.display=scrollY>600?'block':'none';
+},{passive:true});
+
+function initSecs(){
+  syncHdr();
+  const want=(location.hash||'').slice(1);
+  showView(VIEWS.some(v=>v.k===want)?want:curView,false);
 }
 
 let charts={};
@@ -1838,6 +2358,7 @@ function renderTabs(){
     const n=recs.filter(r=>r.type==k).length;
     return`<div class="tab ${k==activeTab?'active':''}" onclick="activeTab='${k}';renderTabs();renderTable()">${label}<span class="n">${n}</span></div>`;
   }).join('');
+  buildViewNav();   // sekmedeki oneri sayisini guncelle
 }
 
 function renderTable(){
@@ -1936,7 +2457,9 @@ async function uploadFiles(files){
     ?`✅ ${r.file} → <b>${r.type}</b> (${r.rows} satır)`
     :`❌ ${r.file}: ${r.error}`).join('<br>');
   if(brandId!=targetBrand){toast('Yükleme sırasında marka değişti — hedef marka korundu');brandId=targetBrand;$('brandSel').value=brandId;}
-  await Promise.all([loadSummary(),loadRecs(),loadInsights(),loadAILatest()]);
+  await Promise.all([loadSummary(),loadRecs(),loadInsights(),loadAILatest(),
+                     loadOpportunities()]);
+  loadToday();
   toast(`✅ Analiz tamamlandı → ${b.name}`);
 }
 
@@ -2055,19 +2578,24 @@ function autoFillLaunch() {
   if (!$('lqFba').value) {
     $('lqFba').value = Math.max(3.50, price * 0.18 + 1.50).toFixed(2);
   }
-  if (!$('lqSku').value) {
-    const asin = $('lqAsin').value.trim() || 'ASIN';
-    $('lqSku').value = 'SKU-' + asin.toUpperCase();
-  }
-  toast('⚡ Akıllı tahminler (Fiyat, COGS, FBA, SKU) otomatik dolduruldu!');
+  // SKU UYDURULMAZ. 'SKU-<ASIN>' gibi bir deger Seller Central'da
+  // karsiligi olmadigi icin Product Ad satirlarini sessizce bozuyordu;
+  // ustelik sku!=asin oldugu icin backend'in uyarisi da hic tetiklenmiyordu.
+  // Bos birakiyoruz: backend uyariyi basar, kullanici gercek SKU'yu girer.
+  toast($('lqSku').value
+    ? '⚡ Fiyat, COGS, FBA otomatik dolduruldu!'
+    : '⚡ Fiyat, COGS, FBA dolduruldu — SKU\'yu Seller Central\'daki gerçek değerle siz girin.');
 }
 
 function openLaunchDlg(){
   $('launchResult').innerHTML='';
   launchPlan=null;
-  // Secili marka varsa marka adini onek olarak onerelim.
-  const b=brands.find(x=>x.id==brandId);
-  if(b&&!$('lqBrand').value)$('lqBrand').value=b.name;
+  // Her acilis YENI bir urun lansmanidir. Formu temizlemezsek onceki
+  // urunun markasi/ASIN'i/rakipleri sizar ve yanlis plan uretilir.
+  ['lqTitle','lqAsin','lqSku','lqBrand','lqPrice','lqCogs','lqFba','lqComp']
+    .forEach(id=>{ if($(id)) $(id).value=''; });
+  // Marka alani lansmani yapilan URUNUN markasidir; soldaki secili PPC
+  // markasi degil. Onek olarak doldurmuyoruz, kullanici yazar.
   $('launchDlg').showModal();
 }
 
