@@ -17,17 +17,65 @@ function asinFromUrl(url) {
 }
 
 // === PRODUCT DEEP SCRAPER ===
+function soupAttr(sel, attr) {
+  const n = document.querySelector(sel);
+  return n ? (n.getAttribute(attr) || "") : "";
+}
+
+function parseRating(s) {
+  /* "4.3 out of 5 stars" -> 4.3. Duz sayi kazima "4.34.3..." metninden
+     4.34 uretiyordu; puan her zaman "X out of" kalibindan okunur. */
+  if (!s) return 0;
+  // Puan 0-5 arasi TEK hanedir. Genis kalip ([\d]+...) "4.34.3 out of 5"
+  // metninde acgozlu davranip 34.3 yakaliyordu.
+  const m = String(s).match(/([0-5](?:[.,]\d)?)\s*out of\s*5/i);
+  if (m) return parseFloat(m[1].replace(",", "."));
+  const m2 = String(s).match(/^\s*([\d]+[.,]?\d?)\b/);
+  const v = m2 ? parseFloat(m2[1].replace(",", ".")) : 0;
+  return v > 5 ? 0 : v;      // 5'ten buyukse yanlis okumadir
+}
+
+function cleanBrand(s) {
+  /* "Visit the PURA D'OR Store" / "Brand: X" / "X Store" -> "X" */
+  if (!s) return "";
+  return String(s)
+    .replace(/^\s*(visit the|brand:|marka:|store:)\s*/i, "")
+    .replace(/\s+store\s*$/i, "")
+    .replace(/['’]s\s+store\s*$/i, "")
+    .trim();
+}
+
 function scrapeProductDeep() {
   const title = txt("#productTitle") || txt("#title");
   if (!title) return null; // Not a product page
 
   const asin = asinFromUrl();
-  const brand = txt("#bylineInfo") || txt("a#bylineInfo") || txt("#brand");
-  let price =
-    parsePrice(txt(".a-price .a-offscreen")) ||
-    parsePrice(txt("#corePrice_feature_div .a-offscreen")) ||
-    parsePrice(txt("#priceblock_ourprice")) ||
-    parsePrice(txt("span.a-price-whole"));
+  // "Visit the PURA D'OR Store" / "Brand: X" gibi sarmalayici metinleri temizle;
+  // ham haliyle marka adi kampanya adina ve marka filtresine kirli giriyordu.
+  const brand = cleanBrand(txt("#bylineInfo") || txt("a#bylineInfo") || txt("#brand"));
+
+  // Fiyat: Amazon sayfa duzenini sik degistiriyor, tek secici yetmiyor.
+  // Sirayla dene, ilk makul degeri al.
+  let price = null;
+  for (const sel of [
+    "#corePriceDisplay_desktop_feature_div .a-price .a-offscreen",
+    "#corePrice_feature_div .a-price .a-offscreen",
+    "#corePrice_desktop .a-price .a-offscreen",
+    "#apex_desktop .a-price .a-offscreen",
+    "#price_inside_buybox",
+    "#priceblock_ourprice",
+    "#priceblock_dealprice",
+    ".a-price .a-offscreen",
+  ]) {
+    price = parsePrice(txt(sel));
+    if (price) break;
+  }
+  if (!price) {
+    // Son care: whole + fraction ayri span'lerde olabilir ($29 . 99)
+    const whole = txt("span.a-price-whole");
+    const frac = txt("span.a-price-fraction");
+    if (whole) price = parsePrice(whole + (frac ? "." + frac.replace(/\D/g, "") : ""));
+  }
 
   // Bullets
   const bullets = [];
@@ -39,9 +87,12 @@ function scrapeProductDeep() {
   // Description
   const description = txt("#productDescription p") || txt("#productDescription_feature_div");
 
-  // Rating
-  const ratingText = txt("#acrPopover") || txt(".a-icon-star .a-icon-alt");
-  const rating = parsePrice(ratingText) || 0;
+  // Rating. DIKKAT: #acrPopover metni "4.34.3 out of 5 stars" seklinde
+  // birlesik gelir; duz parse 4.34 uretiyordu. aria-label / "X out of" regex
+  // ile okunmali.
+  const rating = parseRating(
+    (soupAttr("#acrPopover", "title") || "") + " " +
+    txt("#acrPopover") + " " + txt(".a-icon-star .a-icon-alt"));
 
   // Review count
   const reviewCountStr = txt("#acrCustomerReviewText");

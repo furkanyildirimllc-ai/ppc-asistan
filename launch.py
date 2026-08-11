@@ -559,26 +559,97 @@ def bid_explanation(price, econ, bids):
     }
 
 
-def keyword_bid(kw, base_bid, match_key, head_tokens=None):
-    """Kelime bazli bid. Duz liste yerine kelimenin niteligine gore ayrisir.
+def keyword_signals(keywords, search_suggestions=None, competitors=None,
+                    head_tokens=None):
+    """Her kelime icin elimizdeki GERCEK sinyalleri toplar.
 
-    - Uzun kuyruk (4+ kelime): niyet net, rekabet dusuk -> daha ucuz alinir
-    - Cok kisa (1-2 kelime): genis, pahali, alakasiz trafik riski -> kisilir
-    - Urunun ana token'larini iceren kelime: alakali -> primli
+    Onceden bid ayrimi sadece kelime sayisina bakiyordu; oysa veri var:
+      - autocomplete sirasi: Amazon en cok aranani basa koyar (talep vekili)
+      - rakip basliklarinda gecme sikligi: ticari olarak kanitlanmis terim
+      - urunun ana token'lariyla ortusme: alaka
     """
-    words = str(kw).split()
-    n = len(words)
+    sugg = [str(s).lower() for s in (search_suggestions or [])]
+    sugg_rank = {s: i for i, s in enumerate(sugg)}
+    comp_titles = " || ".join(str(c.get("title") or "").lower()
+                              for c in (competitors or []))
+    head = set(head_tokens or [])
+
+    out = {}
+    for kw in keywords or []:
+        k = str(kw).lower().strip()
+        words = k.split()
+        # 1) Talep: autocomplete'te var mi, kacinci sirada
+        rank = sugg_rank.get(k)
+        if rank is None and len(words) >= 2:
+            # Tam eslesme yoksa oneriyi ICEREN cok kelimeli obek de sayilir.
+            # NOT: tek kelime icin bunu yapmak yanlisti - "loss" kelimesi
+            # "hair loss shampoo" onerisine takilip en yuksek talep skorunu
+            # aliyordu. Tek kelimelik parca, aranan terim degildir.
+            for s, i in sugg_rank.items():
+                if f" {k} " in f" {s} ":
+                    rank = i
+                    break
+        demand = 0.0 if rank is None else max(0.0, 1.0 - rank / 20.0)
+
+        # 2) Ticari kanit: rakip basliklarinda kac kez geciyor
+        comp_hits = comp_titles.count(k) if k else 0
+
+        # 3) Alaka: ana token ortusmesi
+        overlap = sum(1 for w in words if w in head)
+
+        out[kw] = {
+            "words": len(words),
+            "demand": round(demand, 3),
+            "in_suggestions": rank is not None,
+            "suggestion_rank": rank,
+            "competitor_hits": comp_hits,
+            "head_overlap": overlap,
+        }
+    return out
+
+
+def keyword_bid(kw, base_bid, match_key, head_tokens=None, signals=None):
+    """Kelime bazli bid: kampanyanin taban bid'ini kelimenin niteligine gore
+    yukari/asagi oynatir. Tum kelimelere ayni bid vermek, talebi ve alakayi
+    yok saymak demektir.
+
+    Carpanlar (birlestirilir, sonuc 0.6x - 1.6x arasinda kirpilir):
+      talep (autocomplete)      : 1.00 -> 1.30
+      rakip basliklarinda gecme : 1.00 -> 1.15
+      ana token ortusmesi       : 0.80 -> 1.15
+      uzunluk                   : long tail 0.90, tek kelime 0.85
+    """
+    s = (signals or {}).get(kw) or {}
+    words = s.get("words") or len(str(kw).split())
     f = 1.0
-    if n >= 4:
-        f *= 0.85          # long tail ucuzdur
-    elif n <= 2:
-        f *= 0.90          # head term riskli, temkinli gir
-    if head_tokens:
-        hits = sum(1 for w in words if w.lower() in head_tokens)
-        if hits >= 2:
-            f *= 1.15      # urunle guclu ortusme
-        elif hits == 0:
-            f *= 0.80      # ana token yok, alaka zayif
+
+    # Talep: cok aranan kelime daha degerlidir, daha yuksek teklif hak eder.
+    f *= 1.0 + 0.30 * float(s.get("demand") or 0.0)
+
+    # Rakipler bu terimi basliklarinda kullaniyorsa ticari olarak kanitlidir.
+    hits = int(s.get("competitor_hits") or 0)
+    if hits >= 2:
+        f *= 1.15
+    elif hits == 1:
+        f *= 1.07
+
+    # Alaka: urunun kok kelimeleriyle ortusme
+    ov = s.get("head_overlap")
+    if ov is None and head_tokens:
+        ov = sum(1 for w in str(kw).lower().split() if w in head_tokens)
+    if ov is not None:
+        if ov >= 2:
+            f *= 1.15
+        elif ov == 0:
+            f *= 0.80
+
+    # Uzunluk: long tail ucuz alinir, tek kelime genis ve riskli
+    if words >= 4:
+        f *= 0.90
+    elif words == 1:
+        f *= 0.85
+
+    f = max(0.60, min(1.60, f))
     return round(max(0.15, base_bid * f), 2)
 
 
@@ -725,6 +796,36 @@ def build_plan(product, competitors=None, use_ai=True, model=None,
     if not exact:
         exact = heur_exact[:6]
 
+    # Tek kelimelik parcalar ("loss", "natural", "clinic") gercek arama terimi
+    # degildir; para yakar. Sadece kategori nounu (shampoo gibi) kesif amacli
+    # broad'da kalir. Kendi marka kelimeleri de elenir: yeni markanin adi
+    # aranmiyor, o trafige odeme yapmak anlamsiz.
+    head_tok = set(_head_tokens(title, competitors) or [])
+    _brand_toks = {w for w in re.sub(r"[^a-z0-9]+", " ",
+                                     str(product.get("brand") or "").lower()).split() if w}
+    _head_sorted = list(head_tok)
+
+    def _clean_terms(terms, allow_head_noun=True):
+        out, head_used = [], False
+        for t in terms or []:
+            k = str(t).strip()
+            if not k:
+                continue
+            ws = k.lower().split()
+            if all(w in _brand_toks for w in ws):
+                continue                      # tamamen kendi markasi
+            if len(ws) == 1:
+                if not allow_head_noun or head_used or ws[0] not in _head_sorted:
+                    continue                  # tek kelimelik parca
+                head_used = True              # kategori nounundan sadece bir tane
+            if k not in out:
+                out.append(k)
+        return out
+
+    phrase = _clean_terms(phrase, allow_head_noun=False)
+    broad = _clean_terms(broad, allow_head_noun=True)
+    exact = _clean_terms(exact, allow_head_noun=False)
+
     # AI negatif vermediyse (veya kapaliysa) taban negatifleri uygula
     negatives = baseline_negatives(title, negatives)
 
@@ -755,7 +856,6 @@ def build_plan(product, competitors=None, use_ai=True, model=None,
     # oldugunu degistirir.
     feasibility = bid_feasibility(price, econ, suggest_bids(price, econ),
                                   competitors)
-    head_tok = set(_head_tokens(title, competitors) or [])
     prefix = _campaign_prefix(product.get("brand"), title, asin)
 
     campaigns = [
@@ -787,8 +887,10 @@ def build_plan(product, competitors=None, use_ai=True, model=None,
     for c in campaigns:
         if not c.get("keywords"):
             continue
+        sig = keyword_signals(c["keywords"], search_suggestions, competitors, head_tok)
+        c["keyword_signals"] = sig
         c["keyword_bids"] = {
-            kw: keyword_bid(kw, c["default_bid"], c["key"], head_tok)
+            kw: keyword_bid(kw, c["default_bid"], c["key"], head_tok, sig)
             for kw in c["keywords"]
         }
 
