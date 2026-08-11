@@ -73,6 +73,39 @@ View'lar: `opp` (fırsatlar), `home`, `camp`, `charts`, `recs`, `ai` — `showVi
 Ortak yardımcılar: `api()` 1132, `toast()` 1129, `loadBrands()` 1139, `selectBrand()` 1176.
 Render fonksiyonları isimlendirme kalıbı: `render*` / `load*`.
 
+## Amazon bulksheet kuralları (resmi şablondan doğrulandı)
+
+Referans: `AmazonAdvertisingBulksheetSellerTemplate.xlsx` → `Config` sayfası.
+**Bu değerler tahmin değil, Amazon'un kendi listesidir. Değiştirmeden önce şablona bak.**
+
+| Alan | Geçerli değerler |
+|---|---|
+| `Product` | `Sponsored Products` |
+| `Entity` | Campaign, Ad Group, Bidding Adjustment, Campaign Negative Keyword, Keyword, Negative Keyword, Product Targeting, Negative Product Targeting, Product Ad |
+| `Operation` | Create, Update, Archive |
+| `Targeting Type` | **`AUTO` / `MANUAL` (BÜYÜK HARF)** — şablon böyle diyor; pratikte `Auto`/`Manual` de kabul edildi ama büyük harf yaz |
+| `Bidding Strategy` | Dynamic bids - down only / Dynamic bids - up and down / Fixed bid |
+| Keyword `Match Type` | exact, phrase, broad |
+| Negative Keyword `Match Type` | negativeExact, negativePhrase |
+| `State` (Create) | enabled, paused |
+| Auto targeting ifadeleri | close-match, loose-match, substitutes, complements |
+
+Create için zorunlu kolonlar (entity bazında):
+- Campaign: Campaign ID, Campaign Name, Daily Budget, Targeting Type, State, Start Date, Bidding Strategy
+- Ad Group: Campaign ID, Ad Group ID, Ad Group Name, Ad Group Default Bid, State
+- Product Ad: Campaign ID, Ad Group ID, **SKU**, State
+- Keyword / Negative Keyword: Campaign ID, Ad Group ID, State, Keyword Text, Match Type
+- Product Targeting: Campaign ID, Ad Group ID, State, Product Targeting Expression
+
+Kolon formatı: Bizim çıktımız Amazon'un **indirme (rapor)** formatını taklit eder — 46 kolon,
+`(Read only)` / `(Informational only)` ekli kolonlar ve performans kolonları dahil.
+Yükleme şablonu 32 kolondur. Amazon eşleştirmeyi **kolon adına göre** yapar, sıraya göre değil;
+fazla kolonlar yok sayılır. Bu format indirip-düzenleyip-tekrar yükleme akışının aynısıdır ve
+gerçek yüklemede kabul edildiği doğrulandı.
+
+**SKU tuzağı:** `launch.py` SKU boşsa ASIN'e düşer (`sku = product.get("sku") or asin`).
+Seller hesabında ASIN geçerli SKU değildir → Product Ad satırları reddedilir. Formda SKU doldurulmalı.
+
 ## Konvansiyonlar
 
 - Tüm kullanıcıya görünen metin **Türkçe**.

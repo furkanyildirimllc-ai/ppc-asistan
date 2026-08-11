@@ -771,6 +771,64 @@ def _blank():
     return {h: "" for h in BULK_HEADERS}
 
 
+# Amazon'un resmi sablonundaki (Config sayfasi) gecerli degerler.
+# Kaynak: AmazonAdvertisingBulksheetSellerTemplate.xlsx
+SP_VALID = {
+    "Product": {"Sponsored Products"},
+    "Entity": {"Campaign", "Ad Group", "Bidding Adjustment",
+               "Campaign Negative Keyword", "Keyword", "Negative Keyword",
+               "Product Targeting", "Negative Product Targeting", "Product Ad"},
+    "Operation": {"Create", "Update", "Archive"},
+    "Targeting Type": {"AUTO", "MANUAL"},
+    "Bidding Strategy": {"Dynamic bids - down only",
+                         "Dynamic bids - up and down", "Fixed bid"},
+}
+SP_MATCH_TYPES = {
+    "Keyword": {"exact", "phrase", "broad"},
+    "Negative Keyword": {"negativeExact", "negativePhrase"},
+    "Campaign Negative Keyword": {"negativeExact", "negativePhrase"},
+}
+# Create islemi icin entity bazinda zorunlu alanlar.
+SP_REQUIRED = {
+    "Campaign": ["Campaign ID", "Campaign Name", "Daily Budget",
+                 "Targeting Type", "State", "Start Date", "Bidding Strategy"],
+    "Ad Group": ["Campaign ID", "Ad Group ID", "Ad Group Name",
+                 "Ad Group Default Bid", "State"],
+    "Product Ad": ["Campaign ID", "Ad Group ID", "SKU", "State"],
+    "Keyword": ["Campaign ID", "Ad Group ID", "State", "Keyword Text", "Match Type"],
+    "Negative Keyword": ["Campaign ID", "Ad Group ID", "State", "Keyword Text",
+                         "Match Type"],
+    "Product Targeting": ["Campaign ID", "Ad Group ID", "State",
+                          "Product Targeting Expression"],
+}
+
+
+def validate_bulk_row(d):
+    """Tek bir bulksheet satirini Amazon kurallarina gore denetler.
+
+    Bozuk dosyayi kullaniciya vermektense burada yakalamak ucuzdur; Amazon'un
+    hata raporu satir satir okumak zorunda birakiyor.
+    """
+    errs = []
+    for field, allowed in SP_VALID.items():
+        v = d.get(field)
+        if v not in (None, "") and v not in allowed:
+            errs.append(f"{field}={v!r} gecersiz (beklenen: {sorted(allowed)})")
+
+    ent = d.get("Entity")
+    mt = d.get("Match Type")
+    if ent in SP_MATCH_TYPES and mt not in (None, ""):
+        if mt not in SP_MATCH_TYPES[ent]:
+            errs.append(f"{ent} icin Match Type={mt!r} gecersiz "
+                        f"(beklenen: {sorted(SP_MATCH_TYPES[ent])})")
+
+    if d.get("Operation") == "Create":
+        for f in SP_REQUIRED.get(ent, []):
+            if d.get(f) in (None, ""):
+                errs.append(f"{ent} icin zorunlu alan bos: {f}")
+    return errs
+
+
 def build_bulksheet(plan):
     """plan -> BytesIO(xlsx). Amazon SP Create operasyonlari."""
     p = plan["product"]
@@ -788,7 +846,10 @@ def build_bulksheet(plan):
         cell.font, cell.fill = head_font, head_fill
     ws.freeze_panes = "A2"
 
+    problems = []
+
     def emit(d):
+        problems.extend(validate_bulk_row(d))
         ws.append([d.get(h, "") for h in BULK_HEADERS])
 
     for c in plan["campaigns"]:
@@ -801,7 +862,10 @@ def build_bulksheet(plan):
         r.update({
             "Product": "Sponsored Products", "Entity": "Campaign",
             "Operation": "Create", "Campaign ID": cid, "Campaign Name": c["name"],
-            "Start Date": today, "Targeting Type": c["targeting_type"],
+            "Start Date": today,
+            # Amazon sablonu AUTO/MANUAL (buyuk harf) bekler; "Auto"/"Manual"
+            # yazilirsa kampanya satiri reddedilebilir.
+            "Targeting Type": str(c["targeting_type"]).upper(),
             "State": "enabled", "Daily Budget": c["budget"],
             "Bidding Strategy": "Dynamic bids - down only",
         })
@@ -874,6 +938,11 @@ def build_bulksheet(plan):
                 "Product Targeting Expression": f'asin="{a}"',
             })
             emit(r)
+
+    if problems:
+        # Bozuk dosya uretip Amazon'a yukletmektense burada dur.
+        uniq = list(dict.fromkeys(problems))[:10]
+        raise ValueError("Bulksheet Amazon kurallarina uymuyor: " + " | ".join(uniq))
 
     buf = io.BytesIO()
     wb.save(buf)

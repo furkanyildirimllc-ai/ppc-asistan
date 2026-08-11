@@ -277,7 +277,7 @@ def build(recs, brand_name, brand=None, report_rows=None):
                 "Operation": "Create",
                 "Campaign Name": skag_camp,
                 "State": "enabled",
-                "Targeting Type": "manual",
+                "Targeting Type": "MANUAL",  # Amazon buyuk harf bekler
                 "Start Date": today,
                 "Daily Budget": 10, # default $10
             })
