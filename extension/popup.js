@@ -476,6 +476,31 @@ async function resetAll() {
   await rescan();
 }
 
+// Sunucu secimi: elle URL yazmak yerine tek tik. Secilen adres kaydedilir ve
+// canli olup olmadigi aninda test edilir.
+const API_PRESETS = {
+  local: "http://localhost:8642",
+  cloud: "https://ppc-asistan.onrender.com",
+};
+
+async function setApi(url) {
+  API = url;
+  if ($("f-api-url")) $("f-api-url").value = url;
+  try { await chrome.storage.local.set({ ppc_api_url: url }); } catch (_) {}
+  const st = $("api-status");
+  if (st) st.textContent = "Bağlantı test ediliyor...";
+  try {
+    // Canli sunucu uykudan kalkarken yavas olabilir, bol sure ver.
+    const r = await fetchWithTimeout(url + "/", { method: "GET" }, 90000);
+    if (st) st.textContent = r.ok ? `✅ Bağlandı: ${url}` : `⚠️ Yanıt ${r.status}: ${url}`;
+  } catch (e) {
+    if (st) st.textContent = `❌ Ulaşılamadı: ${url}`;
+  }
+}
+
+if ($("btn-api-local")) $("btn-api-local").addEventListener("click", () => setApi(API_PRESETS.local));
+if ($("btn-api-cloud")) $("btn-api-cloud").addEventListener("click", () => setApi(API_PRESETS.cloud));
+
 if ($("btn-reset")) {
   $("btn-reset").addEventListener("click", resetAll);
 }

@@ -26,7 +26,8 @@
     "https://*.media-amazon.com/*",
     "https://*.images-amazon.com/*",
     "https://completion.amazon.com/*",
-    "http://localhost:8642/*"
+    "http://localhost:8642/*",
+    "https://ppc-asistan.onrender.com/*"
   ],
   "action": {
     "default_title": "PPC Launch Pro",
