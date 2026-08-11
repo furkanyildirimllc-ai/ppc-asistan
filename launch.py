@@ -394,11 +394,16 @@ def expected_cvr(match_key, ramp=LAUNCH_RAMP, base_cvr=CATEGORY_BASE_CVR):
 
 # Bid stratejileri: hesaplanan "odenebilir" bid ile pazarin gercek CPC'si
 # cakistiginda kullanicinin bilincli secim yapmasi icin.
+# Sabit carpan yerine PAZARA capa atarlar: "ekonomi bid'i" ile "pazar CPC'si"
+# arasinda nerede duracagini secersin. Sabit +%35 gibi bir carpan, pazar CPC'si
+# ekonomi bid'inin 5 kati oldugunda hicbir ise yaramiyordu (gosterim alinmiyordu).
 BID_STRATEGIES = {
-    "profit":     {"label": "Karli", "factor": 1.00},
-    "balanced":   {"label": "Dengeli", "factor": 1.35},
-    "aggressive": {"label": "Pazar Payi", "factor": 1.90},
+    "profit":     {"label": "Karli",      "market_weight": 0.00},
+    "balanced":   {"label": "Dengeli",    "market_weight": 0.55},
+    "aggressive": {"label": "Pazar Payi", "market_weight": 1.00},
 }
+# Gosterim almak icin pazar CPC'sinin en az bu kadarini teklif etmek gerekir.
+MIN_VIABLE_MARKET_RATIO = 0.70
 
 
 def market_cpc_estimate(price, competitors=None):
@@ -466,7 +471,7 @@ def bid_feasibility(price, econ, bids, competitors=None):
 
 
 def suggest_bids(price, econ=None, ramp=LAUNCH_RAMP, base_cvr=CATEGORY_BASE_CVR,
-                 strategy="profit"):
+                 strategy="profit", competitors=None):
     """Ekonomiye bagli baslangic bid'leri.
 
     econ: break_even() ciktisi. Verilmezse temkinli bir varsayilan hedef ACOS
@@ -483,18 +488,56 @@ def suggest_bids(price, econ=None, ramp=LAUNCH_RAMP, base_cvr=CATEGORY_BASE_CVR,
     else:
         be_acos, target_acos = 0.40, 0.28
 
-    factor = BID_STRATEGIES.get(strategy, BID_STRATEGIES["profit"])["factor"]
+    w = BID_STRATEGIES.get(strategy, BID_STRATEGIES["profit"])["market_weight"]
+    market = market_cpc_estimate(p, competitors)
+
     out = {}
     for key in MATCH_CVR_FACTOR:
         cvr = expected_cvr(key, ramp, base_cvr)
-        bid = p * cvr * target_acos * factor
+        econ_bid = p * cvr * target_acos
         if strategy == "profit":
             # Break-even bid mutlak tavan: bunun ustu her tiklamada zarar demek.
-            # Diger stratejiler bu tavani BILEREK asar (pazar payi yatirimi).
-            bid = min(bid, p * cvr * be_acos)
+            bid = min(econ_bid, p * cvr * be_acos)
+        else:
+            # Pazar CPC'sini match type'a gore olcekle: exact daha pahali,
+            # ASIN targeting daha ucuz kapisilir.
+            market_bid = market * (0.75 + 0.35 * MATCH_CVR_FACTOR.get(key, 1.0))
+            # Ekonomi ile pazar arasinda secilen agirlikta konumlan.
+            bid = econ_bid + (market_bid - econ_bid) * w
+            # Gosterim almayacak kadar dusuk kalmasin.
+            bid = max(bid, market_bid * MIN_VIABLE_MARKET_RATIO) if w >= 0.5 else bid
         # Amazon alt siniri $0.02; pratikte $0.15 altinda gosterim alinmaz.
         out[key] = round(max(0.15, bid), 2)
     return out
+
+
+def bid_outlook(price, econ, bids, competitors=None, ramp=LAUNCH_RAMP,
+                base_cvr=CATEGORY_BASE_CVR):
+    """Secilen bid'lerin gercek sonucu ne olur? Tahmini ACOS ve gosterim sansi.
+
+    Kullanici "bu bid'le ne olacak" sorusunun cevabini gormeden secim yapmasin.
+    """
+    p = float(price or 0)
+    if p <= 0 or not bids:
+        return {}
+    market = market_cpc_estimate(p, competitors)
+    be = float((econ or {}).get("break_even_acos_pct") or 0) / 100.0
+    rows = {}
+    for key, bid in bids.items():
+        cvr = expected_cvr(key, ramp, base_cvr)
+        # ACOS = CPC / (fiyat x CVR)
+        acos = bid / (p * cvr) if (p and cvr) else 0
+        ratio = bid / market if market else 1
+        rows[key] = {
+            "bid": bid,
+            "expected_acos_pct": round(acos * 100, 1),
+            "vs_market_pct": round(ratio * 100),
+            "impression_odds": ("iyi" if ratio >= 0.9 else
+                                "orta" if ratio >= MIN_VIABLE_MARKET_RATIO else "dusuk"),
+            "profitable": (acos <= be) if be else None,
+        }
+    return {"market_cpc_estimate": market, "break_even_acos_pct": round(be * 100, 1),
+            "per_match": rows}
 
 
 def bid_explanation(price, econ, bids):
@@ -561,6 +604,46 @@ def suggest_budgets(price, bids=None, clicks_per_day=None):
         # Amazon minimumu $1; cok kucuk butce gun icinde hic gosterim almaz.
         out[key] = max(5, int(round(raw)))
     return out
+
+
+def _campaign_prefix(brand, title, asin):
+    """Kampanya adi onekini uretir: 'Marka | Urun (ASIN)'.
+
+    Sadece marka yazmak iki sorun cikariyordu:
+      1) Ayni markanin ikinci urununu lansmanlarken kampanya adlari BIREBIR
+         ayni oluyordu - Amazon ayni isimde ikinci kampanyayi reddeder.
+      2) Panelde hangi kampanyanin hangi urune ait oldugu anlasilmiyordu.
+    """
+    b = _sanitize_name(brand or "") or ""
+    t = _sanitize_name(title or "") or ""
+
+    # Basliktan marka kelimelerini dus; kalan kisim urunu tanimlar.
+    # Noktalama normalize edilmeli: marka "Natural.clinic", baslikta
+    # "Natural Clinic" olarak geciyor - duz karsilastirma bunu kaciriyordu.
+    def _norm(s):
+        return re.sub(r"[^a-z0-9]+", " ", str(s).lower()).split()
+
+    btoks = set(_norm(b))
+    words, seen = [], set()
+    for w in t.split():
+        lw = re.sub(r"[^a-z0-9]+", "", w.lower())
+        if not lw or lw in btoks or lw in seen:
+            continue
+        # Olcu/adet artiklarini atla (500ml, 2pack, 16oz)
+        if re.fullmatch(r"\d+([a-z]{1,4})?", lw):
+            continue
+        seen.add(lw)
+        words.append(w)
+        if len(words) >= 3:          # 3 kelime urunu ayirt etmeye yeter
+            break
+
+    prod = " ".join(words)[:32].strip()
+    parts = [p for p in (b[:24], prod) if p]
+    label = " | ".join(parts) if parts else "Launch"
+    # ASIN benzersizligi garanti eder (ayni urunun varyantlari icin sart).
+    if asin:
+        label = f"{label} ({asin})"
+    return _sanitize_name(label)[:90] or "Launch"
 
 
 # ------------------------------------------------------------------ plan
@@ -664,15 +747,16 @@ def build_plan(product, competitors=None, use_ai=True, model=None,
 
     if bid_strategy not in BID_STRATEGIES:
         bid_strategy = "profit"
-    bids = suggest_bids(price, econ, strategy=bid_strategy)
+    bids = suggest_bids(price, econ, strategy=bid_strategy, competitors=competitors)
     budgets = suggest_budgets(price, bids)
+    outlook = bid_outlook(price, econ, bids, competitors)
     # Uyari her zaman "karli" bid'e gore hesaplanir: strateji degistirmek
     # fiyat/maliyet gercegini degistirmez, sadece ne kadar zarara razi
     # oldugunu degistirir.
     feasibility = bid_feasibility(price, econ, suggest_bids(price, econ),
                                   competitors)
     head_tok = set(_head_tokens(title, competitors) or [])
-    prefix = _sanitize_name(product.get("brand") or title[:20] or "Launch")[:24] or "Launch"
+    prefix = _campaign_prefix(product.get("brand"), title, asin)
 
     campaigns = [
         {"key": "auto", "name": f"{prefix} | Auto | Discovery",
@@ -730,6 +814,7 @@ def build_plan(product, competitors=None, use_ai=True, model=None,
         "bid_strategy_label": BID_STRATEGIES[bid_strategy]["label"],
         "bid_explanation": bid_explanation(price, econ, bids),
         "bid_feasibility": feasibility,
+        "bid_outlook": outlook,
         "budgets": budgets,
         "daily_budget_total": round(total_budget, 2),
         "campaigns": campaigns,

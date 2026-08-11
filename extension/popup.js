@@ -465,6 +465,35 @@ $("strategy-picker").addEventListener("click", (ev) => {
   saveState();
 });
 
+function renderOutlook(o) {
+  if (!o || !o.per_match) return "";
+  const order = ["exact", "phrase", "broad", "auto", "pt"];
+  const label = { exact: "Exact", phrase: "Phrase", broad: "Broad", auto: "Auto", pt: "ASIN" };
+  const rows = order.filter(k => o.per_match[k]).map(k => {
+    const r = o.per_match[k];
+    const dot = r.impression_odds === "iyi" ? "🟢" : r.impression_odds === "orta" ? "🟡" : "🔴";
+    const acosColor = r.profitable === false ? "var(--danger)" : "var(--ok)";
+    return `<tr>
+      <td>${label[k]}</td>
+      <td><b>$${r.bid}</b></td>
+      <td style="color:${acosColor}">%${r.expected_acos_pct}</td>
+      <td>${dot} %${r.vs_market_pct}</td>
+    </tr>`;
+  }).join("");
+  return `
+    <div class="card" style="margin-top:12px;">
+      <div class="tag">🎯 Bu Bid'lerle Ne Olur?</div>
+      <table class="outlook">
+        <tr><th>Tip</th><th>Bid</th><th>Tahmini ACOS</th><th>Pazarın %'si</th></tr>
+        ${rows}
+      </table>
+      <div class="muted" style="margin-top:6px; font-size:10px;">
+        Break-even ACOS %${o.break_even_acos_pct} · Pazar CPC tahmini $${o.market_cpc_estimate}.
+        🟢 gösterim alır · 🟡 sınırda · 🔴 muhtemelen gösterim almaz.
+      </div>
+    </div>`;
+}
+
 function renderFeasibility(f) {
   if (!f || !f.headline) return "";
   const icon = f.status === "ok" ? "✅" : f.status === "tight" ? "⚠️" : "🚫";
@@ -577,6 +606,7 @@ function renderPlan(plan) {
 
   $("plan-content").innerHTML = `
     ${renderFeasibility(plan.bid_feasibility)}
+    ${renderOutlook(plan.bid_outlook)}
     ${rationaleHtml}
     ${econHtml}
     ${compIntelHtml}
