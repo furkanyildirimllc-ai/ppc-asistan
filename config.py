@@ -26,3 +26,11 @@ MAX_SUPERVISOR_RETRIES = 2
 # Veri yeterliligi esikleri (AI ayrica kendi degerlendirmesini yapar)
 MIN_CLICKS_FOR_STRATEGY = 50
 MIN_DAYS_FOR_STRATEGY = 14
+
+# Amazon Advertising API (opsiyonel). Kurulum: ADS_API_KURULUM.md
+# Bu degerler .env'den okunur, koda yazilmaz.
+ADS_CLIENT_ID = os.getenv("ADS_CLIENT_ID", "")
+ADS_CLIENT_SECRET = os.getenv("ADS_CLIENT_SECRET", "")
+ADS_REFRESH_TOKEN = os.getenv("ADS_REFRESH_TOKEN", "")
+ADS_PROFILE_ID = os.getenv("ADS_PROFILE_ID", "")
+ADS_REGION = os.getenv("ADS_REGION", "NA")

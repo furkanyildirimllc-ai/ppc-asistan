@@ -25,6 +25,7 @@ import launch as launch_mod
 import chat as chat_mod
 import market_intel
 import brain
+import amazon_ads
 
 DB_PATH = Path(__file__).parent / "ppc.db"
 app = FastAPI(title="PPC Asistan")
@@ -298,6 +299,12 @@ def delete_brand(brand_id: int):
     with db() as c:
         c.execute("DELETE FROM brands WHERE id=?", (brand_id,))
     return {"ok": True}
+
+
+@app.get("/api/ads-api/status")
+def ads_api_status():
+    """Amazon Ads API baglantisi kurulu mu, calisiyor mu?"""
+    return amazon_ads.check()
 
 
 @app.get("/api/brands/{brand_id}/data-inventory")
