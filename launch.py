@@ -517,32 +517,48 @@ def discovery_plan(price, econ, bench, keywords=None, market_price=None):
     rev = float((bench.get("account") or {}).get("aov") or 0) or p
     cvr = bench["cvr"].get("phrase") or bench["cvr"].get("exact") or 0.06
 
-    # Kesif teklifi: odenebilir bid'in belirgin ustunde ki acik artirmaya
-    # kesin girsin. Ikinci-fiyat oldugu icin bu tutari ODEMEZSIN; sadece
-    # "gosterim alamadim, hicbir sey ogrenemedim" durumunu engeller.
+    # KESIF TEKLIFI - odenebilirlikten TURETILMEZ.
+    # Onceki surumde "odenebilir bid x 3" kullaniliyordu; bu mantik hatasiydi.
+    # Odenebilir bid dusukse (dusuk CVR varsayimi yuzunden) kesif teklifi de
+    # dusuk cikiyor, acik artirma kazanilamiyor ve HICBIR SEY olculemiyordu -
+    # yani kesif fazi kendi amacini bosa cikariyordu.
+    #
+    # Dogrusu: teklif "kazanacak kadar yuksek" olmali. Ikinci-fiyat oldugu
+    # icin bu tutari genelde ODEMEZSIN. Riski butce sinirlar.
+    # Fiyatin ~%12'si, cogu kategoride pazar CPC'sinin belirgin ustunde kalir.
     afford = rev * cvr * be
-    probe = round(max(1.50, min(6.00, afford * 3.0)), 2)
+    probe = round(max(3.00, min(9.00, p * 0.12)), 2)
 
     # CPC icin ~20 tiklama yeter (+-%9). Butce en kotu durumu sinirlar:
-    # gercekten teklif kadar odersen bile gunluk kayip bu kadardir.
+    # gercekten teklif kadar odersen bile gunluk kayip ~bu kadardir.
+    # (Amazon gunluk butceyi %25'e kadar asabilir; ustte pay birakildi.)
     target_clicks = 20
-    worst_case_day = round(probe * target_clicks / 2, 0)   # 2 gune yay
-    per_day = int(max(15, min(60, worst_case_day)))
+    days = 3          # kampanya baslamasi + rapor gecikmesi icin pay
+    per_day = int(max(20, min(80, round(probe * target_clicks / days))))
 
     return {
         "phase": "0 - Fiyat Keşfi",
         "purpose": "Gerçek CPC'yi ölçmek. Tek amaç bu; satış beklentisi yok.",
-        "days": 2,
+        "days": days,
         "probe_bid": probe,
+        "affordable_bid": round(afford, 2),
         "budget_per_day": per_day,
-        "max_total_spend": per_day * 2,
+        "max_total_spend": per_day * days,
         "target_clicks": target_clicks,
         "keywords": list(keywords or [])[:10],
+        "match_type": "EXACT",
         "why_high_bid": (
             f"Amazon ikinci-fiyat açık artırması kullanır: ${probe} teklif etsen de "
-            f"pazar neyde temizleniyorsa onu ödersin. Yüksek teklif para kaybı "
-            f"değil, açık artırmaya girme garantisidir. Riski günlük "
-            f"${per_day} bütçe sınırlar."),
+            f"pazar neyde temizleniyorsa onu ödersin. Bu teklif kârlılıktan "
+            f"türetilmedi — kârlı bid ${afford:.2f} olurdu ve o tutarla açık "
+            f"artırmayı kazanamayıp hiçbir şey ölçemezdin. Amaç kazanmak; "
+            f"riski günlük ${per_day} bütçe sınırlar."),
+        "why_exact_only": (
+            "Sadece EXACT match kullanılır. Yüksek teklif + broad match, "
+            "alakasız pahalı trafik çeker. Exact'te ne için ödediğini bilirsin."),
+        "budget_warning": (
+            "Amazon günlük bütçeyi %25'e kadar aşabilir (ay içinde dengeler). "
+            f"Gerçek üst sınırı ~${round(per_day*1.25)}/gün kabul et."),
         "why_cheap": (
             "CPC ölçmek ucuzdur: her tıklama bir ölçümdür, ~20 tıklama ±%9 "
             "doğruluk verir. CVR ölçmek pahalıdır (~100 tıklama), o yüzden "
@@ -550,7 +566,7 @@ def discovery_plan(price, econ, bench, keywords=None, market_price=None):
         "success_criteria": (
             f"{target_clicks} tıklamaya ulaşmak. Sipariş gelmemesi BAŞARISIZLIK "
             f"DEĞİLDİR — bu fazın amacı satış değil, fiyat bilgisi."),
-        "stop_rule": f"{target_clicks} tıklama veya 2 gün — hangisi önce gelirse.",
+        "stop_rule": f"{target_clicks} tıklama veya {days} gün — hangisi önce gelirse.",
         "next_step": (
             "Seller Central > Reports > Targeting raporunu indir, uygulamada "
             "bu markaya yükle. Araç gerçek CPC'yi okuyup Faz 1 planını "
