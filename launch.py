@@ -490,6 +490,74 @@ def bid_feasibility(price, econ, bids, competitors=None, measured_cpc=None):
     }
 
 
+def discovery_plan(price, econ, bench, keywords=None, market_price=None):
+    """FAZ 0 - FIYAT KESFI: gercek CPC'yi 1-2 gunde ve ucuza satin alir.
+
+    Neden bu ise yarar (uc gercege dayanir):
+
+    1) Amazon SP IKINCI-FIYAT acik artirmasidir. Teklifin $5 olsa da pazar
+       $2.60'ta temizleniyorsa ~$2.60 odersin. Yuksek teklif "cok para
+       odemek" demek DEGILDIR; sadece acik artirmaya girmeyi garanti eder.
+       Riski BUTCE sinirlar, teklif degil.
+
+    2) CPC olcmek UCUZDUR, CVR olcmek PAHALI. Her tiklama bir CPC olcumudur
+       (~20 tik -> +-%9 dogruluk). CVR ise nadir olaydir; %30 dogruluk icin
+       ~100 tiklama gerekir. Bu yuzden once SADECE CPC satin alinir.
+
+    3) Bilinmeyen CPC, plandaki en buyuk hata kaynagidir: bid'i de butceyi de
+       tahmini ACOS'u da o belirler. Onu 1-2 gunde kapatmak, iki hafta yanlis
+       varsayimla harcamaktan cok daha ucuzdur.
+
+    Sonuc: yuksek teklif + kucuk butce = birkac saatte gercek CPC.
+    """
+    p = float(price or 0)
+    if p <= 0:
+        return {}
+    be = float((econ or {}).get("break_even_acos_pct") or 40.0) / 100.0
+    rev = float((bench.get("account") or {}).get("aov") or 0) or p
+    cvr = bench["cvr"].get("phrase") or bench["cvr"].get("exact") or 0.06
+
+    # Kesif teklifi: odenebilir bid'in belirgin ustunde ki acik artirmaya
+    # kesin girsin. Ikinci-fiyat oldugu icin bu tutari ODEMEZSIN; sadece
+    # "gosterim alamadim, hicbir sey ogrenemedim" durumunu engeller.
+    afford = rev * cvr * be
+    probe = round(max(1.50, min(6.00, afford * 3.0)), 2)
+
+    # CPC icin ~20 tiklama yeter (+-%9). Butce en kotu durumu sinirlar:
+    # gercekten teklif kadar odersen bile gunluk kayip bu kadardir.
+    target_clicks = 20
+    worst_case_day = round(probe * target_clicks / 2, 0)   # 2 gune yay
+    per_day = int(max(15, min(60, worst_case_day)))
+
+    return {
+        "phase": "0 - Fiyat Keşfi",
+        "purpose": "Gerçek CPC'yi ölçmek. Tek amaç bu; satış beklentisi yok.",
+        "days": 2,
+        "probe_bid": probe,
+        "budget_per_day": per_day,
+        "max_total_spend": per_day * 2,
+        "target_clicks": target_clicks,
+        "keywords": list(keywords or [])[:10],
+        "why_high_bid": (
+            f"Amazon ikinci-fiyat açık artırması kullanır: ${probe} teklif etsen de "
+            f"pazar neyde temizleniyorsa onu ödersin. Yüksek teklif para kaybı "
+            f"değil, açık artırmaya girme garantisidir. Riski günlük "
+            f"${per_day} bütçe sınırlar."),
+        "why_cheap": (
+            "CPC ölçmek ucuzdur: her tıklama bir ölçümdür, ~20 tıklama ±%9 "
+            "doğruluk verir. CVR ölçmek pahalıdır (~100 tıklama), o yüzden "
+            "bu fazda CVR'yi ölçmeye çalışmıyoruz."),
+        "success_criteria": (
+            f"{target_clicks} tıklamaya ulaşmak. Sipariş gelmemesi BAŞARISIZLIK "
+            f"DEĞİLDİR — bu fazın amacı satış değil, fiyat bilgisi."),
+        "stop_rule": f"{target_clicks} tıklama veya 2 gün — hangisi önce gelirse.",
+        "next_step": (
+            "Seller Central > Reports > Targeting raporunu indir, uygulamada "
+            "bu markaya yükle. Araç gerçek CPC'yi okuyup Faz 1 planını "
+            "varsayımsız hesaplar."),
+    }
+
+
 def measure_plan(price, econ, bench, keywords=None, days=3, budget_per_day=None):
     """OLC-DUZELT modu: gercek CPC'yi ucuza satin alan olcum plani.
 
@@ -1143,6 +1211,9 @@ def build_plan(product, competitors=None, use_ai=True, model=None,
         "measure_plan": (measure_plan(price, econ, bench,
                                       keywords=(exact or []) + (phrase or []))
                          if not bench.get("has_cpc") else None),
+        "discovery_plan": (discovery_plan(price, econ, bench,
+                                          keywords=(exact or []) + (phrase or []))
+                           if not bench.get("has_cpc") else None),
         "data_scope": bench.get("scope"),
         "benchmarks": {"cvr_pct": {k: (round(v*100,2) if v is not None else None)
                                    for k,v in bench["cvr"].items()},
