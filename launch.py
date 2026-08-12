@@ -490,6 +490,60 @@ def bid_feasibility(price, econ, bids, competitors=None, measured_cpc=None):
     }
 
 
+def measure_plan(price, econ, bench, keywords=None, days=3, budget_per_day=None):
+    """OLC-DUZELT modu: gercek CPC'yi ucuza satin alan olcum plani.
+
+    Reklam acilmadan CPC bilinemez. Bunu kabul edip ilk gunleri VERI SATIN
+    ALMAYA ayirmak, yanlis varsayimla buyuk butce yakmaktan ucuzdur.
+
+    Mantik: gosterim almaya yetecek kadar yuksek, ogrenme bitene kadar
+    kontrollu bir bid; ve istatistiksel olarak anlamli sonuc icin gereken
+    tiklama sayisini karsilayan bir butce.
+    """
+    p = float(price or 0)
+    be = float((econ or {}).get("break_even_acos_pct") or 40.0) / 100.0
+    rev = float((bench.get("account") or {}).get("aov") or 0) or p
+
+    # Ogrenme icin hedef tiklama: "0 siparis" sonucunun anlamli olabilmesi
+    # icin ~3/CVR tiklama gerekir (rule of three, %95 guven).
+    cvr_ref = bench["cvr"].get("phrase") or 0.06
+    need_clicks = max(30, min(120, int(round(3 / max(cvr_ref, 0.01)))))
+
+    # Olcum bid'i: break-even bid'in biraz altinda. Gosterim alir ama
+    # ogrenme doneminde bile felaket ACOS uretmez.
+    probe = {}
+    for key in ("exact", "phrase", "auto"):
+        cvr = bench["cvr"].get(key)
+        if cvr is None:
+            continue
+        probe[key] = round(max(0.20, rev * cvr * be * 0.90), 2)
+
+    if not probe:
+        return {}
+    avg_bid = sum(probe.values()) / len(probe)
+    per_day = budget_per_day or max(10, round(avg_bid * need_clicks / max(days, 1)))
+
+    return {
+        "purpose": "Gercek CPC ve CVR'i olcmek icin kontrollu ogrenme donemi",
+        "days": days,
+        "probe_bids": probe,
+        "budget_per_day": per_day,
+        "total_budget": per_day * days,
+        "target_clicks": need_clicks,
+        "keywords": list(keywords or [])[:15],
+        "why_this_bid": (
+            f"Break-even bid'in %90'i. Gosterim almaya yeter, ogrenme "
+            f"doneminde bile ACOS break-even'i (%{be*100:.0f}) asmaz."),
+        "next_step": (
+            f"{days} gun sonra Seller Central > Reports > Targeting raporunu "
+            f"indir ve bu markaya yukle. Arac gercek CPC/CVR'i olcup butun "
+            f"plani yeniden hesaplar - artik varsayim kalmaz."),
+        "stop_rule": (
+            f"Hedef {need_clicks} tiklamaya ulastiginda ya da {days} gun "
+            f"dolduğunda dur; hangisi once gelirse."),
+    }
+
+
 def bid_feasibility_v2(price, econ, profit_bids, bench):
     """Karli bid pazarin gercek CPC'sini karsiliyor mu?
 
@@ -1071,6 +1125,9 @@ def build_plan(product, competitors=None, use_ai=True, model=None,
         "bid_strategy_label": BID_STRATEGIES[bid_strategy]["label"],
         "bid_explanation": bid_explanation(price, econ, bids),
         "data_warnings": bench.get("warnings") or [],
+        "measure_plan": (measure_plan(price, econ, bench,
+                                      keywords=(exact or []) + (phrase or []))
+                         if not bench.get("has_cpc") else None),
         "data_scope": bench.get("scope"),
         "benchmarks": {"cvr_pct": {k: (round(v*100,2) if v is not None else None)
                                    for k,v in bench["cvr"].items()},

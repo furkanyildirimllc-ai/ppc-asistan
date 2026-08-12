@@ -118,6 +118,9 @@ def init_db():
             # Rakip marka tespiti otomatik tahmindir; kullanici duzeltmesi burada saklanir
             ("competitor_brands", "ALTER TABLE brands ADD COLUMN competitor_brands TEXT DEFAULT ''"),
             ("not_brands", "ALTER TABLE brands ADD COLUMN not_brands TEXT DEFAULT ''"),
+            # Lansman markalari ayri bolumde gosterilir: henuz reklam verisi
+            # yoktur, optimizasyon ekranlari onlar icin anlamsizdir.
+            ("kind", "ALTER TABLE brands ADD COLUMN kind TEXT DEFAULT 'active'"),
         ]:
             if col not in cols:
                 c.execute(ddl)
@@ -231,6 +234,14 @@ def list_brands():
             b["uploads"] = [dict(r) for r in c.execute(
                 "SELECT filename, report_type, row_count, uploaded_at FROM uploads "
                 "WHERE brand_id=? ORDER BY id DESC LIMIT 10", (b["id"],))]
+            # Veri tazeligi: hangi rapor tipi ne zaman ve kac satir yuklendi.
+            # "Eskiyi yeni sanma" sorununu gorunur kilar.
+            b["data_freshness"] = [dict(r) for r in c.execute(
+                "SELECT rr.report_type, COUNT(*) rows, "
+                "  (SELECT MAX(uploaded_at) FROM uploads u "
+                "   WHERE u.brand_id=rr.brand_id AND u.report_type=rr.report_type) last_upload "
+                "FROM report_rows rr WHERE rr.brand_id=? "
+                "GROUP BY rr.report_type ORDER BY rr.report_type", (b["id"],))]
             counts = c.execute(
                 "SELECT status, COUNT(*) n FROM recommendations WHERE brand_id=? "
                 "GROUP BY status", (b["id"],)).fetchall()
@@ -287,6 +298,66 @@ def delete_brand(brand_id: int):
     with db() as c:
         c.execute("DELETE FROM brands WHERE id=?", (brand_id,))
     return {"ok": True}
+
+
+@app.get("/api/brands/{brand_id}/data-inventory")
+def data_inventory(brand_id: int):
+    """Bu markada NE VAR: rapor tipi, satir sayisi, son yukleme tarihi.
+    Neyi silecegini gormeden silme."""
+    with db() as c:
+        if not c.execute("SELECT 1 FROM brands WHERE id=?", (brand_id,)).fetchone():
+            raise HTTPException(404, "Marka bulunamadi")
+        rows = [dict(r) for r in c.execute(
+            "SELECT rr.report_type, COUNT(*) rows, "
+            "  (SELECT MAX(uploaded_at) FROM uploads u WHERE u.brand_id=rr.brand_id "
+            "   AND u.report_type=rr.report_type) last_upload "
+            "FROM report_rows rr WHERE rr.brand_id=? GROUP BY rr.report_type",
+            (brand_id,))]
+        recs = c.execute("SELECT COUNT(*) n FROM recommendations WHERE brand_id=?",
+                         (brand_id,)).fetchone()["n"]
+        ai = c.execute("SELECT COUNT(*) n FROM ai_strategies WHERE brand_id=?",
+                       (brand_id,)).fetchone()["n"]
+    return {"brand_id": brand_id, "reports": rows,
+            "recommendations": recs, "ai_strategies": ai}
+
+
+class ResetIn(BaseModel):
+    # Bos birakilirsa TUM rapor tipleri silinir.
+    report_types: list[str] = []
+    clear_recommendations: bool = True
+    clear_ai: bool = False
+
+
+@app.post("/api/brands/{brand_id}/reset")
+def reset_brand_data(brand_id: int, body: ResetIn):
+    """Markanin verisini sifirlar. Marka kaydi ve ayarlari KORUNUR.
+
+    Haftalik yeni rapor yuklemeden once eskiyi temizlemek icin. Silme
+    islemi yalnizca bu brand_id'yi etkiler - baska marka etkilenmez.
+    """
+    with db() as c:
+        if not c.execute("SELECT 1 FROM brands WHERE id=?", (brand_id,)).fetchone():
+            raise HTTPException(404, "Marka bulunamadi")
+        deleted = {}
+        if body.report_types:
+            for rt in body.report_types:
+                n = c.execute("DELETE FROM report_rows WHERE brand_id=? AND report_type=?",
+                              (brand_id, rt)).rowcount
+                c.execute("DELETE FROM uploads WHERE brand_id=? AND report_type=?",
+                          (brand_id, rt))
+                deleted[rt] = n
+        else:
+            n = c.execute("DELETE FROM report_rows WHERE brand_id=?", (brand_id,)).rowcount
+            c.execute("DELETE FROM uploads WHERE brand_id=?", (brand_id,))
+            deleted["hepsi"] = n
+        if body.clear_recommendations:
+            deleted["recommendations"] = c.execute(
+                "DELETE FROM recommendations WHERE brand_id=?", (brand_id,)).rowcount
+            c.execute("DELETE FROM rec_history WHERE brand_id=?", (brand_id,))
+        if body.clear_ai:
+            deleted["ai_strategies"] = c.execute(
+                "DELETE FROM ai_strategies WHERE brand_id=?", (brand_id,)).rowcount
+    return {"ok": True, "deleted": deleted}
 
 
 def _load_rows(c, brand_id, rtype):
