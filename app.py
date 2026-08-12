@@ -1460,6 +1460,26 @@ def extension_download():
                  'attachment; filename="ppc-launch-extension.zip"'})
 
 
+@app.post("/api/launch/discovery-bulksheet")
+def launch_discovery_bulksheet(plan: dict):
+    """FAZ 0 kesif kampanyasi (gercek CPC olcumu icin)."""
+    try:
+        buf = launch_mod.build_discovery_campaign(plan)
+    except Exception as e:
+        raise HTTPException(500, f"Kesif kampanyasi uretilemedi: {e}")
+    if not buf:
+        raise HTTPException(400, "Bu plan icin kesif fazi gerekmiyor "
+                                 "(olculmus CPC zaten var) ya da kelime yok.")
+    title = (plan.get("product", {}).get("brand")
+             or plan.get("product", {}).get("title", "launch"))
+    safe = "".join(ch for ch in title[:24] if ch.isalnum() or ch in " -_").strip() or "launch"
+    fname = f"{safe}_FAZ0_cpc_kesif_{datetime.now():%Y%m%d}.xlsx"
+    return StreamingResponse(
+        buf, media_type="application/vnd.openxmlformats-officedocument"
+        ".spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="{fname}"'})
+
+
 @app.post("/api/launch/bulksheet")
 def launch_bulksheet(plan: dict):
     """Analyze'den donen plani (veya elle duzenlenmis halini) bulk sheet yapar."""

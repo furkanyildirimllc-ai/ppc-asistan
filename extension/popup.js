@@ -753,6 +753,8 @@ function renderPlan(plan) {
   
   $("loading-view").style.display = "none";
   $("plan-view").style.display = "block";
+  const f0 = $("faz0-box");
+  if (f0) f0.style.display = plan.discovery_plan ? "block" : "none";
   
   // Prep step 5 data
   $("summary-budget").textContent = `$${plan.daily_budget_total || 0}`;
@@ -826,6 +828,35 @@ $("btn-step-1-next").addEventListener("click", () => goToStep(2));
 $("btn-step-2-next").addEventListener("click", () => goToStep(3));
 $("btn-analyze").addEventListener("click", analyze);
 $("btn-dl").addEventListener("click", downloadBulksheet);
+
+// FAZ 0 kesif kampanyasi: ayri, kucuk, sadece CPC olcmek icin.
+async function downloadDiscovery() {
+  const btn = $("btn-dl-faz0");
+  if (!lastPlan) { btn.textContent = "Önce Analiz Et"; return; }
+  const old = btn.textContent;
+  btn.disabled = true; btn.textContent = "Hazırlanıyor...";
+  try {
+    const r = await fetchWithTimeout(`${API}/api/launch/discovery-bulksheet`, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(lastPlan) }, 120000);
+    if (!r.ok) throw new Error(await errText(r));
+    const blob = await r.blob();
+    if (!blob || blob.size === 0) throw new Error("Boş dosya");
+    const brand = ((lastPlan.product || {}).brand || "launch")
+      .replace(/[^a-z0-9]+/gi, "-").slice(0, 24) || "launch";
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url; a.download = `${brand}-FAZ0-cpc-kesif.xlsx`;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 60000);
+    btn.textContent = "✅ İndirildi";
+  } catch (e) {
+    btn.textContent = "Hata: " + e.message.slice(0, 40);
+  } finally {
+    setTimeout(() => { btn.textContent = old; btn.disabled = false; }, 4000);
+  }
+}
+if ($("btn-dl-faz0")) $("btn-dl-faz0").addEventListener("click", downloadDiscovery);
 
 // Adim gecis butonlari: inline onclick MV3 CSP'sinde calismaz, burada baglaniyor.
 [1, 2, 3, 4, 5].forEach((n) => {
