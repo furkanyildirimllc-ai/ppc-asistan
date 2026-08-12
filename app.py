@@ -1188,10 +1188,13 @@ class LaunchProductIn(BaseModel):
     catalog_products: list[dict] = []
     use_ai: bool = True
     bid_strategy: str = "profit"   # profit | balanced | aggressive
+    measured_cpc: float | None = None  # kendi raporundan gercek ortalama CPC
+    brand_id: int | None = None        # varsa markanin olculmus verisi kullanilir
 
     _p_ints = field_validator("review_count", mode="before")(_loose_int)
     _p_floats = field_validator(
-        "price", "cogs", "fba_fee", "fee_pct", "rating", mode="before")(_loose_float)
+        "price", "cogs", "fba_fee", "fee_pct", "rating", "measured_cpc",
+        mode="before")(_loose_float)
     _p_lists = field_validator(
         "bullets", "search_suggestions", "catalog_products", "competitors",
         mode="before")(_loose_list)
@@ -1220,8 +1223,18 @@ def launch_analyze(body: LaunchProductIn):
     }
     competitors = [c.model_dump() for c in body.competitors]
     try:
+        # Marka verildiyse KENDI olculmus CPC/CVR'i esas alinir.
+        report_rows = None
+        if body.brand_id:
+            with db() as c:
+                rs = c.execute(
+                    "SELECT data FROM report_rows WHERE brand_id=? AND report_type='targeting'",
+                    (body.brand_id,)).fetchall()
+            report_rows = [json.loads(r["data"]) for r in rs] or None
         plan = launch_mod.build_plan(product, competitors, use_ai=body.use_ai,
-                                     bid_strategy=body.bid_strategy)
+                                     bid_strategy=body.bid_strategy,
+                                     measured_cpc=body.measured_cpc,
+                                     report_rows=report_rows)
     except Exception as e:
         raise HTTPException(500, f"Plan uretilemedi: {e}")
     return plan

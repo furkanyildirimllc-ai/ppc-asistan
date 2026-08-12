@@ -20,6 +20,7 @@ from openpyxl.styles import Font, PatternFill
 import config
 from bulksheet import BULK_HEADERS, _sanitize_name
 import competitor_intel
+import benchmarks
 
 try:
     import keepa_engine
@@ -406,27 +407,46 @@ BID_STRATEGIES = {
 MIN_VIABLE_MARKET_RATIO = 0.70
 
 
-def market_cpc_estimate(price, competitors=None):
+def market_cpc_estimate(price, competitors=None, measured_cpc=None):
     """Kategorideki tipik CPC tahmini.
 
-    Yeni urunde gercek CPC verisi yoktur. Fiyatin ~%10'u sektorde yaygin bir
-    yaklasimdir; rakip yogunlugu ve gucu bunu yukari ceker.
+    measured_cpc verilirse (kendi raporlarindan gelen GERCEK ortalama CPC)
+    tahmin yerine o kullanilir - olculmus veri her zaman tahmini yener.
+
+    Tahmin modunda iki carpan vardi ve ikisi de kolayca TAVANA dayaniyordu:
+      - fiyat tabani min(3.0, fiyat*0.10): $30+ her urunde 3.00
+      - rakip carpani 0.06 x SAYI: esik (500 yorum VEYA 4.5 puan) o kadar
+        dusuktu ki gercek Amazon rakiplerinin ~hepsi geciyordu (9/9 olculdu)
+    Sonuc her defasinda $4.50 (maksimum) cikiyor, "tahmin" olmaktan cikiyordu.
+    Artik: taban sert tavana takilmaz, rakip carpani SAYIya degil ORANa bakar
+    ve esik gercekten guclu rakibi ayirt eder.
     """
+    if measured_cpc:
+        try:
+            m = float(measured_cpc)
+            if m > 0:
+                return round(m, 2)
+        except (TypeError, ValueError):
+            pass
+
     p = float(price or 0)
     if p <= 0:
         return 0.75
-    base = max(0.35, min(3.0, p * 0.10))
-    comps = competitors or []
+    base = max(0.30, min(8.0, p * 0.09))
+
+    comps = [c for c in (competitors or []) if c]
     if comps:
+        # Gercekten guclu: hem hacim hem puan. Amazon'da 4.5 puan siradan,
+        # tek basina "guclu" demek degil.
         strong = sum(1 for c in comps
-                     if (c.get("review_count") or 0) > 500
-                     or (c.get("rating") or 0) >= 4.5)
-        # Guclu rakip yogunlugu arttikca acik artirma kizisir.
-        base *= 1.0 + min(0.5, 0.06 * strong)
+                     if (c.get("review_count") or 0) >= 2000
+                     and (c.get("rating") or 0) >= 4.3)
+        share = strong / len(comps)
+        base *= 1.0 + 0.35 * share      # en fazla 1.35x
     return round(base, 2)
 
 
-def bid_feasibility(price, econ, bids, competitors=None):
+def bid_feasibility(price, econ, bids, competitors=None, measured_cpc=None):
     """Odenebilir bid pazar CPC'sini karsiliyor mu?
 
     Karsilamiyorsa kampanya gosterim alamaz ya da alsa bile zarar eder; bu
@@ -434,7 +454,7 @@ def bid_feasibility(price, econ, bids, competitors=None):
     """
     if not bids:
         return {}
-    market = market_cpc_estimate(price, competitors)
+    market = market_cpc_estimate(price, competitors, measured_cpc)
     afford = bids.get("exact") or 0
     ratio = (afford / market) if market > 0 else 1.0
 
@@ -470,8 +490,85 @@ def bid_feasibility(price, econ, bids, competitors=None):
     }
 
 
+def bid_feasibility_v2(price, econ, profit_bids, bench):
+    """Karli bid pazarin gercek CPC'sini karsiliyor mu?
+
+    Karsilamiyorsa bu bir bid ayari sorunu degil, fiyat/maliyet sorunudur.
+    Karsilastirma artik tahmini degil OLCULMUS CPC ile yapilir.
+    """
+    if not profit_bids:
+        return {}
+    market = bench["cpc"].get("exact") or 0
+    afford = profit_bids.get("exact") or 0
+    ratio = (afford / market) if market > 0 else 1.0
+
+    if ratio >= 0.85:
+        status = "ok"
+        head = "Kârlı bid pazarın gerçek CPC'sini karşılıyor."
+        advice = []
+    elif ratio >= 0.55:
+        status = "tight"
+        head = "Kârlı bid pazar CPC'sinin altında — gösterim almakta zorlanabilirsin."
+        advice = ["Uzun kuyruk kelimelerle başla; oralarda CPC daha düşük.",
+                  "Listing dönüşümünü yükselt: her CVR puanı ödenebilir bid'i büyütür.",
+                  "Dengeli stratejiyle kontrollü zarara razı olabilirsin."]
+    else:
+        status = "blocked"
+        head = ("Bu fiyat/maliyet yapısıyla pazarın CPC'sine kârlı giremezsin.")
+        advice = ["Satış fiyatını yükselt ya da COGS/FBA maliyetini düşür.",
+                  "Daha dar, daha ucuz nişlere odaklan (long tail + ASIN targeting).",
+                  "Bilinçli pazar payı yatırımı yapacaksan zarar yazacağını kabul et."]
+
+    return {
+        "status": status, "headline": head,
+        "market_cpc_estimate": round(market, 2),
+        "affordable_bid": round(afford, 2),
+        "ratio_pct": round(ratio * 100),
+        "break_even_acos_pct": (econ or {}).get("break_even_acos_pct"),
+        "advice": advice,
+        "note": bench["cpc_source"],
+    }
+
+
+def suggest_bids_v2(price, econ, bench, strategy="profit"):
+    """Bid'i OLCULMUS referanslardan hesaplar (bench = benchmarks.resolve()).
+
+        odenebilir_bid = fiyat x beklenen_CVR x hedef_ACOS
+        pazar_bid      = o match type'in olculmus CPC'si
+        secilen        = strateji agirligina gore ikisi arasinda
+
+    Onceki surumde CVR ve pazar CPC'si uydurma sabitlerdi; ikisi de
+    olculmus veriyle degistirildi.
+    """
+    p = float(price or 0)
+    if p <= 0:
+        return {k: 0.30 for k in bench["cvr"]}
+    # ACOS ciro tabanlidir. Coklu adet siparisler yuzunden siparis basina ciro
+    # (AOV) birim fiyattan yuksek olabilir; olculmusse onu kullan, yoksa fiyat.
+    rev = float((bench.get("account") or {}).get("aov") or 0) or p
+
+    be = float((econ or {}).get("break_even_acos_pct") or 40.0) / 100.0
+    target = float((econ or {}).get("recommended_target_acos_pct") or be * 70) / 100.0
+    w = BID_STRATEGIES.get(strategy, BID_STRATEGIES["profit"])["market_weight"]
+
+    out = {}
+    for key, cvr in bench["cvr"].items():
+        afford = rev * cvr * target        # hedef ACOS'u tutturan bid
+        ceiling = rev * cvr * be           # break-even bid (zarar siniri)
+        market = bench["cpc"].get(key, afford)
+
+        if strategy == "profit":
+            bid = min(afford, ceiling)
+        else:
+            bid = afford + (market - afford) * w
+            if w >= 0.9:
+                bid = max(bid, market)     # pazar payi: pazari karsila
+        out[key] = round(max(0.15, bid), 2)
+    return out
+
+
 def suggest_bids(price, econ=None, ramp=LAUNCH_RAMP, base_cvr=CATEGORY_BASE_CVR,
-                 strategy="profit", competitors=None):
+                 strategy="profit", competitors=None, measured_cpc=None):
     """Ekonomiye bagli baslangic bid'leri.
 
     econ: break_even() ciktisi. Verilmezse temkinli bir varsayilan hedef ACOS
@@ -489,7 +586,7 @@ def suggest_bids(price, econ=None, ramp=LAUNCH_RAMP, base_cvr=CATEGORY_BASE_CVR,
         be_acos, target_acos = 0.40, 0.28
 
     w = BID_STRATEGIES.get(strategy, BID_STRATEGIES["profit"])["market_weight"]
-    market = market_cpc_estimate(p, competitors)
+    market = market_cpc_estimate(p, competitors, measured_cpc)
 
     out = {}
     for key in MATCH_CVR_FACTOR:
@@ -511,8 +608,44 @@ def suggest_bids(price, econ=None, ramp=LAUNCH_RAMP, base_cvr=CATEGORY_BASE_CVR,
     return out
 
 
+def bid_outlook_v2(price, econ, bids, bench):
+    """Secilen bid'lerle gercekte ne olur: tahmini ACOS, gosterim sansi, karlilik.
+    Tum sayilar bench'teki OLCULMUS CVR/CPC uzerinden hesaplanir."""
+    p = float(price or 0)
+    if p <= 0 or not bids:
+        return {}
+    be = float((econ or {}).get("break_even_acos_pct") or 0) / 100.0
+    rev = float((bench.get("account") or {}).get("aov") or 0) or p
+    rows = {}
+    for key, bid in bids.items():
+        cvr = bench["cvr"].get(key) or 0
+        market = bench["cpc"].get(key) or 0
+        acos = bid / (rev * cvr) if (rev and cvr) else 0
+        ratio = bid / market if market else 1
+        rows[key] = {
+            "bid": bid,
+            "expected_cvr_pct": round(cvr * 100, 2),
+            "market_cpc": round(market, 2),
+            "expected_acos_pct": round(acos * 100, 1),
+            "vs_market_pct": round(ratio * 100),
+            "impression_odds": ("iyi" if ratio >= 0.95 else
+                                "orta" if ratio >= 0.75 else "dusuk"),
+            "profitable": (acos <= be) if be else None,
+            "cvr_source": bench["cvr_source"].get(key),
+        }
+    return {
+        "per_match": rows,
+        "break_even_acos_pct": round(be * 100, 1),
+        "revenue_per_order": round(rev, 2),
+        "cpc_source": bench["cpc_source"],
+        "ramp_pct": round(bench["ramp"] * 100),
+        "calibration": bench["calibration_note"],
+        "account": bench.get("account"),
+    }
+
+
 def bid_outlook(price, econ, bids, competitors=None, ramp=LAUNCH_RAMP,
-                base_cvr=CATEGORY_BASE_CVR):
+                base_cvr=CATEGORY_BASE_CVR, measured_cpc=None):
     """Secilen bid'lerin gercek sonucu ne olur? Tahmini ACOS ve gosterim sansi.
 
     Kullanici "bu bid'le ne olacak" sorusunun cevabini gormeden secim yapmasin.
@@ -520,7 +653,7 @@ def bid_outlook(price, econ, bids, competitors=None, ramp=LAUNCH_RAMP,
     p = float(price or 0)
     if p <= 0 or not bids:
         return {}
-    market = market_cpc_estimate(p, competitors)
+    market = market_cpc_estimate(p, competitors, measured_cpc)
     be = float((econ or {}).get("break_even_acos_pct") or 0) / 100.0
     rows = {}
     for key, bid in bids.items():
@@ -719,7 +852,7 @@ def _campaign_prefix(brand, title, asin):
 
 # ------------------------------------------------------------------ plan
 def build_plan(product, competitors=None, use_ai=True, model=None,
-               bid_strategy="profit"):
+               bid_strategy="profit", measured_cpc=None, report_rows=None):
     """product: {title, asin, sku, price, brand, cogs, fba_fee, fee_pct}. -> plan dict."""
     title = product.get("title") or ""
     asin = (product.get("asin") or "").strip()
@@ -848,14 +981,16 @@ def build_plan(product, competitors=None, use_ai=True, model=None,
 
     if bid_strategy not in BID_STRATEGIES:
         bid_strategy = "profit"
-    bids = suggest_bids(price, econ, strategy=bid_strategy, competitors=competitors)
+    # Referanslar: markanin kendi olculmus verisi > kalibre varsayilan.
+    bench = benchmarks.resolve(report_rows, price=price, override_cpc=measured_cpc)
+    bids = suggest_bids_v2(price, econ, bench, strategy=bid_strategy)
     budgets = suggest_budgets(price, bids)
-    outlook = bid_outlook(price, econ, bids, competitors)
+    outlook = bid_outlook_v2(price, econ, bids, bench)
     # Uyari her zaman "karli" bid'e gore hesaplanir: strateji degistirmek
     # fiyat/maliyet gercegini degistirmez, sadece ne kadar zarara razi
     # oldugunu degistirir.
-    feasibility = bid_feasibility(price, econ, suggest_bids(price, econ),
-                                  competitors)
+    profit_bids = suggest_bids_v2(price, econ, bench, strategy="profit")
+    feasibility = bid_feasibility_v2(price, econ, profit_bids, bench)
     prefix = _campaign_prefix(product.get("brand"), title, asin)
 
     campaigns = [
@@ -915,6 +1050,12 @@ def build_plan(product, competitors=None, use_ai=True, model=None,
         "bid_strategy": bid_strategy,
         "bid_strategy_label": BID_STRATEGIES[bid_strategy]["label"],
         "bid_explanation": bid_explanation(price, econ, bids),
+        "benchmarks": {"cvr_pct": {k: round(v*100,2) for k,v in bench["cvr"].items()},
+                       "cpc": bench["cpc"], "cvr_source": bench["cvr_source"],
+                       "cpc_source": bench["cpc_source"],
+                       "ramp_pct": round(bench["ramp"]*100),
+                       "account": bench.get("account"),
+                       "calibration": bench["calibration_note"]},
         "bid_feasibility": feasibility,
         "bid_outlook": outlook,
         "budgets": budgets,
