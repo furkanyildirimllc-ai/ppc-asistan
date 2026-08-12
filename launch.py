@@ -554,6 +554,21 @@ def bid_feasibility_v2(price, econ, profit_bids, bench):
         return {}
     market = bench["cpc"].get("exact") or 0
     afford = profit_bids.get("exact") or 0
+
+    if not market:
+        # CPC olculmemis. "Karsiliyor" demek yanlis olur - kiyaslanacak sayi yok.
+        return {
+            "status": "unknown",
+            "headline": "Pazar CPC'si bilinmiyor — karşılaştırma yapılamıyor.",
+            "market_cpc_estimate": None,
+            "affordable_bid": round(afford, 2),
+            "ratio_pct": None,
+            "break_even_acos_pct": (econ or {}).get("break_even_acos_pct"),
+            "advice": ["Aşağıdaki Ölç-Düzelt planıyla 3 günde gerçek CPC'yi ölç.",
+                       "Ya da bildiğin bir CPC varsa elle gir."],
+            "note": bench["cpc_source"],
+        }
+
     ratio = (afford / market) if market > 0 else 1.0
 
     if ratio >= 0.85:

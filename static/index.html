@@ -926,6 +926,19 @@
 <dialog id="brandDlg">
   <h3 id="dlgTitle">Yeni Marka</h3>
   <label>Marka adı</label><input id="bName">
+  <label>Marka tipi</label>
+  <select id="bKind">
+    <option value="active">Aktif — reklamları çalışıyor</option>
+    <option value="launch">🚀 Lansman — henüz reklam verisi yok</option>
+  </select>
+  <div id="dataBox" style="display:none;margin-top:12px;padding:10px;border:1px solid var(--line,#334155);border-radius:8px">
+    <b style="font-size:13px">Yüklü veri</b>
+    <div id="dataInv" style="font-size:12px;margin-top:6px;color:#94a3b8">yükleniyor…</div>
+    <button class="no" style="margin-top:8px" onclick="resetBrandData()">🧹 Bu markanın verisini sıfırla</button>
+    <div style="font-size:11px;color:#94a3b8;margin-top:4px">
+      Marka ayarları korunur, sadece rapor verisi ve öneriler silinir. Diğer markalar etkilenmez.
+    </div>
+  </div>
   <label>Hedef ACOS % (örn. 30)</label><input id="bAcos" type="number" step="1" value="30">
   <label>Negatif için min. tıklama (satışsız)</label><input id="bClicks" type="number" value="8">
   <label>Kelime taşıma için min. sipariş</label><input id="bOrders" type="number" value="2">
@@ -1139,14 +1152,32 @@ async function api(url,opts){
 async function loadBrands(keep){
   brands=await(await api('/api/brands')).json();
   const sel=$('brandSel');
-  sel.innerHTML=brands.length?'':'<option>marka yok</option>';
-  for(const b of brands){
-    const o=document.createElement('option');o.value=b.id;o.textContent=b.name;
-    sel.appendChild(o);
-  }
+  sel.innerHTML='';
+  // Acilista MARKA SECILI GELMEZ. Onceden ilk marka otomatik seciliyordu;
+  // yanlis markanin verisine bakip dogru sanmak kolaydi.
+  const ph=document.createElement('option');
+  ph.value=''; ph.textContent=brands.length?'— Marka seç —':'marka yok';
+  sel.appendChild(ph);
+
+  // Lansman markalari ayri grupta: henuz reklam verisi yoktur, optimizasyon
+  // ekranlari onlar icin anlamsizdir.
+  const mk=(label,list)=>{
+    if(!list.length)return;
+    const g=document.createElement('optgroup'); g.label=label;
+    for(const b of list){
+      const o=document.createElement('option');
+      o.value=b.id;
+      const rows=(b.data_freshness||[]).reduce((a,x)=>a+(x.rows||0),0);
+      o.textContent=b.name+(rows?'':'  (veri yok)');
+      g.appendChild(o);
+    }
+    sel.appendChild(g);
+  };
+  mk('Aktif markalar', brands.filter(b=>(b.kind||'active')!=='launch'));
+  mk('🚀 Lansman markaları', brands.filter(b=>b.kind==='launch'));
+
   if(keep&&brands.some(b=>b.id==brandId)){sel.value=brandId;}
-  else if(brands.length){brandId=brands[0].id;sel.value=brandId;}
-  else brandId=null;
+  else {brandId=null; sel.value='';}
   await selectBrand(brandId);
 }
 
@@ -2481,11 +2512,48 @@ function openBrandDialog(edit){
   $('bHarvestAdGroup').value=b?(b.harvest_ad_group||''):'';
   $('bHarvestCamp').value=b?(b.harvest_campaign||''):'';
   $('bHarvestAdGroup').value=b?(b.harvest_ad_group||''):'';
+  $('bKind').value=b?(b.kind||'active'):'active';
   $('delBrandBtn').style.display=editing?'inline-block':'none';
+  $('dataBox').style.display=editing?'block':'none';
+  if(editing) loadDataInventory(b.id);
   editingProducts=b&&b.products?JSON.parse(JSON.stringify(b.products)):[];
   renderProductsList();
   updateCalcPreview();
   $('brandDlg').showModal();
+}
+
+// Neyi silecegini gormeden silme: once envanteri goster.
+async function loadDataInventory(id){
+  const box=$('dataInv');
+  box.textContent='yükleniyor…';
+  try{
+    const d=await(await api(`/api/brands/${id}/data-inventory`)).json();
+    if(!d.reports||!d.reports.length){
+      box.innerHTML='<i>Bu markada yüklü rapor verisi yok.</i>';
+      return;
+    }
+    box.innerHTML=d.reports.map(r=>
+      `<div>• <b>${r.report_type}</b> — ${r.rows.toLocaleString('tr')} satır`
+      +(r.last_upload?` <span style="opacity:.7">(${r.last_upload.replace('T',' ')})</span>`:'')
+      +`</div>`).join('')
+      +`<div style="margin-top:4px;opacity:.8">${d.recommendations} öneri · ${d.ai_strategies} AI stratejisi</div>`;
+  }catch(e){ box.textContent='envanter alınamadı: '+e; }
+}
+
+async function resetBrandData(){
+  const b=brands.find(x=>x.id==brandId);
+  if(!b) return;
+  if(!confirm(`"${b.name}" markasının TÜM rapor verisi ve önerileri silinecek.\n\n`
+             +`Marka ayarları korunur. Diğer markalar etkilenmez.\n\nOnaylıyor musun?`)) return;
+  try{
+    const r=await api(`/api/brands/${brandId}/reset`,{
+      method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({clear_recommendations:true,clear_ai:false})});
+    const d=await r.json();
+    toast('Veri sıfırlandı: '+JSON.stringify(d.deleted));
+    await loadDataInventory(brandId);
+    await loadBrands(true);
+  }catch(e){ toast('Sıfırlama hatası: '+e); }
 }
 
 function renderProductsList(){/* removed - profit UI kaldırıldı */}
@@ -2504,7 +2572,8 @@ async function saveBrand(){
     amazon_fee_pct:(Number($('bFee').value)||0)/100,
     fba_fee:Number($('bFba').value)||0,
     harvest_campaign:$('bHarvestCamp').value.trim(),
-    harvest_ad_group:$('bHarvestAdGroup').value.trim()});
+    harvest_ad_group:$('bHarvestAdGroup').value.trim(),
+    kind:$('bKind').value});
   if(!$('bName').value.trim()){toast('Marka adı gerekli');return;}
   const url=editing?`/api/brands/${brandId}`:'/api/brands';
   const r=await api(url,{method:editing?'PUT':'POST',

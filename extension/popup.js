@@ -563,6 +563,32 @@ $("strategy-picker").addEventListener("click", (ev) => {
   saveState();
 });
 
+function renderDataWarnings(list) {
+  if (!list || !list.length) return "";
+  return `<div class="feas tight"><b>⚠️ Veri durumu</b>
+    <ul>${list.map(w => `<li>${w}</li>`).join("")}</ul></div>`;
+}
+
+function renderMeasurePlan(m) {
+  if (!m || !m.probe_bids) return "";
+  const bids = Object.entries(m.probe_bids)
+    .map(([k, v]) => `<span class="chip">${k}: $${v}</span>`).join(" ");
+  return `
+    <div class="card" style="margin-top:12px; border-left:3px solid var(--acc);">
+      <div class="tag">🔬 Ölç-Düzelt Planı (önerilen ilk adım)</div>
+      <div class="muted" style="margin-top:4px;">${m.purpose}</div>
+      <div style="margin-top:8px; font-size:12px;">
+        <b>${m.days} gün</b> · günlük <b>$${m.budget_per_day}</b> ·
+        toplam <b>$${m.total_budget}</b> · hedef <b>${m.target_clicks} tıklama</b>
+      </div>
+      <div style="margin-top:8px;">${bids}</div>
+      <div class="expert-note" style="margin-top:8px;"><b>Neden bu bid:</b> ${m.why_this_bid}</div>
+      <div class="expert-note" style="margin-top:6px;"><b>Ne zaman dur:</b> ${m.stop_rule}</div>
+      <div class="expert-note" style="margin-top:6px; border-color:var(--ok)">
+        <b>Sonraki adım:</b> ${m.next_step}</div>
+    </div>`;
+}
+
 function renderOutlook(o) {
   if (!o || !o.per_match) return "";
   const order = ["exact", "phrase", "broad", "auto", "pt"];
@@ -594,15 +620,18 @@ function renderOutlook(o) {
 
 function renderFeasibility(f) {
   if (!f || !f.headline) return "";
-  const icon = f.status === "ok" ? "✅" : f.status === "tight" ? "⚠️" : "🚫";
+  const icon = f.status === "ok" ? "✅" : f.status === "tight" ? "⚠️"
+             : f.status === "unknown" ? "❓" : "🚫";
   const tips = (f.advice || []).map(a => `<li>${a}</li>`).join("");
   return `
     <div class="feas ${f.status}">
       <b>${icon} ${f.headline}</b>
       <div class="feas-nums">
         <span>Ödenebilir bid: <b>$${f.affordable_bid}</b></span>
-        <span>Pazar CPC (tahmini): <b>$${f.market_cpc_estimate}</b></span>
-        <span>Karşılama: <b>%${f.ratio_pct}</b></span>
+        ${f.market_cpc_estimate != null
+          ? `<span>Pazar CPC: <b>$${f.market_cpc_estimate}</b></span>` : ""}
+        ${f.ratio_pct != null
+          ? `<span>Karşılama: <b>%${f.ratio_pct}</b></span>` : ""}
       </div>
       ${tips ? `<ul>${tips}</ul>` : ""}
       <div class="muted" style="margin-top:5px; font-size:10px;">${f.note || ""}</div>
@@ -707,7 +736,9 @@ function renderPlan(plan) {
   ` : "";
 
   $("plan-content").innerHTML = `
+    ${renderDataWarnings(plan.data_warnings)}
     ${renderFeasibility(plan.bid_feasibility)}
+    ${renderMeasurePlan(plan.measure_plan)}
     ${renderOutlook(plan.bid_outlook)}
     ${rationaleHtml}
     ${econHtml}

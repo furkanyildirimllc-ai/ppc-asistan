@@ -153,6 +153,7 @@ class BrandIn(BaseModel):
     harvest_ad_group: str = ""
     competitor_brands: str = ""
     not_brands: str = ""
+    kind: str = "active"   # active | launch
 
 
 def _profit_calc_single(sp, cogs, fee_pct, fba):
@@ -282,13 +283,14 @@ def update_brand(brand_id: int, body: BrandIn):
             "UPDATE brands SET name=?,target_acos=?,min_clicks_neg=?,"
             "min_orders_harvest=?,bid_change_cap=?,sell_price=?,cogs=?,"
             "amazon_fee_pct=?,fba_fee=?,harvest_campaign=?,harvest_ad_group=?,"
-            "competitor_brands=?,not_brands=? "
+            "competitor_brands=?,not_brands=?,kind=? "
             "WHERE id=?",
             (body.name.strip(), body.target_acos, body.min_clicks_neg,
              body.min_orders_harvest, body.bid_change_cap,
              body.sell_price, body.cogs, body.amazon_fee_pct, body.fba_fee,
              body.harvest_campaign.strip(), body.harvest_ad_group.strip(),
              body.competitor_brands.strip(), body.not_brands.strip(),
+             (body.kind or "active").strip(),
              brand_id))
     _regenerate(brand_id)
     return {"ok": True}
