@@ -25,9 +25,10 @@ Onay gelmeden aşağıdaki adımlar çalışmaz.
 2. **Create a New Security Profile**
    - Name: `PPC Asistan`
    - Description: kendi kullanımın
-   - Consent Privacy Notice URL: herhangi bir geçerli URL (kendi siten olur)
+   - Consent Privacy Notice URL: `https://ppc-asistan.onrender.com/privacy`
+     (localhost kabul edilmez — herkese açık HTTPS adres olmalı)
 3. Oluşturduktan sonra **Web Settings** → **Edit**
-   - Allowed Return URLs: `https://localhost:8642/callback`
+   - Allowed Return URLs: `https://ppc-asistan.onrender.com/callback`
 4. Buradan iki değeri al: **Client ID** ve **Client Secret**
 
 ## 3. Refresh token (bir kez alınır, kalıcıdır)
@@ -36,11 +37,11 @@ Tarayıcıda şu adrese git (`CLIENT_ID` ve gerekiyorsa bölgeyi kendi
 değerinle değiştir):
 
 ```
-https://www.amazon.com/ap/oa?client_id=CLIENT_ID&scope=advertising::campaign_management&response_type=code&redirect_uri=https://localhost:8642/callback
+https://www.amazon.com/ap/oa?client_id=CLIENT_ID&scope=advertising::campaign_management&response_type=code&redirect_uri=https://ppc-asistan.onrender.com/callback
 ```
 
-- Onayla. Tarayıcı `https://localhost:8642/callback?code=XXXX` adresine döner.
-- Sayfa açılmasa da olur; **adres çubuğundaki `code=` değerini kopyala.**
+- Onayla. Tarayıcı canlı sunucundaki callback sayfasına döner ve
+  **authorization code'u ekranda gösterir** — oradan kopyala.
 
 Sonra terminalde (kendi değerlerini koyarak):
 
@@ -48,7 +49,7 @@ Sonra terminalde (kendi değerlerini koyarak):
 curl -X POST https://api.amazon.com/auth/o2/token \
   -d "grant_type=authorization_code" \
   -d "code=BURAYA_CODE" \
-  -d "redirect_uri=https://localhost:8642/callback" \
+  -d "redirect_uri=https://ppc-asistan.onrender.com/callback" \
   -d "client_id=BURAYA_CLIENT_ID" \
   -d "client_secret=BURAYA_CLIENT_SECRET"
 ```

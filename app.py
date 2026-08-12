@@ -11,7 +11,7 @@ from pathlib import Path
 import openpyxl
 from openpyxl.styles import Font, PatternFill
 from fastapi import FastAPI, UploadFile, HTTPException
-from fastapi.responses import FileResponse, StreamingResponse
+from fastapi.responses import FileResponse, StreamingResponse, HTMLResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, field_validator
 
@@ -218,6 +218,91 @@ def _profit_calc(b, products=None):
     if res:
         res["mode"] = "single"
     return res
+
+
+_PAGE_CSS = """
+body{font:15px/1.6 system-ui,-apple-system,sans-serif;background:#0f172a;
+color:#e2e8f0;max-width:760px;margin:0 auto;padding:40px 24px}
+h1{font-size:22px;margin:0 0 6px} h2{font-size:16px;margin:26px 0 6px;color:#38bdf8}
+code{background:#1e293b;padding:2px 6px;border-radius:5px;font-size:13px;
+word-break:break-all} .muted{color:#94a3b8;font-size:13px}
+.box{background:#1e293b;border:1px solid #334155;border-radius:10px;padding:16px;margin:16px 0}
+"""
+
+
+@app.get("/privacy")
+def privacy_notice():
+    """Gizlilik bildirimi.
+
+    Amazon Login with Amazon (LWA) guvenlik profili olustururken
+    'Consent Privacy Notice URL' alani herkese acik bir HTTPS adres ister;
+    localhost kabul edilmez. Bu sayfa o amaca hizmet eder.
+    """
+    html = f"""<!doctype html><html lang="tr"><head><meta charset="utf-8">
+<title>Gizlilik Bildirimi - PPC Asistan</title><style>{_PAGE_CSS}</style></head><body>
+<h1>Gizlilik Bildirimi</h1>
+<p class="muted">PPC Asistan - Amazon reklam raporu analiz araci</p>
+
+<h2>Bu uygulama nedir</h2>
+<p>PPC Asistan, tek bir saticinin kendi Amazon reklam hesabini yonetmek icin
+kullandigi <b>kisisel bir aractir</b>. Ucuncu taraflara hizmet sunmaz, kullanici
+kaydi almaz, baska kullanicilarin verisini islemez.</p>
+
+<h2>Hangi veriler islenir</h2>
+<ul>
+<li>Hesap sahibinin kendi Amazon reklam raporlari (kampanya, arama terimi,
+hedefleme, yerlesim) ve Brand Analytics verileri</li>
+<li>Amazon Advertising API kullanildiginda: yalnizca hesap sahibinin kendi
+reklam hesabina ait kampanya ve teklif verileri</li>
+</ul>
+<p>Alici kisisel verisi, odeme bilgisi, adres veya iletisim bilgisi
+<b>islenmez ve saklanmaz</b>.</p>
+
+<h2>Veriler nerede tutulur</h2>
+<p>Veriler yalnizca hesap sahibinin kendi ortaminda (yerel makine veya kendi
+sunucusu) bir SQLite veritabaninda tutulur. Ucuncu taraflarla paylasilmaz,
+satilmaz, reklam amaciyla kullanilmaz.</p>
+
+<h2>Erisim yetkileri</h2>
+<p>Amazon API erisim anahtarlari yalnizca sunucu ortam degiskenlerinde tutulur,
+kaynak koda yazilmaz ve surum kontrolune dahil edilmez. Yetki istendigi anda
+iptal edilebilir.</p>
+
+<h2>Saklama ve silme</h2>
+<p>Veriler uygulama icinden marka bazinda istenildigi zaman tamamen silinebilir.
+Uygulama kaldirildiginda tum veri de silinmis olur.</p>
+
+<h2>Iletisim</h2>
+<p>Bu arac hakkinda soru icin hesap sahibiyle iletisime gecin.</p>
+<p class="muted">Son guncelleme: {datetime.now():%Y-%m-%d}</p>
+</body></html>"""
+    return HTMLResponse(html)
+
+
+@app.get("/callback")
+def lwa_callback(code: str = "", error: str = "", error_description: str = ""):
+    """LWA yetkilendirme donusu.
+
+    Amazon buraya ?code=... ile doner. Kod kisa omurludur; sayfada gosterilir
+    ki refresh token'a cevirmek icin kopyalanabilsin.
+    """
+    if error:
+        body = (f'<div class="box"><b>Yetkilendirme reddedildi</b><br>'
+                f'<code>{error}</code><p class="muted">{error_description}</p></div>')
+    elif code:
+        body = (f'<div class="box"><b>Authorization code alindi</b>'
+                f'<p><code>{code}</code></p>'
+                f'<p class="muted">Bu kod birkac dakika gecerlidir. '
+                f'ADS_API_KURULUM.md icindeki curl komutuyla hemen '
+                f'refresh token\'a cevir.</p></div>')
+    else:
+        body = ('<div class="box">Bu adres Amazon Login with Amazon '
+                'yonlendirmesi icindir. Dogrudan acildiginda gosterilecek '
+                'bir sey yoktur.</div>')
+    html = f"""<!doctype html><html lang="tr"><head><meta charset="utf-8">
+<title>LWA Callback - PPC Asistan</title><style>{_PAGE_CSS}</style></head><body>
+<h1>Amazon yetkilendirme</h1>{body}</body></html>"""
+    return HTMLResponse(html)
 
 
 @app.get("/")
