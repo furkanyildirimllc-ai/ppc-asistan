@@ -17,27 +17,35 @@ Bu modul sirayla su kaynaklari dener:
 Her sonuc "source" ve "confidence" ile birlikte doner; kullaniciya hangi
 sayinin olculdugu hangisinin tahmin oldugu acikca soylenir.
 """
+import re
 
-# Gercek hesap verisinden kalibre edildi (Amazon SP, sac bakim kategorisi,
-# ~6200 tiklama). Olculen degerler:
-#   EXACT   CPC $3.00  CVR %15.15   (1914 tik)
-#   PHRASE  CPC $3.16  CVR %14.64   (1639 tik)
-#   AUTO    CPC $2.04  CVR % 5.57   (1956 tik)
-#   ASIN/PT CPC $1.71  CVR % 7.72   ( 661 tik)
-#   BROAD   CPC $1.92  CVR % 5.26   (  38 tik - dusuk guven)
-#   Hesap geneli: CPC $2.60, CVR %11.2, AOV $36.95
-CALIBRATION = {
-    "source": "olculmus hesap verisi (~6200 tiklama, sac bakim)",
-    "account_cpc": 2.60,
-    "account_cvr": 0.112,
-    "aov": 36.95,
-    # Olgun (veri birikmis) listing icin match type bazinda CVR
-    "cvr": {"exact": 0.1515, "phrase": 0.1464, "broad": 0.0526,
-            "auto": 0.0557, "pt": 0.0772},
-    # Hesap ortalama CPC'sine gore match type CPC carpani
-    "cpc_factor": {"exact": 1.15, "phrase": 1.22, "broad": 0.74,
-                   "auto": 0.78, "pt": 0.66},
-}
+# =====================================================================
+# MARKA IZOLASYONU - KURAL
+# Bir markanin olculmus verisi ASLA baska bir markanin planinda kullanilmaz.
+# Farkli marka = farkli fiyat, farkli kitle, farkli donusum. Karistirmak
+# sessizce yanlis bid uretir.
+#
+# Bu dosyada HICBIR markaya ait sayi sabit olarak tutulmaz. Asagidaki
+# degerler yalnizca match type'lar arasindaki GORELI iliskidir (Amazon SP
+# mekanigi geregi exact > phrase > broad); mutlak CVR/CPC degeri degildir
+# ve tek basina kullanilmaz.
+# =====================================================================
+
+# Match type'lar arasi goreli CVR iliskisi (phrase = 1.00).
+# Niyet genisligi mekaniktir: exact en dar niyet, broad/auto en genis.
+RELATIVE_CVR = {"exact": 1.05, "phrase": 1.00, "broad": 0.38,
+                "auto": 0.40, "pt": 0.55}
+# Match type'lar arasi goreli CPC iliskisi (hesap ortalamasi = 1.00).
+RELATIVE_CPC = {"exact": 1.15, "phrase": 1.20, "broad": 0.75,
+                "auto": 0.80, "pt": 0.68}
+
+MATCH_KEYS = ("exact", "phrase", "broad", "auto", "pt")
+
+# Hicbir olcum yoksa kullanilan SON CARE varsayim. Bu deger hicbir markadan
+# turetilmemistir; Amazon Sponsored Products genelinde yaygin olarak
+# bildirilen ~%9 donusum orani baslangic noktasidir. Her zaman "VARSAYIM"
+# olarak isaretlenir ve kullanicinin ustune yazmasi beklenir.
+FALLBACK_CVR = 0.09
 
 # Yeni listing olgun listing kadar donusturmez: yorum yok, organik sira yok,
 # Amazon henuz alaka ogrenmemis. Ilk 2-4 haftada olgun CVR'in ~%65'i beklenir.
@@ -47,6 +55,105 @@ LAUNCH_RAMP = 0.65
 MIN_CLICKS_TRUST = 100
 # Bu esigin altinda ama ustunde veri varsa kismen harmanlanir.
 MIN_CLICKS_BLEND = 25
+
+
+def _q_tokens(s):
+    return {t for t in re.sub(r"[^a-z0-9]+", " ", str(s or "").lower()).split()
+            if len(t) > 2}
+
+
+def query_stats(ba_rows):
+    """Brand Analytics 'Search Query Performance' -> kelime bazinda PAZAR verisi.
+
+    Bu veri REKLAM ACMADAN elde edilir; yeni urun lansmaninda elimizdeki tek
+    gercek donusum kaynagidir. Her sorgu icin:
+      cvr    = satin alma / tiklama  (pazarin tamami, tum saticilar)
+      volume = arama hacmi           (talep buyuklugu)
+      price  = tiklanan urunlerin ortalama fiyati (fiyat konumlandirmasi)
+    """
+    agg = {}
+    for r in ba_rows or []:
+        q = str(r.get("query") or "").strip().lower()
+        if not q:
+            continue
+        a = agg.setdefault(q, dict(clicks=0.0, purchases=0.0, volume=0.0,
+                                   price_num=0.0, price_w=0.0))
+        cl = float(r.get("clicks_total") or 0)
+        pu = float(r.get("pur_total") or 0)
+        a["clicks"] += cl
+        a["purchases"] += pu
+        a["volume"] += float(r.get("volume") or 0)
+        mp = float(r.get("market_price") or 0)
+        if mp > 0 and cl > 0:
+            a["price_num"] += mp * cl
+            a["price_w"] += cl
+    out = {}
+    for q, a in agg.items():
+        if a["clicks"] <= 0:
+            continue
+        out[q] = {
+            "cvr": a["purchases"] / a["clicks"],
+            "clicks": a["clicks"],
+            "volume": a["volume"],
+            "market_price": (a["price_num"] / a["price_w"]) if a["price_w"] else None,
+        }
+    return out
+
+
+def category_cvr(qstats, seed_tokens=None):
+    """Kategori geneli pazar CVR'i (hacimle agirlikli).
+    seed_tokens verilirse sadece o kategoriye ait sorgular sayilir."""
+    cl = pu = 0.0
+    for q, d in (qstats or {}).items():
+        if seed_tokens and not (_q_tokens(q) & seed_tokens):
+            continue
+        cl += d["clicks"]
+        pu += d["cvr"] * d["clicks"]
+    return (pu / cl) if cl > 0 else None
+
+
+def lookup_query(qstats, keyword, min_clicks=30, require_tokens=None):
+    """Bir keyword icin pazar verisi. Once tam eslesme, sonra token ortusmesi.
+
+    Doner: (stats, match_kind) - match_kind: exact | partial | None
+    """
+    if not qstats or not keyword:
+        return None, None
+    k = str(keyword).strip().lower()
+    d = qstats.get(k)
+    if d and d["clicks"] >= min_clicks:
+        return d, "exact"
+
+    kt = _q_tokens(k)
+    if not kt:
+        return None, None
+    best, best_score, best_q = None, 0.0, None
+    for q, d in qstats.items():
+        if d["clicks"] < min_clicks:
+            continue
+        qt = _q_tokens(q)
+        if not qt:
+            continue
+        inter = kt & qt
+        if not inter:
+            continue
+        # Urun tipini belirleyen kok kelime (ornek "shampoo") ESLESMEK ZORUNDA.
+        # Yoksa "shampoo for thinning hair women" -> "hair fibers for thinning
+        # hair for women" gibi BASKA BIR URUNUN sorgusuna baglaniyor ve yanlis
+        # CVR atiyordu. Yanlis veri, veri yoklugundan kotudur.
+        if require_tokens and not (require_tokens & qt):
+            continue
+        # Jaccard: tek yonlu kapsama, dar keyword'u cok daha genis sorguya
+        # baglayip yanlis hacim/CVR veriyordu.
+        score = len(inter) / len(kt | qt)
+        if score > best_score or (score == best_score and best and d["clicks"] > best["clicks"]):
+            best, best_score, best_q = d, score, q
+    if best is not None and best_score >= 0.6:
+        out = dict(best)
+        out["matched_query"] = best_q
+        out["match_score"] = round(best_score, 2)
+        return out, "partial"
+    return None, None
 
 
 def _norm_match(row):
@@ -109,52 +216,98 @@ def _blend(measured_val, default_val, clicks):
     return default_val, 0.0
 
 
-def resolve(rows=None, price=None, ramp=LAUNCH_RAMP, override_cpc=None):
-    """Lansman icin kullanilacak CVR ve CPC referanslarini belirler.
+def resolve(rows=None, ba_rows=None, brand_id=None, brand_name=None,
+            category_tokens=None, ramp=LAUNCH_RAMP, override_cpc=None,
+            assumed_cvr=None):
+    """Lansman referanslarini belirler. MARKA IZOLASYONU ZORUNLUDUR.
 
-    rows verilirse markanin kendi olcumu esas alinir; yetersizse kalibre
-    varsayilanlarla harmanlanir. Sonuc her zaman hangi kaynaktan geldigini
-    ve ne kadar guvenilir oldugunu soyler.
+    rows / ba_rows YALNIZCA plani yapilan markaya ait olmalidir; cagiran taraf
+    bunu brand_id ile filtreleyerek getirir. Bu fonksiyon baska bir markanin
+    verisine ASLA basvurmaz ve veri yoksa uydurmaz - "veri yok" der.
+
+    Kaynak onceligi:
+      CVR: markanin kendi reklam olcumu > kendi Brand Analytics pazar verisi
+           > kullanicinin girdigi varsayim > (hicbiri yoksa) VARSAYIM YOK
+      CPC: kullanici girdisi > markanin kendi olculmus CPC'si
+           > (hicbiri yoksa) OLCUM YOK - pazar capali stratejiler kapatilir
     """
     m = measure(rows) if rows else {}
     acct = m.get("_account") or {}
+    qs = query_stats(ba_rows) if ba_rows else {}
 
-    cvr, cpc, conf, src = {}, {}, {}, {}
-    for key, dflt_cvr in CALIBRATION["cvr"].items():
-        got = m.get(key) or {}
-        clicks = got.get("clicks", 0)
-        v, w = _blend(got.get("cvr", dflt_cvr), dflt_cvr, clicks)
-        # Olgun CVR -> lansman CVR
-        cvr[key] = round(max(0.005, v * ramp), 4)
-        conf[key] = round(w, 2)
-        src[key] = ("olculdu" if w >= 1.0 else
-                    "kismen olculdu" if w > 0 else "kalibre varsayilan")
+    warnings = []
+    scope = {"brand_id": brand_id, "brand_name": brand_name,
+             "ad_rows": len(rows or []), "ba_rows": len(ba_rows or [])}
 
-        # CPC: once override, sonra olculen, sonra hesap ortalamasi x carpan
-        if override_cpc:
-            cpc[key] = round(float(override_cpc) * CALIBRATION["cpc_factor"][key], 2)
-        elif clicks >= MIN_CLICKS_BLEND and got.get("cpc"):
-            cpc[key] = round(got["cpc"], 2)
-        elif acct.get("cpc"):
-            cpc[key] = round(acct["cpc"] * CALIBRATION["cpc_factor"][key], 2)
-        else:
-            cpc[key] = round(CALIBRATION["account_cpc"]
-                             * CALIBRATION["cpc_factor"][key], 2)
+    # ---------------- CVR temeli ----------------
+    base_cvr, cvr_basis = None, None
+    if acct.get("clicks", 0) >= MIN_CLICKS_TRUST and acct.get("cvr"):
+        base_cvr = acct["cvr"]
+        cvr_basis = (f"{brand_name or 'marka'} kendi reklam verisi "
+                     f"(%{base_cvr*100:.2f}, {acct['clicks']:.0f} tik)")
+    elif qs:
+        cat = category_cvr(qs, set(category_tokens or []) or None)
+        if cat:
+            base_cvr = cat
+            cvr_basis = (f"{brand_name or 'marka'} Brand Analytics pazar CVR'i "
+                         f"(%{cat*100:.2f})")
+    if base_cvr is None and assumed_cvr:
+        base_cvr = float(assumed_cvr)
+        cvr_basis = f"kullanici varsayimi (%{base_cvr*100:.2f})"
+    if base_cvr is None:
+        base_cvr = FALLBACK_CVR
+        cvr_basis = f"⚠ VARSAYIM (%{FALLBACK_CVR*100:.0f}) - bu marka icin olcum yok"
+        warnings.append(
+            f"Bu marka icin OLCULMUS CVR yok; %{FALLBACK_CVR*100:.0f} varsayimi "
+            f"kullanildi. Bu sayi hicbir markadan turetilmedi, sadece bir "
+            f"baslangic noktasidir. Markanin reklam raporunu ya da Brand "
+            f"Analytics verisini yukle, veya beklenen CVR'i elle gir.")
 
+    # ---------------- CPC temeli ----------------
+    base_cpc, cpc_basis = None, None
     if override_cpc:
-        cpc_source = f"kullanici girdi (${float(override_cpc):.2f})"
-    elif acct.get("cpc"):
-        cpc_source = f"markanin olculmus CPC'si (${acct['cpc']:.2f}, {acct['clicks']:.0f} tik)"
+        base_cpc = float(override_cpc)
+        cpc_basis = f"kullanici girdi (${base_cpc:.2f})"
+    elif acct.get("clicks", 0) >= MIN_CLICKS_TRUST and acct.get("cpc"):
+        base_cpc = acct["cpc"]
+        cpc_basis = (f"{brand_name or 'marka'} kendi olculmus CPC'si "
+                     f"(${base_cpc:.2f}, {acct['clicks']:.0f} tik)")
     else:
-        cpc_source = f"kalibre varsayilan (${CALIBRATION['account_cpc']:.2f})"
+        warnings.append("Bu marka icin OLCULMUS CPC yok. Reklam acilmadan CPC "
+                        "olculemez; pazar capali stratejiler (Dengeli/Pazar "
+                        "Payi) guvenilir degildir. Ilk 2-3 gunun gercek CPC'si "
+                        "olcup yeniden hesapla.")
+        cpc_basis = "veri yok"
+
+    # ---------------- match type dagilimi ----------------
+    cvr, cpc, src = {}, {}, {}
+    for key in MATCH_KEYS:
+        got = m.get(key) or {}
+        if got.get("clicks", 0) >= MIN_CLICKS_TRUST and got.get("cvr") is not None:
+            v = got["cvr"]
+            src[key] = "olculdu (bu marka)"
+        elif base_cvr is not None:
+            v = base_cvr * RELATIVE_CVR[key]
+            src[key] = cvr_basis
+        else:
+            v = None
+            src[key] = "veri yok"
+        cvr[key] = round(max(0.005, v * ramp), 4) if v is not None else None
+
+        if got.get("clicks", 0) >= MIN_CLICKS_TRUST and got.get("cpc"):
+            cpc[key] = round(got["cpc"], 2)
+        elif base_cpc is not None:
+            cpc[key] = round(base_cpc * RELATIVE_CPC[key], 2)
+        else:
+            cpc[key] = None
 
     return {
-        "cvr": cvr,                    # lansman icin beklenen CVR (oran)
-        "cpc": cpc,                    # match type bazinda beklenen CPC ($)
-        "confidence": conf,            # 0-1, olculmus veri agirligi
-        "cvr_source": src,
-        "cpc_source": cpc_source,
-        "ramp": ramp,
-        "account": acct or None,
-        "calibration_note": CALIBRATION["source"],
+        "cvr": cvr, "cpc": cpc, "cvr_source": src,
+        "cvr_basis": cvr_basis, "cpc_source": cpc_basis,
+        "ramp": ramp, "account": acct or None,
+        "query_stats": qs, "scope": scope, "warnings": warnings,
+        "has_cvr": base_cvr is not None or any(v for v in cvr.values()),
+        "has_cpc": base_cpc is not None or any(v for v in cpc.values()),
+        "calibration_note": ("Tum sayilar YALNIZCA bu markanin verisinden; "
+                            "baska marka verisi kullanilmaz."),
     }

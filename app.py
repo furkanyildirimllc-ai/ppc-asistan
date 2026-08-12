@@ -1190,6 +1190,7 @@ class LaunchProductIn(BaseModel):
     bid_strategy: str = "profit"   # profit | balanced | aggressive
     measured_cpc: float | None = None  # kendi raporundan gercek ortalama CPC
     brand_id: int | None = None        # varsa markanin olculmus verisi kullanilir
+    assumed_cvr: float | None = None   # veri yoksa kullanicinin beklentisi
 
     _p_ints = field_validator("review_count", mode="before")(_loose_int)
     _p_floats = field_validator(
@@ -1224,17 +1225,29 @@ def launch_analyze(body: LaunchProductIn):
     competitors = [c.model_dump() for c in body.competitors]
     try:
         # Marka verildiyse KENDI olculmus CPC/CVR'i esas alinir.
-        report_rows = None
+        # MARKA IZOLASYONU: veriler SADECE bu brand_id'den cekilir.
+        report_rows = ba_rows = None
+        brand_name = None
         if body.brand_id:
             with db() as c:
+                row = c.execute("SELECT name FROM brands WHERE id=?",
+                                (body.brand_id,)).fetchone()
+                brand_name = row["name"] if row else None
                 rs = c.execute(
                     "SELECT data FROM report_rows WHERE brand_id=? AND report_type='targeting'",
                     (body.brand_id,)).fetchall()
+                bs = c.execute(
+                    "SELECT data FROM report_rows WHERE brand_id=? AND "
+                    "report_type IN ('ba_search_query','ba_search_query_month')",
+                    (body.brand_id,)).fetchall()
             report_rows = [json.loads(r["data"]) for r in rs] or None
+            ba_rows = [json.loads(r["data"]) for r in bs] or None
         plan = launch_mod.build_plan(product, competitors, use_ai=body.use_ai,
                                      bid_strategy=body.bid_strategy,
                                      measured_cpc=body.measured_cpc,
-                                     report_rows=report_rows)
+                                     report_rows=report_rows, ba_rows=ba_rows,
+                                     brand_id=body.brand_id, brand_name=brand_name,
+                                     assumed_cvr=body.assumed_cvr)
     except Exception as e:
         raise HTTPException(500, f"Plan uretilemedi: {e}")
     return plan

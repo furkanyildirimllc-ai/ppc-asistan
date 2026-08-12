@@ -553,11 +553,17 @@ def suggest_bids_v2(price, econ, bench, strategy="profit"):
 
     out = {}
     for key, cvr in bench["cvr"].items():
+        if cvr is None:
+            # CVR olculmemis ve varsayilmamis: bid hesaplanamaz. Uydurma sayi
+            # uretmektense bos birak; cagiran taraf kullaniciya sorar.
+            out[key] = None
+            continue
         afford = rev * cvr * target        # hedef ACOS'u tutturan bid
         ceiling = rev * cvr * be           # break-even bid (zarar siniri)
-        market = bench["cpc"].get(key, afford)
+        market = bench["cpc"].get(key)
 
-        if strategy == "profit":
+        if strategy == "profit" or market is None:
+            # CPC olculmemisse pazara capa atilamaz; ekonomiye sadik kal.
             bid = min(afford, ceiling)
         else:
             bid = afford + (market - afford) * w
@@ -618,6 +624,9 @@ def bid_outlook_v2(price, econ, bids, bench):
     rev = float((bench.get("account") or {}).get("aov") or 0) or p
     rows = {}
     for key, bid in bids.items():
+        if bid is None:
+            rows[key] = {"bid": None, "note": "CVR verisi yok - hesaplanamadi"}
+            continue
         cvr = bench["cvr"].get(key) or 0
         market = bench["cpc"].get(key) or 0
         acos = bid / (rev * cvr) if (rev and cvr) else 0
@@ -627,8 +636,9 @@ def bid_outlook_v2(price, econ, bids, bench):
             "expected_cvr_pct": round(cvr * 100, 2),
             "market_cpc": round(market, 2),
             "expected_acos_pct": round(acos * 100, 1),
-            "vs_market_pct": round(ratio * 100),
-            "impression_odds": ("iyi" if ratio >= 0.95 else
+            "vs_market_pct": round(ratio * 100) if market else None,
+            "impression_odds": (None if not market else
+                                "iyi" if ratio >= 0.95 else
                                 "orta" if ratio >= 0.75 else "dusuk"),
             "profitable": (acos <= be) if be else None,
             "cvr_source": bench["cvr_source"].get(key),
@@ -804,7 +814,10 @@ def suggest_budgets(price, bids=None, clicks_per_day=None):
     }
     out = {}
     for key, clicks in target_clicks.items():
-        raw = bids.get(key, 0.5) * clicks
+        b = bids.get(key)
+        if b is None:
+            continue
+        raw = b * clicks
         # Amazon minimumu $1; cok kucuk butce gun icinde hic gosterim almaz.
         out[key] = max(5, int(round(raw)))
     return out
@@ -852,7 +865,8 @@ def _campaign_prefix(brand, title, asin):
 
 # ------------------------------------------------------------------ plan
 def build_plan(product, competitors=None, use_ai=True, model=None,
-               bid_strategy="profit", measured_cpc=None, report_rows=None):
+               bid_strategy="profit", measured_cpc=None, report_rows=None,
+               ba_rows=None, brand_id=None, brand_name=None, assumed_cvr=None):
     """product: {title, asin, sku, price, brand, cogs, fba_fee, fee_pct}. -> plan dict."""
     title = product.get("title") or ""
     asin = (product.get("asin") or "").strip()
@@ -982,7 +996,13 @@ def build_plan(product, competitors=None, use_ai=True, model=None,
     if bid_strategy not in BID_STRATEGIES:
         bid_strategy = "profit"
     # Referanslar: markanin kendi olculmus verisi > kalibre varsayilan.
-    bench = benchmarks.resolve(report_rows, price=price, override_cpc=measured_cpc)
+    # MARKA IZOLASYONU: report_rows/ba_rows cagiran tarafta brand_id ile
+    # filtrelenmis olarak gelir. Baska markanin verisi buraya giremez.
+    bench = benchmarks.resolve(
+        rows=report_rows, ba_rows=ba_rows,
+        brand_id=brand_id, brand_name=brand_name or product.get("brand"),
+        category_tokens=head_tok, override_cpc=measured_cpc,
+        assumed_cvr=assumed_cvr)
     bids = suggest_bids_v2(price, econ, bench, strategy=bid_strategy)
     budgets = suggest_budgets(price, bids)
     outlook = bid_outlook_v2(price, econ, bids, bench)
@@ -1050,9 +1070,13 @@ def build_plan(product, competitors=None, use_ai=True, model=None,
         "bid_strategy": bid_strategy,
         "bid_strategy_label": BID_STRATEGIES[bid_strategy]["label"],
         "bid_explanation": bid_explanation(price, econ, bids),
-        "benchmarks": {"cvr_pct": {k: round(v*100,2) for k,v in bench["cvr"].items()},
+        "data_warnings": bench.get("warnings") or [],
+        "data_scope": bench.get("scope"),
+        "benchmarks": {"cvr_pct": {k: (round(v*100,2) if v is not None else None)
+                                   for k,v in bench["cvr"].items()},
                        "cpc": bench["cpc"], "cvr_source": bench["cvr_source"],
                        "cpc_source": bench["cpc_source"],
+                       "cvr_basis": bench.get("cvr_basis"),
                        "ramp_pct": round(bench["ramp"]*100),
                        "account": bench.get("account"),
                        "calibration": bench["calibration_note"]},
