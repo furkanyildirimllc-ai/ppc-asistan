@@ -375,6 +375,15 @@
           <div><label>SKU (Opsiyonel)</label><input id="f-sku" placeholder="Satıcı SKU" /></div>
           <div><label>Marka</label><input id="f-brand" placeholder="Marka adı" /></div>
         </div>
+
+        <label>Uygulamadaki marka hesabı</label>
+        <select id="f-brand-id">
+          <option value="">— seçilmedi (ölçülmüş veri kullanılmaz) —</option>
+        </select>
+        <div id="brand-id-note" class="muted" style="margin-top:4px; font-size:10px;">
+          Faz 0 raporunu yüklediğin markayı seç — bid'ler o markanın gerçek
+          CPC/CVR'ından hesaplansın. Seçmezsen varsayım kullanılır.
+        </div>
         
         <div class="row">
           <div><label>Üretim Maliyeti (COGS $)</label><input id="f-cogs" type="number" step="0.01" placeholder="Kar analizi için" /></div>

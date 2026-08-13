@@ -14,7 +14,7 @@ let bidStrategy = "profit";   // profit | balanced | aggressive
 // Chrome popup'i disariya tiklayinca / sayfayi kaydirinca kapanir ve DOM ile
 // tum JS degiskenleri sifirlanir. Bunu engellemek mumkun degil; bu yuzden her
 // degisiklikte durumu chrome.storage'a yazip acilista geri yukluyoruz.
-const FORM_FIELDS = ["f-title", "f-asin", "f-price", "f-sku", "f-brand", "f-cogs", "f-fba"];
+const FORM_FIELDS = ["f-title", "f-asin", "f-price", "f-sku", "f-brand", "f-cogs", "f-fba", "f-brand-id"];
 let restoring = false;
 
 function saveState() {
@@ -493,6 +493,7 @@ async function setApi(url) {
     // Canli sunucu uykudan kalkarken yavas olabilir, bol sure ver.
     const r = await fetchWithTimeout(url + "/", { method: "GET" }, 90000);
     if (st) st.textContent = r.ok ? `✅ Bağlandı: ${url}` : `⚠️ Yanıt ${r.status}: ${url}`;
+    if (r.ok) loadBrandAccounts();
   } catch (e) {
     if (st) st.textContent = `❌ Ulaşılamadı: ${url}`;
   }
@@ -537,7 +538,33 @@ function collectData() {
     competitors: selectedCompetitors.filter(c => c.selected !== false),
     use_ai: true,
     bid_strategy: bidStrategy,
+    // Uygulamadaki marka hesabi: verilirse O MARKANIN olculmus CPC/CVR'i
+    // kullanilir. Faz 0 -> Faz 1 devri bu alana bagli.
+    brand_id: Number($("f-brand-id").value) || null,
   };
+}
+
+// Uygulamadaki markalari cek ve secime doldur.
+async function loadBrandAccounts() {
+  const sel = $("f-brand-id");
+  if (!sel) return;
+  try {
+    const r = await fetchWithTimeout(`${API}/api/brands`, {}, 20000);
+    if (!r.ok) throw new Error(String(r.status));
+    const brands = await r.json();
+    const keep = sel.value;
+    sel.innerHTML = '<option value="">— seçilmedi (ölçülmüş veri kullanılmaz) —</option>';
+    brands.forEach(b => {
+      const rows = (b.data_freshness || []).reduce((a, x) => a + (x.rows || 0), 0);
+      const o = document.createElement("option");
+      o.value = b.id;
+      o.textContent = `${b.name}${rows ? "  ✓ veri var" : "  (veri yok)"}`;
+      sel.appendChild(o);
+    });
+    if (keep) sel.value = keep;
+  } catch (e) {
+    $("brand-id-note").textContent = "Marka listesi alınamadı: " + e.message;
+  }
 }
 
 // Strateji secici
@@ -895,6 +922,7 @@ document.addEventListener("DOMContentLoaded", () => {
   // Once kayitli durumu geri yukle; yoksa sayfayi tara. Boylece popup
   // kapanip acildiginda yapilanlar kaybolmaz.
   restoreState().then((restored) => { if (!restored) rescan(); });
+  loadBrandAccounts();
 });
 
 // Form alanlarindaki her degisiklik aninda saklansin.
