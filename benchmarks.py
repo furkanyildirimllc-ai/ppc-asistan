@@ -51,10 +51,23 @@ FALLBACK_CVR = 0.09
 # Amazon henuz alaka ogrenmemis. Ilk 2-4 haftada olgun CVR'in ~%65'i beklenir.
 LAUNCH_RAMP = 0.65
 
-# Olculmus veriye guvenmek icin gereken minimum tiklama (match type basina).
-MIN_CLICKS_TRUST = 100
-# Bu esigin altinda ama ustunde veri varsa kismen harmanlanir.
-MIN_CLICKS_BLEND = 25
+# CPC ve CVR icin esikler AYRIDIR. Ikisini ayni saymak Faz 0'i bozuyordu:
+# Faz 0 hedefi 20 tiklama, esik 100 olunca "olculmus CPC yok" deniyor ve
+# kesif fazi bosa gidiyordu.
+#
+# Neden farkli:
+#   CPC: her tiklama BIR OLCUMDUR (maliyeti dogrudan gorursun).
+#        ~15 tik -> +-%10, ~20 tik -> +-%9 dogruluk. UCUZ.
+#   CVR: her tiklama 0/1 bir denemedir; siparis nadir olaydir.
+#        %10 CVR'da 20 tik -> +-%67 (ise yaramaz), 100 tik -> +-%30. PAHALI.
+MIN_CLICKS_CPC = 15          # bu tiklamadan sonra olculmus CPC'ye guvenilir
+MIN_CLICKS_CPC_BLEND = 6     # altinda kismen, bunun da altinda hic
+MIN_CLICKS_CVR = 100         # CVR icin gercekten cok veri gerekir
+MIN_CLICKS_CVR_BLEND = 30
+
+# Geriye donuk uyum (eski cagrilar icin)
+MIN_CLICKS_TRUST = MIN_CLICKS_CVR
+MIN_CLICKS_BLEND = MIN_CLICKS_CVR_BLEND
 
 
 def _q_tokens(s):
@@ -156,6 +169,64 @@ def lookup_query(qstats, keyword, min_clicks=30, require_tokens=None):
     return None, None
 
 
+def diagnose_discovery(rows, probe_bid=None):
+    """FAZ 0 sonucunu teshis eder: ne oldu, simdi ne yapmali?
+
+    Kesif fazi 'veri gelmedi' diye biterse kullanici ne yapacagini bilmeli.
+    Her sonucun tek bir net eylemi vardir.
+    """
+    imp = sum((r.get("impressions") or 0) for r in (rows or []))
+    clicks = sum((r.get("clicks") or 0) for r in (rows or []))
+    spend = sum((r.get("spend") or 0.0) for r in (rows or []))
+    orders = sum((r.get("orders") or 0) for r in (rows or []))
+    cpc = (spend / clicks) if clicks else None
+
+    d = {"impressions": imp, "clicks": clicks, "spend": round(spend, 2),
+         "orders": orders, "measured_cpc": round(cpc, 2) if cpc else None}
+
+    if imp == 0:
+        d.update(status="gosterim_yok", headline="Hiç gösterim gelmedi.",
+                 cause="Reklam yayınlanmadı — bu bir bid sorunu değil, uygunluk sorunu.",
+                 actions=[
+                     "Kampanya gerçekten 'enabled' mı, bütçe bitmiş mi kontrol et.",
+                     "Ürün Buy Box'a sahip mi? Buy Box yoksa reklam yayınlanmaz.",
+                     "Stok var mı? Stoksuz ürün reklam alamaz.",
+                     "Listing yeni ise Amazon'un indekslemesi 24-48 saat sürebilir.",
+                     "Kısıtlı kelime olabilir (sağlık iddiası vb.) — reddedilen "
+                     "keyword var mı bak.",
+                 ])
+    elif clicks == 0:
+        ctr = 0.0
+        d.update(status="tiklama_yok", ctr_pct=0.0,
+                 headline=f"{imp:,.0f} gösterim geldi ama hiç tıklama yok.",
+                 cause="Reklam yayınlanıyor; sorun listing çekiciliğinde.",
+                 actions=[
+                     "Ana görseli gözden geçir — tıklamayı belirleyen ilk şey odur.",
+                     "Fiyatın rakiplerin çok üstünde mi? Arama sonucunda fiyat görünür.",
+                     "Yıldız/yorum yokluğu tıklamayı düşürür; ilk yorumları hızlandır.",
+                     "Başlık arama sonucunda kesiliyor olabilir; ilk 60 karakteri güçlendir.",
+                 ])
+    elif clicks < MIN_CLICKS_CPC:
+        need = MIN_CLICKS_CPC - clicks
+        d.update(status="veri_az", headline=f"Sadece {clicks} tıklama — CPC ölçümü için yetersiz.",
+                 cause=f"Güvenilir CPC için en az {MIN_CLICKS_CPC} tıklama gerekir.",
+                 actions=[
+                     f"Keşfi {need} tıklama daha sürdür (2-3 gün yeter).",
+                     "Gösterim azsa teklifi %30 artır; bütçeyi değil.",
+                     "Bütçe her gün bitiyorsa bütçeyi artır; teklifi değil.",
+                 ])
+    else:
+        err = 40.0 / (clicks ** 0.5)
+        note = (f"CPC ölçüldü: ${cpc:.2f} (±%{err:.0f}, {clicks} tıklama). "
+                f"Artık bid hesabı varsayıma değil ölçüme dayanıyor.")
+        acts = ["Raporu bu markaya yükle, Faz 1 planını üret."]
+        if orders == 0:
+            acts.append(f"Sipariş gelmemesi bu fazda normaldir — {clicks} tıklama "
+                        f"CVR ölçmeye yetmez (~{MIN_CLICKS_CVR} gerekir).")
+        d.update(status="basarili", headline=note, cause="", actions=acts)
+    return d
+
+
 def _norm_match(row):
     """Rapor satirini match type kovasina koy: exact/phrase/broad/auto/pt."""
     t = str(row.get("targeting") or "").lower()
@@ -241,7 +312,7 @@ def resolve(rows=None, ba_rows=None, brand_id=None, brand_name=None,
 
     # ---------------- CVR temeli ----------------
     base_cvr, cvr_basis = None, None
-    if acct.get("clicks", 0) >= MIN_CLICKS_TRUST and acct.get("cvr"):
+    if acct.get("clicks", 0) >= MIN_CLICKS_CVR and acct.get("cvr"):
         base_cvr = acct["cvr"]
         cvr_basis = (f"{brand_name or 'marka'} kendi reklam verisi "
                      f"(%{base_cvr*100:.2f}, {acct['clicks']:.0f} tik)")
@@ -268,10 +339,18 @@ def resolve(rows=None, ba_rows=None, brand_id=None, brand_name=None,
     if override_cpc:
         base_cpc = float(override_cpc)
         cpc_basis = f"kullanici girdi (${base_cpc:.2f})"
-    elif acct.get("clicks", 0) >= MIN_CLICKS_TRUST and acct.get("cpc"):
+    elif acct.get("clicks", 0) >= MIN_CLICKS_CPC and acct.get("cpc"):
         base_cpc = acct["cpc"]
+        n = acct["clicks"]
+        # +-hata payi: tiklama sayisi arttikca daralir (~%40 degisim katsayisi)
+        err = 40.0 / (n ** 0.5)
         cpc_basis = (f"{brand_name or 'marka'} kendi olculmus CPC'si "
-                     f"(${base_cpc:.2f}, {acct['clicks']:.0f} tik)")
+                     f"(${base_cpc:.2f}, {n:.0f} tik, ±%{err:.0f})")
+        if n < MIN_CLICKS_CVR:
+            warnings.append(
+                f"CPC {n:.0f} tiklamayla olculdu (±%{err:.0f}) - bid hesabi icin "
+                f"yeterli. Ama CVR bu veriyle guvenilir degil; onun icin "
+                f"~{MIN_CLICKS_CVR} tiklama gerekir.")
     else:
         warnings.append("Bu marka icin OLCULMUS CPC yok. Reklam acilmadan CPC "
                         "olculemez; pazar capali stratejiler (Dengeli/Pazar "
@@ -283,7 +362,7 @@ def resolve(rows=None, ba_rows=None, brand_id=None, brand_name=None,
     cvr, cpc, src = {}, {}, {}
     for key in MATCH_KEYS:
         got = m.get(key) or {}
-        if got.get("clicks", 0) >= MIN_CLICKS_TRUST and got.get("cvr") is not None:
+        if got.get("clicks", 0) >= MIN_CLICKS_CVR and got.get("cvr") is not None:
             v = got["cvr"]
             src[key] = "olculdu (bu marka)"
         elif base_cvr is not None:
@@ -294,7 +373,7 @@ def resolve(rows=None, ba_rows=None, brand_id=None, brand_name=None,
             src[key] = "veri yok"
         cvr[key] = round(max(0.005, v * ramp), 4) if v is not None else None
 
-        if got.get("clicks", 0) >= MIN_CLICKS_TRUST and got.get("cpc"):
+        if got.get("clicks", 0) >= MIN_CLICKS_CPC and got.get("cpc"):
             cpc[key] = round(got["cpc"], 2)
         elif base_cpc is not None:
             cpc[key] = round(base_cpc * RELATIVE_CPC[key], 2)

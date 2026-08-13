@@ -394,6 +394,17 @@ def ads_api_status():
     return amazon_ads.check()
 
 
+@app.get("/api/brands/{brand_id}/discovery-status")
+def discovery_status(brand_id: int):
+    """FAZ 0 sonucu: ne oldu, simdi ne yapmali?"""
+    with db() as c:
+        if not c.execute("SELECT 1 FROM brands WHERE id=?", (brand_id,)).fetchone():
+            raise HTTPException(404, "Marka bulunamadi")
+        rows = _load_rows(c, brand_id, "targeting") or _load_rows(c, brand_id, "search_term")
+    import benchmarks
+    return benchmarks.diagnose_discovery(rows)
+
+
 @app.get("/api/brands/{brand_id}/data-inventory")
 def data_inventory(brand_id: int):
     """Bu markada NE VAR: rapor tipi, satir sayisi, son yukleme tarihi.
