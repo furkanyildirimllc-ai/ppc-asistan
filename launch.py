@@ -427,7 +427,15 @@ def discovery_plan(price, econ, bench, keywords=None, market_price=None):
         "probe_bid": probe,
         "affordable_bid": round(afford, 2),
         "budget_per_day": per_day,
-        "max_total_spend": per_day * days,
+        # Dosyada exact + auto var; auto butcesi exact'in yarisi.
+# Amazon gunluk butceyi %25'e kadar asabilir -> 1.25 pay.
+        "max_total_spend": round(per_day * 1.5 * 1.25 * days),
+        "safety_net": (
+            "Dosyada EXACT'in yanına küçük bütçeli bir AUTO kampanya da var. "
+            "Yeni ASIN'de exact keyword'ler gösterim almayabilir (Amazon'un o "
+            "kelimeler için alaka geçmişi yoktur); auto'da yerleşimi Amazon "
+            "seçer ve ilk gösterimi almanın en güvenilir yoludur. Exact hiç "
+            "veri vermezse bile CPC auto'dan ölçülür."),
         "target_clicks": target_clicks,
         "keywords": list(keywords or [])[:10],
         "match_type": "EXACT",
@@ -1242,6 +1250,46 @@ def build_discovery_campaign(plan):
         r = _blank(); r.update({
             "Product": "Sponsored Products", "Entity": "Negative Keyword",
             "Operation": "Create", "Campaign ID": cid, "Ad Group ID": agid,
+            "State": "enabled", "Keyword Text": nk, "Match Type": "negativeExact"})
+        emit(r)
+
+    # ---- GUVENLIK AGI: AUTO kampanya ----
+    # Yepyeni bir ASIN'de exact keyword'ler gosterim almayabilir: Amazon'un
+    # o kelimeler icin alaka gecmisi yoktur. Auto targeting'de yerlesimi
+    # Amazon secer, bu yuzden ilk gosterimi almanin EN GUVENILIR yoludur.
+    # Kucuk butceyle yanina konur: exact hic veri vermezse bile CPC olculur.
+    acid = _sanitize_name(f"{name} | AUTO")
+    aagid = f"{acid} - AG"
+    auto_budget = max(10, int(round(budget * 0.5)))
+    r = _blank(); r.update({
+        "Product": "Sponsored Products", "Entity": "Campaign", "Operation": "Create",
+        "Campaign ID": acid, "Campaign Name": f"{name} | AUTO", "Start Date": today,
+        "Targeting Type": "AUTO", "State": "enabled", "Daily Budget": auto_budget,
+        "Bidding Strategy": "Fixed bid"})
+    emit(r)
+    r = _blank(); r.update({
+        "Product": "Sponsored Products", "Entity": "Ad Group", "Operation": "Create",
+        "Campaign ID": acid, "Ad Group ID": aagid, "Ad Group Name": "Auto Kesif",
+        "State": "enabled", "Ad Group Default Bid": bid})
+    emit(r)
+    r = _blank(); r.update({
+        "Product": "Sponsored Products", "Entity": "Product Ad", "Operation": "Create",
+        "Campaign ID": acid, "Ad Group ID": aagid, "State": "enabled",
+        "SKU": sku, "ASIN (Informational only)": asin})
+    emit(r)
+    # Sadece yakin eslesme: gosterim garantisi isterken alakasiz trafige
+    # yuksek teklifle para vermeyelim.
+    for grp in ("close-match", "loose-match"):
+        r = _blank(); r.update({
+            "Product": "Sponsored Products", "Entity": "Product Targeting",
+            "Operation": "Create", "Campaign ID": acid, "Ad Group ID": aagid,
+            "State": "enabled", "Bid": bid,
+            "Product Targeting Expression": grp})
+        emit(r)
+    for nk in (plan.get("negatives") or [])[:25]:
+        r = _blank(); r.update({
+            "Product": "Sponsored Products", "Entity": "Negative Keyword",
+            "Operation": "Create", "Campaign ID": acid, "Ad Group ID": aagid,
             "State": "enabled", "Keyword Text": nk, "Match Type": "negativeExact"})
         emit(r)
 
