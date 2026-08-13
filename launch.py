@@ -451,6 +451,31 @@ def discovery_plan(price, econ, bench, keywords=None, market_price=None):
             f"{target_clicks} tıklamaya ulaşmak. Sipariş gelmemesi BAŞARISIZLIK "
             f"DEĞİLDİR — bu fazın amacı satış değil, fiyat bilgisi."),
         "stop_rule": f"{target_clicks} tıklama veya {days} gün — hangisi önce gelirse.",
+        # "Veri gelmezse ne yapacagim?" sorusunun cevabi plana gomulu olmali.
+        # Her gun icin tek bir kontrol ve tek bir eylem.
+        "escalation": [
+            {"when": "1. gün sonunda gösterim = 0",
+             "diagnosis": "Bu bir teklif sorunu DEĞİL — reklam hiç yayınlanmıyor.",
+             "action": "Buy Box, stok, kampanya durumu ve reddedilen keyword'leri "
+                       "kontrol et. Teklifi artırmak bu durumu çözmez."},
+            {"when": "2. gün sonunda gösterim var ama tıklama < 5",
+             "diagnosis": "Yayındasın ama ya çok az gösterim alıyorsun ya da "
+                          "listing tıklama almıyor.",
+             "action": f"Gösterim düşükse teklifi ${round(probe*1.4,2)}'a çıkar "
+                       f"(bütçeyi değil). Gösterim yüksek ama tıklama yoksa "
+                       f"sorun görsel/fiyat/yorum — teklif artırma."},
+            {"when": "3. gün sonunda tıklama 6-14 arası",
+             "diagnosis": "Ölçüm zayıf ama kullanılabilir (±%11-16).",
+             "action": "Raporu yükle; araç bu veriyi 'ZAYIF' etiketiyle kullanır. "
+                       "Faz 1'e temkinli (Kârlı) strateji ile başla."},
+            {"when": "Bütçe her gün erken bitiyor",
+             "diagnosis": "Teklif yeterli, hacim var — sadece bütçe kısıtlıyor.",
+             "action": "Bütçeyi artır, teklifi değil. Bu iyi haber: pazar seni "
+                       "kabul ediyor."},
+        ],
+        "no_data_promise": (
+            "Hiç veri gelmezse araç uydurmaz: 'ölçüm yok' der ve yukarıdaki "
+            "teşhis adımlarını gösterir. Varsayımla lansman kurmaya zorlamaz."),
         "next_step": (
             "Seller Central > Reports > Targeting raporunu indir, uygulamada "
             "bu markaya yükle. Araç gerçek CPC'yi okuyup Faz 1 planını "

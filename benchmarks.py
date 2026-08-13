@@ -339,14 +339,24 @@ def resolve(rows=None, ba_rows=None, brand_id=None, brand_name=None,
     if override_cpc:
         base_cpc = float(override_cpc)
         cpc_basis = f"kullanici girdi (${base_cpc:.2f})"
-    elif acct.get("clicks", 0) >= MIN_CLICKS_CPC and acct.get("cpc"):
+    elif acct.get("clicks", 0) >= MIN_CLICKS_CPC_BLEND and acct.get("cpc"):
+        # AZ VERI DE VERIDIR. 8 tiklamalik olcum, hicbir olcum olmamasindan
+        # cok daha iyidir - yeter ki hata payi acikca soylensin. Esigin
+        # altindaki veriyi cope atmak, kullaniciyi varsayima geri iter.
         base_cpc = acct["cpc"]
         n = acct["clicks"]
         # +-hata payi: tiklama sayisi arttikca daralir (~%40 degisim katsayisi)
         err = 40.0 / (n ** 0.5)
+        solid = n >= MIN_CLICKS_CPC
         cpc_basis = (f"{brand_name or 'marka'} kendi olculmus CPC'si "
-                     f"(${base_cpc:.2f}, {n:.0f} tik, ±%{err:.0f})")
-        if n < MIN_CLICKS_CVR:
+                     f"(${base_cpc:.2f}, {n:.0f} tik, ±%{err:.0f}"
+                     f"{'' if solid else ' - ZAYIF'})")
+        if not solid:
+            warnings.append(
+                f"CPC sadece {n:.0f} tiklamayla olculdu (±%{err:.0f}). Kullanilabilir "
+                f"ama zayif; {MIN_CLICKS_CPC} tiklamaya ulasinca yeniden hesapla. "
+                f"Bu arada temkinli (Karli) strateji ile ilerle.")
+        elif n < MIN_CLICKS_CVR:
             warnings.append(
                 f"CPC {n:.0f} tiklamayla olculdu (±%{err:.0f}) - bid hesabi icin "
                 f"yeterli. Ama CVR bu veriyle guvenilir degil; onun icin "
@@ -373,7 +383,10 @@ def resolve(rows=None, ba_rows=None, brand_id=None, brand_name=None,
             src[key] = "veri yok"
         cvr[key] = round(max(0.005, v * ramp), 4) if v is not None else None
 
-        if got.get("clicks", 0) >= MIN_CLICKS_CPC and got.get("cpc"):
+        # O match type'in KENDI olcumu varsa dogrudan kullan. Hesap
+        # ortalamasina goreli carpan uygulamak, veri zaten o match type'tan
+        # geliyorsa cift sayim yapar (olculen $2.60 -> $2.99 gorunuyordu).
+        if got.get("clicks", 0) >= MIN_CLICKS_CPC_BLEND and got.get("cpc"):
             cpc[key] = round(got["cpc"], 2)
         elif base_cpc is not None:
             cpc[key] = round(base_cpc * RELATIVE_CPC[key], 2)
