@@ -590,6 +590,15 @@ $("strategy-picker").addEventListener("click", (ev) => {
   saveState();
 });
 
+function renderStrategyNotice(plan) {
+  if (!plan || !plan.effective_strategy) return "";
+  if (plan.effective_strategy === plan.bid_strategy) return "";
+  return `<div class="feas tight"><b>⚠️ Strateji uygulanamadı</b><br>
+    <b>${plan.bid_strategy_label}</b> seçtin ama pazar CPC'si ölçülmediği için
+    uygulanamadı — bid'ler <b>${plan.effective_strategy_label}</b> gibi hesaplandı.
+    Pazara çapa atmak için önce Faz 0 ile gerçek CPC'yi ölç.</div>`;
+}
+
 function renderDataWarnings(list) {
   if (!list || !list.length) return "";
   return `<div class="feas tight"><b>⚠️ Veri durumu</b>
@@ -763,6 +772,7 @@ function renderPlan(plan) {
   ` : "";
 
   $("plan-content").innerHTML = `
+    ${renderStrategyNotice(plan)}
     ${renderDataWarnings(plan.data_warnings)}
     ${renderFeasibility(plan.bid_feasibility)}
     ${renderMeasurePlan(plan.measure_plan)}
@@ -827,8 +837,12 @@ async function downloadBulksheet() {
       .replace(/[^a-z0-9]+/gi, "-").slice(0, 24) || "launch";
     // Strateji dosya adina yazilir: hangi bid seviyesiyle uretildigi sonradan
     // tahmin edilmesin, dosyanin uzerinde yazsin.
+    // Dosya adi GERCEKTEN uygulanan stratejiyi yazar. CPC olcumu yoksa
+    // balanced/aggressive profit'e duser; adinda "dengeli" yazip karli
+    // bid tasimasi yaniltirdi.
     const stratTag = { profit: "karli", balanced: "dengeli",
-                       aggressive: "pazarpayi" }[lastPlan.bid_strategy] || "";
+                       aggressive: "pazarpayi" }[
+      lastPlan.effective_strategy || lastPlan.bid_strategy] || "";
     const filename = `${brand}-launch${stratTag ? "-" + stratTag : ""}-bulksheet.xlsx`;
     // Chrome, chrome.downloads'a data: URL kabul etmez; blob: URL sart.
     const url = URL.createObjectURL(blob);

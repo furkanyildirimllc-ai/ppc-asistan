@@ -963,12 +963,23 @@ def build_plan(product, competitors=None, use_ai=True, model=None,
         brand_id=brand_id, brand_name=brand_name or product.get("brand"),
         category_tokens=head_tok, override_cpc=measured_cpc,
         assumed_cvr=assumed_cvr)
-    bids = suggest_bids_v2(price, econ, bench, strategy=bid_strategy)
+    bids = suggest_bids_v2(price, econ, bench,
+                           strategy=(bid_strategy if bench.get("has_cpc") else "profit"))
     budgets = suggest_budgets(price, bids)
     outlook = bid_outlook_v2(price, econ, bids, bench)
     # Uyari her zaman "karli" bid'e gore hesaplanir: strateji degistirmek
     # fiyat/maliyet gercegini degistirmez, sadece ne kadar zarara razi
     # oldugunu degistirir.
+    # SECILEN vs GERCEKLESEN strateji: CPC olcumu yoksa pazara capa atilamaz,
+    # balanced/aggressive zorunlu olarak profit gibi davranir. Bunu sessizce
+    # yapmak yaniltir - kullanici 'Dengeli' sectigini sanip Karli bid alir.
+    effective_strategy = bid_strategy if bench.get("has_cpc") else "profit"
+    if effective_strategy != bid_strategy:
+        bench.setdefault("warnings", []).append(
+            f"'{BID_STRATEGIES[bid_strategy]['label']}' secildi ama pazar CPC'si "
+            f"olculmedigi icin uygulanamadi; bid'ler '{BID_STRATEGIES['profit']['label']}' "
+            f"gibi hesaplandi. Pazara capa atmak icin once Faz 0 ile gercek "
+            f"CPC'yi olc.")
     profit_bids = suggest_bids_v2(price, econ, bench, strategy="profit")
     feasibility = bid_feasibility_v2(price, econ, profit_bids, bench)
     prefix = _campaign_prefix(product.get("brand"), title, asin)
@@ -1029,6 +1040,10 @@ def build_plan(product, competitors=None, use_ai=True, model=None,
         "bids": bids,
         "bid_strategy": bid_strategy,
         "bid_strategy_label": BID_STRATEGIES[bid_strategy]["label"],
+        # Gercekten uygulanan strateji (CPC yoksa profit'e duser)
+        "effective_strategy": ("profit" if not bench.get("has_cpc") else bid_strategy),
+        "effective_strategy_label": BID_STRATEGIES[
+            "profit" if not bench.get("has_cpc") else bid_strategy]["label"],
         "bid_explanation": bid_explanation(price, econ, bids, bench),
         "data_warnings": bench.get("warnings") or [],
         "discovery_plan": (discovery_plan(price, econ, bench,
