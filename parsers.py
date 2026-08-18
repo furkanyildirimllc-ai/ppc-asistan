@@ -142,6 +142,18 @@ def detect_type(headers):
     for rtype, sig in SIGNATURES:
         if {s.lower() for s in sig} <= hs_lower:
             return rtype
+    # ---- ESNEK GERI DUSUS ----
+    # Amazon rapor kolonlarini zaman zaman degistiriyor; katı imza eslesmesi
+    # tutmayinca kullanici hicbir sey yukleyemiyor. Ayirt edici tek kolon +
+    # metrik kolonlari varsa tipi yine de belirle.
+    metrik = {"impressions", "clicks", "spend"}
+    if metrik & hs_lower:
+        if "customer search term" in hs_lower:
+            return "search_term"
+        if "targeting" in hs_lower:
+            return "targeting"
+        if "placement" in hs_lower:
+            return "placement"
     return None
 
 

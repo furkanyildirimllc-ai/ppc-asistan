@@ -805,6 +805,9 @@
 
   <div id="uploadInfo" class="small muted" style="margin-bottom:8px"></div>
 
+  <!-- FAZ 0 SONUC PANELI: kesif kampanyasi calistiysa gercek CPC'yi gosterir -->
+  <div id="faz0Panel" style="display:none"></div>
+
   <!-- Raporu olmayan yeni urun icin giris noktalari -->
   <div class="launch-strip">
     <div class="ls-txt">
@@ -1193,7 +1196,7 @@ function clearBrandView(){
   // renderHero/renderProInsights tarafindan dinamik olusturuluyor - bunlar da temizlenmeli.
   ['kpiRibbon','metricGroups','alarmStrip','campAdvisor','hero','uploadInfo',
    'aiBody','revBadge','aiMeta','recTable','tabs','tabGuide',
-   'priorityHolder','proHolder','oppPanel','todayPanel']
+   'priorityHolder','proHolder','oppPanel','todayPanel','faz0Panel']
     .forEach(k=>{const el=$(k);if(el)el.innerHTML='';});
   ['trend','match','camp'].forEach(k=>destroyChart(k));
   // Onceki markanin firsat verisi yeni markaya sizmasin
@@ -1208,6 +1211,7 @@ async function selectBrand(id){
   brandId=id?Number(id):null;
   const gen=++brandGen;
   clearBrandView();
+  renderFaz0();
   $('main').style.display=brandId?'block':'none';
   $('empty').style.display=brandId?'none':'block';
   $('editBtn').style.display=brandId?'inline-block':'none';
@@ -2491,6 +2495,7 @@ async function uploadFiles(files){
   await Promise.all([loadSummary(),loadRecs(),loadInsights(),loadAILatest(),
                      loadOpportunities()]);
   loadToday();
+  renderFaz0();          // yeni rapor geldi -> Faz 0 sonucu guncellensin
   toast(`✅ Analiz tamamlandı → ${b.name}`);
 }
 
@@ -2520,6 +2525,44 @@ function openBrandDialog(edit){
   renderProductsList();
   updateCalcPreview();
   $('brandDlg').showModal();
+}
+
+// ---- FAZ 0 SONUC PANELI ----
+// Kesif kampanyasi calistiktan sonra raporu yukleyince gercek CPC burada
+// gorunur. Amac: "olctum mu, olcemedim mi, simdi ne yapmaliyim" sorusunun
+// tek bakista cevabi.
+async function renderFaz0(){
+  const box=$('faz0Panel');
+  if(!brandId){ box.style.display='none'; return; }
+  let d;
+  try{ d=await(await api(`/api/brands/${brandId}/discovery-status`)).json(); }
+  catch(e){ box.style.display='none'; return; }
+
+  const renk={gosterim_yok:'#ef4444',tiklama_yok:'#f59e0b',veri_az:'#f59e0b',basarili:'#22c55e'}[d.status]||'#94a3b8';
+  const ikon={gosterim_yok:'🚫',tiklama_yok:'⚠️',veri_az:'⏳',basarili:'✅'}[d.status]||'❓';
+  const rakam=(l,v)=>`<div style="min-width:110px"><div class="muted" style="font-size:11px">${l}</div>
+      <div style="font-size:17px;font-weight:700">${v}</div></div>`;
+
+  box.style.display='block';
+  box.innerHTML=`
+    <div class="card" style="border-left:4px solid ${renk};margin-bottom:10px">
+      <div class="tag" style="color:${renk}">${ikon} FAZ 0 — CPC KEŞFİ</div>
+      <div style="font-size:14px;font-weight:600;margin:4px 0 8px">${d.headline}</div>
+      <div style="display:flex;gap:18px;flex-wrap:wrap;margin-bottom:8px">
+        ${rakam('Gösterim', (d.impressions||0).toLocaleString('tr'))}
+        ${rakam('Tıklama', d.clicks||0)}
+        ${rakam('Harcama', '$'+(d.spend||0))}
+        ${rakam('Sipariş', d.orders||0)}
+        ${rakam('ÖLÇÜLEN CPC', d.measured_cpc? '$'+d.measured_cpc : '—')}
+      </div>
+      ${d.cause?`<div class="muted" style="margin-bottom:6px">${d.cause}</div>`:''}
+      <ul style="margin:0 0 0 16px;padding:0;font-size:12px;line-height:1.7">
+        ${(d.actions||[]).map(a=>`<li>${a}</li>`).join('')}
+      </ul>
+      ${d.status==='basarili'?`<div style="margin-top:10px">
+        <button class="primary" style="width:auto;padding:8px 16px" onclick="openLaunchDlg()">
+          🚀 Faz 1 planını gerçek CPC ile kur</button></div>`:''}
+    </div>`;
 }
 
 // Neyi silecegini gormeden silme: once envanteri goster.
