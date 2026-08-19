@@ -402,7 +402,10 @@ def discovery_status(brand_id: int):
             raise HTTPException(404, "Marka bulunamadi")
         rows = _load_rows(c, brand_id, "targeting") or _load_rows(c, brand_id, "search_term")
     import benchmarks
-    return benchmarks.diagnose_discovery(rows)
+    sonuc = benchmarks.diagnose_discovery(rows)
+    # Ayni markada birden fazla urun varsa her birini AYRI goster.
+    sonuc["products"] = benchmarks.products_in(rows)
+    return sonuc
 
 
 @app.get("/api/brands/{brand_id}/data-inventory")

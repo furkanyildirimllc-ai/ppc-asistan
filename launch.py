@@ -962,7 +962,7 @@ def build_plan(product, competitors=None, use_ai=True, model=None,
         rows=report_rows, ba_rows=ba_rows,
         brand_id=brand_id, brand_name=brand_name or product.get("brand"),
         category_tokens=head_tok, override_cpc=measured_cpc,
-        assumed_cvr=assumed_cvr)
+        assumed_cvr=assumed_cvr, asin=asin)
     bids = suggest_bids_v2(price, econ, bench,
                            strategy=(bid_strategy if bench.get("has_cpc") else "profit"))
     budgets = suggest_budgets(price, bids)

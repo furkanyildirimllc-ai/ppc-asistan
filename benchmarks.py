@@ -227,6 +227,70 @@ def diagnose_discovery(rows, probe_bid=None):
     return d
 
 
+ASIN_RE = re.compile(r"\b(B0[A-Z0-9]{8})\b")
+
+
+def asin_of_row(row):
+    """Rapor satirinin hangi URUNE ait oldugunu bulur.
+
+    Ayni markada birden fazla urun reklam veriyorsa (6 urun icin ayri Faz 0
+    calistirmak gibi) marka geneli ortalama YANILTIR: sampuanin CPC'si
+    kondisyonerinkinden farklidir. Bizim urettigimiz kampanya adlarinda ASIN
+    parantez icinde gomulu oldugu icin satiri urune baglayabiliyoruz.
+    """
+    for alan in ("campaign", "ad_group", "targeting"):
+        m = ASIN_RE.search(str(row.get(alan) or "").upper())
+        if m:
+            return m.group(1)
+    return None
+
+
+def filter_by_asin(rows, asin):
+    """Sadece o urune ait satirlari dondurur.
+
+    Doner: (satirlar, kapsam) - kapsam: 'urun' | 'marka'
+    Urune ait yeterli satir yoksa marka geneline duser ve bunu SOYLER;
+    sessizce baska urunun verisiyle hesap yapmaz.
+    """
+    if not rows or not asin:
+        return rows, "marka"
+    a = str(asin).strip().upper()
+    esles = [r for r in rows if asin_of_row(r) == a]
+    tik = sum((r.get("clicks") or 0) for r in esles)
+    if tik >= MIN_CLICKS_CPC_BLEND:
+        return esles, "urun"
+    return rows, "marka"
+
+
+def products_in(rows):
+    """Rapordaki urunleri ve her birinin olculmus CPC/CVR'ini listeler."""
+    grup = {}
+    for r in rows or []:
+        a = asin_of_row(r)
+        if not a:
+            continue
+        g = grup.setdefault(a, dict(clicks=0, spend=0.0, orders=0, sales=0.0,
+                                    impressions=0, campaigns=set()))
+        g["clicks"] += r.get("clicks", 0) or 0
+        g["spend"] += r.get("spend", 0) or 0.0
+        g["orders"] += r.get("orders", 0) or 0
+        g["sales"] += r.get("sales", 0) or 0.0
+        g["impressions"] += r.get("impressions", 0) or 0
+        if r.get("campaign"):
+            g["campaigns"].add(str(r["campaign"])[:70])
+    out = []
+    for a, g in grup.items():
+        out.append({
+            "asin": a, "clicks": g["clicks"], "impressions": g["impressions"],
+            "spend": round(g["spend"], 2), "orders": g["orders"],
+            "cpc": round(g["spend"] / g["clicks"], 2) if g["clicks"] else None,
+            "cvr_pct": round(100 * g["orders"] / g["clicks"], 2) if g["clicks"] else None,
+            "enough_for_cpc": g["clicks"] >= MIN_CLICKS_CPC,
+            "campaigns": sorted(g["campaigns"])[:3],
+        })
+    return sorted(out, key=lambda x: -(x["clicks"] or 0))
+
+
 def _norm_match(row):
     """Rapor satirini match type kovasina koy: exact/phrase/broad/auto/pt."""
     t = str(row.get("targeting") or "").lower()
@@ -289,7 +353,7 @@ def _blend(measured_val, default_val, clicks):
 
 def resolve(rows=None, ba_rows=None, brand_id=None, brand_name=None,
             category_tokens=None, ramp=LAUNCH_RAMP, override_cpc=None,
-            assumed_cvr=None):
+            assumed_cvr=None, asin=None):
     """Lansman referanslarini belirler. MARKA IZOLASYONU ZORUNLUDUR.
 
     rows / ba_rows YALNIZCA plani yapilan markaya ait olmalidir; cagiran taraf
@@ -302,13 +366,32 @@ def resolve(rows=None, ba_rows=None, brand_id=None, brand_name=None,
       CPC: kullanici girdisi > markanin kendi olculmus CPC'si
            > (hicbiri yoksa) OLCUM YOK - pazar capali stratejiler kapatilir
     """
+    # URUN AYIRMA: ayni markada birden fazla urun reklam veriyorsa (6 urun
+    # icin ayri Faz 0 calistirmak gibi) marka ortalamasi YANILTIR - sampuanin
+    # CPC'si kondisyonerinkinden farklidir. Kampanya adindaki ASIN sayesinde
+    # satirlari urune baglayip sadece o urunun verisini kullanabiliyoruz.
+    tum_satir = len(rows or [])
+    kapsam = "marka"
+    if rows and asin:
+        rows, kapsam = filter_by_asin(rows, asin)
+
     m = measure(rows) if rows else {}
     acct = m.get("_account") or {}
     qs = query_stats(ba_rows) if ba_rows else {}
 
     warnings = []
     scope = {"brand_id": brand_id, "brand_name": brand_name,
-             "ad_rows": len(rows or []), "ba_rows": len(ba_rows or [])}
+             "ad_rows": len(rows or []), "ba_rows": len(ba_rows or []),
+             "asin": asin, "data_scope": kapsam, "brand_total_rows": tum_satir}
+    if asin and kapsam == "urun":
+        warnings.append(
+            f"Olcumler SADECE bu urunun ({asin}) kendi kampanyalarindan alindi "
+            f"({len(rows)} satir / markanin {tum_satir} satiri icinden).")
+    elif asin and tum_satir:
+        warnings.append(
+            f"Bu urune ({asin}) ait yeterli veri yok; marka geneli kullanildi. "
+            f"Urun bazinda olcum icin o urunun kampanyasindan en az "
+            f"{MIN_CLICKS_CPC_BLEND} tiklama gerekir.")
 
     # ---------------- CVR temeli ----------------
     base_cvr, cvr_basis = None, None
