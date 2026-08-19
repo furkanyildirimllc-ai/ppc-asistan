@@ -156,6 +156,7 @@ async function rescan() {
     fillForm(res);
     setStatus("Hazır ✓");
     saveState();
+    urunDurumuGuncelle();
   } catch (e) {
     setStatus("Hata oluştu");
     console.error(e);
@@ -544,6 +545,42 @@ function collectData() {
   };
 }
 
+// ASIN girilir girilmez: bu urunun olculmus verisi var mi, hangi faz gerekli?
+// Amac: kullanicinin "ben hangi fazdayim" diye tahmin etmesini bitirmek.
+let _durumTimer = null;
+async function urunDurumuGuncelle() {
+  const kutu = $("urun-durum");
+  if (!kutu) return;
+  const asin = $("f-asin").value.trim().toUpperCase();
+  if (!/^B0[A-Z0-9]{8}$/.test(asin)) { kutu.style.display = "none"; return; }
+
+  kutu.style.display = "block";
+  kutu.innerHTML = `<div class="urun-durum faz0">Kontrol ediliyor…</div>`;
+  try {
+    const bid = Number($("f-brand-id").value) || "";
+    const r = await fetchWithTimeout(
+      `${API}/api/product-status?asin=${asin}${bid ? "&brand_id=" + bid : ""}`, {}, 25000);
+    if (!r.ok) throw new Error(String(r.status));
+    const d = await r.json();
+    const sinif = d.phase === "faz1" ? "faz1" : d.phase === "faz0_devam" ? "zayif" : "faz0";
+    const ikon = d.phase === "faz1" ? "✅" : d.phase === "faz0_devam" ? "⏳" : "🔬";
+    const rakam = d.have_data
+      ? `<div style="margin-top:5px;display:flex;gap:14px;font-size:10px;opacity:.85">
+           <span>CPC <b>$${d.cpc}</b></span><span>CVR <b>%${d.cvr_pct}</b></span>
+           <span>Tık <b>${d.clicks}</b></span>
+           ${d.brand_name ? `<span>Marka <b>${d.brand_name}</b></span>` : ""}
+         </div>` : "";
+    kutu.innerHTML = `<div class="urun-durum ${sinif}">
+        <b>${ikon} ${d.headline}</b>
+        <div style="margin-top:3px">${d.detail || ""}</div>
+        ${rakam}
+        <div style="margin-top:5px;opacity:.8">👉 ${d.action || ""}</div>
+      </div>`;
+  } catch (e) {
+    kutu.innerHTML = `<div class="urun-durum faz0">Durum alınamadı (${e.message})</div>`;
+  }
+}
+
 // Uygulamadaki markalari cek ve secime doldur.
 async function loadBrandAccounts() {
   const sel = $("f-brand-id");
@@ -589,6 +626,20 @@ $("strategy-picker").addEventListener("click", (ev) => {
   }
   saveState();
 });
+
+function renderKeywordRisks(list) {
+  if (!list || !list.length) return "";
+  const yuksek = list.filter(r => r.severity === "yuksek");
+  const satir = r => `<li><code>${r.keyword}</code>
+     <span style="opacity:.7">— ${r.terms.join(", ")}</span></li>`;
+  return `<div class="feas tight">
+    <b>⚠️ ${list.length} kelime reddedilebilir</b>
+    <div style="margin-top:3px">Amazon sağlık/tıbbi iddia içeren terimleri
+      reddedebilir. Kampanya yine kurulur, sadece o kelimeler düşer.</div>
+    <ul>${(yuksek.length ? yuksek : list).slice(0, 6).map(satir).join("")}</ul>
+    ${list.length > 6 ? `<div class="muted">…ve ${list.length - 6} tane daha</div>` : ""}
+  </div>`;
+}
 
 function renderStrategyNotice(plan) {
   if (!plan || !plan.effective_strategy) return "";
@@ -773,6 +824,7 @@ function renderPlan(plan) {
 
   $("plan-content").innerHTML = `
     ${renderStrategyNotice(plan)}
+    ${renderKeywordRisks(plan.keyword_risks)}
     ${renderDataWarnings(plan.data_warnings)}
     ${renderFeasibility(plan.bid_feasibility)}
     ${renderMeasurePlan(plan.measure_plan)}
@@ -944,3 +996,14 @@ FORM_FIELDS.forEach((id) => {
   const el = $(id);
   if (el) el.addEventListener("input", saveState);
 });
+
+// ASIN yazilirken her tusa basmada istek atma; yazim bitince sor.
+if ($("f-asin")) {
+  $("f-asin").addEventListener("input", () => {
+    clearTimeout(_durumTimer);
+    _durumTimer = setTimeout(urunDurumuGuncelle, 600);
+  });
+}
+if ($("f-brand-id")) {
+  $("f-brand-id").addEventListener("change", () => { saveState(); urunDurumuGuncelle(); });
+}

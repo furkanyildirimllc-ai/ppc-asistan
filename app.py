@@ -408,6 +408,58 @@ def discovery_status(brand_id: int):
     return sonuc
 
 
+@app.get("/api/product-status")
+def product_status(asin: str = "", brand_id: int | None = None):
+    """Bir URUN icin: olculmus CPC var mi, hangi faz gerekli?
+
+    Uzanti ASIN girilir girilmez bunu sorar. Amac: kullanicinin "ben hangi
+    fazdayim, verim var mi" diye tahmin etmesini bitirmek.
+    """
+    import benchmarks
+    a = (asin or "").strip().upper()
+    if not a:
+        return {"asin": "", "phase": "bilinmiyor", "headline": "ASIN girilmedi"}
+
+    rows = []
+    marka_adi = None
+    with db() as c:
+        if brand_id:
+            r = c.execute("SELECT name FROM brands WHERE id=?", (brand_id,)).fetchone()
+            marka_adi = r["name"] if r else None
+            rows = _load_rows(c, brand_id, "targeting")
+        else:
+            # Marka secilmediyse ASIN'i TUM markalarda ara - ama hangi markada
+            # bulundugunu SOYLE (sessizce baska markanin verisini kullanma).
+            for b in c.execute("SELECT id,name FROM brands"):
+                rs = _load_rows(c, b["id"], "targeting")
+                if any(benchmarks.asin_of_row(x) == a for x in rs):
+                    rows, marka_adi, brand_id = rs, b["name"], b["id"]
+                    break
+
+    urun = next((u for u in benchmarks.products_in(rows) if u["asin"] == a), None)
+    if not urun:
+        return {"asin": a, "brand_id": brand_id, "brand_name": marka_adi,
+                "phase": "faz0", "have_data": False,
+                "headline": "Bu ürün için ölçülmüş veri yok",
+                "detail": "Önce Faz 0 (CPC keşfi) çalıştır — 3 gün, ~$135.",
+                "action": "Faz 0 dosyasını indir ve yükle."}
+
+    yeter = urun["enough_for_cpc"]
+    return {
+        "asin": a, "brand_id": brand_id, "brand_name": marka_adi,
+        "phase": "faz1" if yeter else "faz0_devam",
+        "have_data": True, "clicks": urun["clicks"], "cpc": urun["cpc"],
+        "cvr_pct": urun["cvr_pct"], "orders": urun["orders"],
+        "headline": (f"Ölçüldü: CPC ${urun['cpc']} ({urun['clicks']:.0f} tıklama)"
+                     if yeter else
+                     f"Veri zayıf: {urun['clicks']:.0f} tıklama (en az 15 gerekir)"),
+        "detail": (f"Bu ürünün kendi verisi kullanılacak. CVR %{urun['cvr_pct']}."
+                   if yeter else "Keşfi biraz daha sürdür ya da temkinli devam et."),
+        "action": ("Faz 1 planını üretebilirsin." if yeter
+                   else "Faz 0'ı sürdür; bid hesabı zayıf veriyle yapılır."),
+    }
+
+
 @app.get("/api/brands/{brand_id}/data-inventory")
 def data_inventory(brand_id: int):
     """Bu markada NE VAR: rapor tipi, satir sayisi, son yukleme tarihi.

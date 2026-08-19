@@ -642,6 +642,48 @@ def bid_outlook_v2(price, econ, bids, bench):
     }
 
 
+# Amazon saglik/tibbi iddia iceren terimleri reddedebilir ya da reklami
+# durdurabilir. Kelime dosyaya girmeden once kullaniciya soylenir; boylece
+# yukleme raporundan hata ayiklamak zorunda kalmaz.
+_RISKLI_TERIMLER = {
+    # tedavi/tibbi iddia
+    "cure", "treat", "treatment", "heal", "therapy", "therapeutic",
+    "clinical", "clinically", "medical", "medicine", "prescription",
+    "doctor", "dermatologist", "fda", "approved", "proven",
+    # hastalik adlari
+    "alopecia", "psoriasis", "eczema", "dandruff-cure", "baldness",
+    "hair-loss-cure", "regrow", "regrowth", "restore",
+    # abartili vaat
+    "guaranteed", "miracle", "instant", "permanent", "100%",
+    "best", "#1", "number one",
+}
+
+
+def keyword_risks(keywords):
+    """Reddedilme riski tasiyan kelimeleri isaretler.
+
+    Doner: [{keyword, terms, severity}] - severity: yuksek | orta
+    Kelime SILINMEZ; karar kullanicinindir. Amac surprizi onlemek.
+    """
+    out = []
+    for kw in keywords or []:
+        k = str(kw).lower()
+        kelimeler = set(re.sub(r"[^a-z0-9%#]+", " ", k).split())
+        bulunan = sorted(kelimeler & _RISKLI_TERIMLER)
+        # "hair loss" gibi ifadeler sorun degil; "cure"/"clinically" gibi
+        # iddialar sorundur. Iki ve uzeri isaret = yuksek risk.
+        if not bulunan:
+            continue
+        out.append({
+            "keyword": kw,
+            "terms": bulunan,
+            "severity": "yuksek" if len(bulunan) > 1 or bulunan[0] in {
+                "cure", "clinically", "clinical", "fda", "guaranteed",
+                "miracle", "permanent", "prescription", "medical"} else "orta",
+        })
+    return out
+
+
 def bid_explanation(price, econ, bids, bench):
     """Bid'lerin nereden geldigini acikla - kara kutu olmasin."""
     if not econ:
@@ -1046,6 +1088,8 @@ def build_plan(product, competitors=None, use_ai=True, model=None,
             "profit" if not bench.get("has_cpc") else bid_strategy]["label"],
         "bid_explanation": bid_explanation(price, econ, bids, bench),
         "data_warnings": bench.get("warnings") or [],
+        "keyword_risks": keyword_risks(
+            list(dict.fromkeys((exact or []) + (phrase or []) + (broad or [])))),
         "discovery_plan": (discovery_plan(price, econ, bench,
                                           keywords=(exact or []) + (phrase or []))
                            if not bench.get("has_cpc") else None),
