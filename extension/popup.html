@@ -2,367 +2,304 @@
 <html lang="tr">
 <head>
   <meta charset="utf-8" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
   <style>
     :root {
-      --bg: #0f172a;
-      --card: #1e293b;
-      --card-hover: #2a374a;
-      --line: #334155;
-      --fg: #e2e8f0;
+      --bg: #090e17;
+      --card: #111827;
+      --card-hover: #1f2937;
+      --line: #1e293b;
+      --line-light: #334155;
+      --fg: #f8fafc;
       --muted: #94a3b8;
-      --acc: #38bdf8;
+      --acc: #0ea5e9;
       --acc-hover: #0284c7;
-      --ok: #22c55e;
+      --ok: #10b981;
       --warn: #f59e0b;
       --danger: #ef4444;
       --radius-sm: 8px;
       --radius-md: 12px;
-      --radius-full: 999px;
+      --radius-full: 9999px;
+      --font-family: 'Inter', system-ui, -apple-system, sans-serif;
     }
-    * { box-sizing: border-box; }
+    
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    
     body {
       width: 420px;
-      height: 580px;
-      margin: 0;
-      font: 14px/1.5 system-ui, -apple-system, Inter, sans-serif;
+      height: 600px;
+      font-family: var(--font-family);
       background: var(--bg);
       color: var(--fg);
       overflow-x: hidden;
-      overflow-y: auto;
+      overflow-y: overlay;
+      display: flex;
+      flex-direction: column;
     }
-    
+
+    /* Scrollbar */
+    ::-webkit-scrollbar { width: 6px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: var(--line); border-radius: 4px; }
+    ::-webkit-scrollbar-thumb:hover { background: var(--muted); }
+
     /* Header */
     header {
-      padding: 16px;
+      padding: 16px 20px;
       border-bottom: 1px solid var(--line);
       display: flex;
       align-items: center;
       gap: 12px;
       position: sticky;
       top: 0;
-      background: rgba(15, 23, 42, 0.9);
-      backdrop-filter: blur(8px);
+      background: rgba(9, 14, 23, 0.85);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
       z-index: 100;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.2);
     }
-    header b { font-size: 16px; font-weight: 600; }
-    header small { color: var(--muted); margin-left: auto; font-size: 12px; }
-    
-    /* Wizard Steps Indicator */
+    header b { font-size: 16px; font-weight: 700; letter-spacing: -0.01em; display: flex; align-items: center; gap: 6px;}
+    header small { color: var(--muted); margin-left: auto; font-size: 12px; font-weight: 500; }
+    .header-actions { display: flex; gap: 4px; align-items: center; }
+    .header-btn {
+      cursor: pointer; padding: 6px; border-radius: var(--radius-sm); font-size: 14px;
+      transition: all 0.2s ease; display: flex; align-items: center; justify-content: center;
+      color: var(--muted); border: 1px solid transparent; background: transparent;
+    }
+    .header-btn:hover { background: var(--card); border-color: var(--line); color: var(--fg); }
+
+    /* Settings Panel */
+    #api-settings-panel {
+      padding: 16px 20px; background: var(--card); border-bottom: 1px solid var(--line);
+      box-shadow: 0 10px 15px -3px rgba(0,0,0,0.3); position: relative; z-index: 99;
+    }
+
+    /* Steps Nav */
     .steps-nav {
       display: flex;
       justify-content: space-between;
       align-items: center;
-      padding: 14px 20px;
-      background: #0b1220;
+      padding: 20px 24px;
+      background: var(--bg);
       border-bottom: 1px solid var(--line);
       position: relative;
     }
     .steps-nav::before {
-      content: '';
-      position: absolute;
-      top: 50%;
-      left: 36px;
-      right: 36px;
-      height: 2px;
-      background: var(--line);
-      transform: translateY(-50%);
-      z-index: 1;
+      content: ''; position: absolute; top: 50%; left: 36px; right: 36px;
+      height: 2px; background: var(--line); transform: translateY(-50%); z-index: 1;
     }
     .step-dot {
-      width: 26px;
-      height: 26px;
-      border-radius: 50%;
-      background: var(--card);
-      border: 2px solid var(--line);
-      color: var(--muted);
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 11px;
-      font-weight: 700;
-      z-index: 2;
-      transition: all 0.25s ease;
-      cursor: pointer;
+      width: 30px; height: 30px; border-radius: 50%;
+      background: var(--bg); border: 2px solid var(--line);
+      color: var(--muted); display: flex; align-items: center; justify-content: center;
+      font-size: 12px; font-weight: 700; z-index: 2; transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+      cursor: pointer; box-shadow: 0 2px 4px rgba(0,0,0,0.1);
     }
     .step-dot.active {
-      border-color: var(--acc);
-      background: var(--acc);
-      color: #04212e;
-      box-shadow: 0 0 12px rgba(56, 189, 248, 0.4);
+      border-color: var(--acc); background: var(--acc); color: #fff;
+      box-shadow: 0 0 16px rgba(14, 165, 233, 0.4); transform: scale(1.15);
     }
-    .step-dot.done {
-      border-color: var(--ok);
-      background: var(--card);
-      color: var(--ok);
-    }
-    
-    /* Layout */
-    .body-content {
-      padding: 14px;
-      position: relative;
-    }
-    .step-panel {
-      display: none;
-      animation: fadeIn 0.25s ease;
-    }
-    .step-panel.active {
-      display: block;
-    }
-    
-    @keyframes fadeIn {
-      from { opacity: 0; transform: translateY(4px); }
+    .step-dot.done { border-color: var(--ok); background: var(--bg); color: var(--ok); }
+
+    /* Layout & Panels */
+    .body-content { padding: 20px; flex: 1; position: relative; }
+    .step-panel { display: none; animation: slideUp 0.3s cubic-bezier(0.4, 0, 0.2, 1) forwards; opacity: 0; }
+    .step-panel.active { display: block; }
+    @keyframes slideUp {
+      from { opacity: 0; transform: translateY(8px); }
       to { opacity: 1; transform: translateY(0); }
     }
-    
-    /* UI Components */
+
+    /* Card System */
     .card {
-      background: var(--card);
-      border: 1px solid var(--line);
-      border-radius: var(--radius-md);
-      padding: 12px 14px;
-      margin-bottom: 10px;
-      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+      background: var(--card); border: 1px solid var(--line);
+      border-radius: var(--radius-md); padding: 16px; margin-bottom: 16px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.1); transition: transform 0.2s, box-shadow 0.2s, border-color 0.2s;
     }
+    .card:hover { border-color: var(--line-light); box-shadow: 0 6px 16px rgba(0,0,0,0.15); }
+    
     .tag {
-      font-size: 11px;
-      color: var(--acc);
-      text-transform: uppercase;
-      letter-spacing: 0.05em;
-      font-weight: 700;
-      margin-bottom: 6px;
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
+      font-size: 11px; color: var(--acc); text-transform: uppercase;
+      letter-spacing: 0.06em; font-weight: 700; margin-bottom: 14px;
+      display: flex; align-items: center; justify-content: space-between;
     }
+
+    /* Forms */
     label {
-      display: block;
-      color: var(--muted);
-      font-size: 11px;
-      font-weight: 600;
-      margin: 6px 0 3px;
-      text-transform: uppercase;
-      letter-spacing: 0.03em;
+      display: block; color: var(--muted); font-size: 11px; font-weight: 600;
+      margin: 12px 0 6px; text-transform: uppercase; letter-spacing: 0.03em;
     }
-    input {
-      width: 100%;
-      padding: 7px 10px;
-      border-radius: var(--radius-sm);
-      border: 1px solid var(--line);
-      background: #0b1220;
-      color: var(--fg);
-      font-size: 12px;
-      transition: border-color 0.2s;
-    }
-    input:focus { outline: none; border-color: var(--acc); }
-    .row { display: flex; gap: 8px; align-items: center; }
-    .row > div { flex: 1; min-width: 0; }
+    label:first-child { margin-top: 0; }
     
+    input, select {
+      width: 100%; padding: 10px 12px; border-radius: var(--radius-sm);
+      border: 1px solid var(--line); background: rgba(0,0,0,0.2);
+      color: var(--fg); font-size: 13px; font-family: inherit;
+      transition: all 0.2s ease; outline: none;
+    }
+    input:focus, select:focus { border-color: var(--acc); box-shadow: 0 0 0 3px rgba(14, 165, 233, 0.15); }
+    input::placeholder { color: #475569; }
+    
+    select {
+      appearance: none;
+      background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2394a3b8' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e");
+      background-repeat: no-repeat; background-position: right 12px center; background-size: 16px;
+      padding-right: 32px; cursor: pointer;
+    }
+    select optgroup { background: var(--bg); color: var(--muted); font-weight: 600; }
+    select option { background: var(--card); color: var(--fg); }
+
+    .row { display: flex; gap: 12px; align-items: stretch; margin-bottom: 12px; }
+    .row > div { flex: 1; min-width: 0; display: flex; flex-direction: column; justify-content: flex-end; }
+    .row:last-child { margin-bottom: 0; }
+
+    /* Buttons */
     button {
-      width: 100%;
-      padding: 9px;
-      border: 0;
-      border-radius: var(--radius-sm);
-      cursor: pointer;
-      font-weight: 600;
-      font-size: 13px;
-      margin-top: 8px;
-      transition: all 0.2s;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      gap: 6px;
+      width: 100%; padding: 10px 16px; border: none; border-radius: var(--radius-sm);
+      cursor: pointer; font-weight: 600; font-size: 13px; font-family: inherit;
+      transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+      display: flex; align-items: center; justify-content: center; gap: 8px;
+      margin-top: 8px; height: 40px; /* Uniform height */
     }
-    .primary { background: var(--acc); color: #04212e; }
-    .primary:hover:not(:disabled) { background: var(--acc-hover); color: #fff; }
-    .ghost { background: transparent; color: var(--acc); border: 1px solid var(--acc); }
-    .ghost:hover:not(:disabled) { background: rgba(56, 189, 248, 0.12); }
-    .success { background: var(--ok); color: #052e16; }
-    .success:hover:not(:disabled) { filter: brightness(1.1); }
+    .primary { background: var(--acc); color: #fff; box-shadow: 0 2px 8px rgba(14, 165, 233, 0.25); }
+    .primary:hover:not(:disabled) { background: var(--acc-hover); transform: translateY(-1px); box-shadow: 0 4px 12px rgba(14, 165, 233, 0.35); }
+    .primary:active:not(:disabled) { transform: translateY(0); }
+    
+    .ghost { background: transparent; color: var(--fg); border: 1px solid var(--line); }
+    .ghost:hover:not(:disabled) { background: var(--card); border-color: var(--line-light); color: var(--acc); }
+    
+    .success { background: var(--ok); color: #fff; box-shadow: 0 2px 8px rgba(16, 185, 129, 0.25); }
+    .success:hover:not(:disabled) { filter: brightness(1.1); transform: translateY(-1px); box-shadow: 0 4px 12px rgba(16, 185, 129, 0.35); }
+    
     button:disabled { opacity: 0.5; cursor: not-allowed; }
-    
-    .muted { color: var(--muted); font-size: 11px; line-height: 1.4; }
-    .spin { animation: spin 1s linear infinite; display: inline-block; }
-    @keyframes spin { 100% { transform: rotate(360deg); } }
-    
-    /* Step 1 specifics */
-    .indicator { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; font-weight: 600; margin-right: 8px; }
-    .i-ok { color: var(--ok); }
-    .i-warn { color: var(--warn); }
-    .i-danger { color: var(--danger); }
-    
-    /* Step 2 specifics */
-    .comp-card {
-      display: flex;
-      gap: 8px;
-      padding: 8px 10px;
-      border-radius: var(--radius-sm);
-      background: #0b1220;
-      border: 1px solid var(--line);
-      margin-bottom: 6px;
-      align-items: center;
-      overflow: hidden;
+
+    /* Button Row alignment */
+    .btn-row { display: flex; gap: 12px; margin-top: 16px; }
+    .btn-row button { margin-top: 0; }
+    .btn-row .ghost { flex: 0 0 100px; }
+    .btn-row .primary, .btn-row .success { flex: 1; }
+
+    /* Typography & Utilities */
+    .muted { color: var(--muted); font-size: 12px; line-height: 1.5; }
+    .expert-note {
+      background: rgba(14, 165, 233, 0.05); border-left: 3px solid var(--acc);
+      padding: 12px 14px; border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+      font-size: 12px; line-height: 1.5; color: var(--fg); margin: 16px 0;
     }
+    
+    /* Chips */
+    .chip {
+      display: inline-flex; align-items: center;
+      background: rgba(0,0,0,0.3); border: 1px solid var(--line);
+      border-radius: var(--radius-full); padding: 5px 12px; margin: 4px 4px 0 0;
+      font-size: 11px; font-weight: 500; color: var(--fg); transition: all 0.2s;
+    }
+    .chip:hover { border-color: var(--line-light); background: var(--card); }
+    .chip.high { border-color: rgba(239, 68, 68, 0.3); color: #fca5a5; background: rgba(239, 68, 68, 0.1); }
+    .chip.med { border-color: rgba(245, 158, 11, 0.3); color: #fde68a; background: rgba(245, 158, 11, 0.1); }
+    .chip.low { border-color: rgba(14, 165, 233, 0.3); color: #bae6fd; background: rgba(14, 165, 233, 0.1); }
+
+    /* Competitors */
+    .comp-card {
+      display: flex; gap: 12px; padding: 12px; border-radius: var(--radius-sm);
+      background: var(--bg); border: 1px solid var(--line); margin-bottom: 8px;
+      align-items: center; transition: all 0.2s;
+    }
+    .comp-card:hover { border-color: var(--line-light); }
     .comp-card.strong { border-left: 4px solid var(--danger); }
     .comp-card.weak { border-left: 4px solid var(--ok); }
-    .comp-info { flex: 1; min-width: 0; overflow: hidden; }
-    .comp-title { font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: 600; color: var(--fg); }
-    .comp-meta { font-size: 11px; color: var(--muted); margin-top: 2px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
-    .star-rating { color: #fbbf24; font-size: 11px; }
-    
-    /* Step 3 specifics */
-    .chip {
-      display: inline-flex;
-      align-items: center;
-      background: #0b1220;
-      border: 1px solid var(--line);
-      border-radius: var(--radius-full);
-      padding: 3px 9px;
-      margin: 3px 3px 0 0;
-      font-size: 11px;
-      font-weight: 500;
-      color: var(--fg);
+    .comp-info { flex: 1; min-width: 0; display: flex; flex-direction: column; justify-content: center; }
+    .comp-title { font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: 600; color: var(--fg); }
+    .comp-meta { font-size: 11px; color: var(--muted); margin-top: 4px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+    .star-rating { color: #fbbf24; font-size: 11px; font-weight: 700; letter-spacing: 0.05em; }
+    .comp-thumb {
+      position: relative; width: 44px; height: 44px; flex-shrink: 0;
+      border-radius: var(--radius-sm); background: #1e293b; overflow: hidden; border: 1px solid var(--line);
     }
-    .chip.high { border-color: var(--danger); color: #fca5a5; }
-    .chip.med { border-color: var(--warn); color: #fde68a; }
-    .chip.low { border-color: var(--acc); color: #bae6fd; }
-    
-    /* Step 4 specifics */
-    .camp-card {
-      border-left: 4px solid var(--acc);
-      background: #0b1220;
-      padding: 8px 10px;
-      border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
-      margin-bottom: 6px;
-    }
-    .timeline { position: relative; padding-left: 14px; }
-    .timeline::before {
-      content: ''; position: absolute; left: 0; top: 4px; bottom: 4px; width: 2px; background: var(--line);
-    }
-    .tl-item { position: relative; margin-bottom: 8px; font-size: 11px; line-height: 1.4; color: var(--fg); }
-    .tl-item::before {
-      content: ''; position: absolute; left: -18px; top: 4px; width: 7px; height: 7px;
-      border-radius: 50%; background: var(--acc);
-    }
-    .expert-note {
-      background: rgba(56, 189, 248, 0.08);
-      border-left: 3px solid var(--acc);
-      padding: 8px 10px;
-      border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
-      font-size: 11px;
-      line-height: 1.45;
-      margin-top: 6px;
-      color: var(--fg);
-    }
-    
-    .comp-badge { font-size: 10px; padding: 2px 6px; border-radius: 8px; font-weight: 600; }
-    .comp-badge.weak { background: rgba(34, 197, 94, 0.15); color: var(--ok); }
+    .comp-thumb-ph { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 18px; }
+    .comp-thumb img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+
+    .comp-badge { font-size: 10px; padding: 3px 8px; border-radius: var(--radius-full); font-weight: 600; letter-spacing: 0.02em; }
+    .comp-badge.weak { background: rgba(16, 185, 129, 0.15); color: var(--ok); }
     .comp-badge.strong { background: rgba(239, 68, 68, 0.15); color: var(--danger); }
-    .comp-badge.overlap { background: rgba(56, 189, 248, 0.15); color: var(--acc); }
+    .comp-badge.overlap { background: rgba(14, 165, 233, 0.15); color: var(--acc); }
+    .comp-summary { display: flex; gap: 12px; padding: 10px 12px; border-radius: var(--radius-sm); background: rgba(14, 165, 233, 0.05); border: 1px solid rgba(14,165,233,0.1); margin-bottom: 12px; font-size: 11px; align-items: center; }
 
-    /* select native/beyaz goruntuden koyu temaya cekildi */
-    select {
-      width: 100%; padding: 7px 10px; border-radius: var(--radius-sm);
-      border: 1px solid var(--line); background: #0b1220; color: var(--fg);
-      font-size: 12px; appearance: none;
-      background-image: linear-gradient(45deg, transparent 50%, var(--muted) 50%),
-                        linear-gradient(135deg, var(--muted) 50%, transparent 50%);
-      background-position: calc(100% - 15px) 14px, calc(100% - 10px) 14px;
-      background-size: 5px 5px, 5px 5px; background-repeat: no-repeat;
-      cursor: pointer;
+    /* Strategy Picker */
+    #strategy-picker { display: flex; gap: 8px; margin-top: 10px; }
+    .strat-btn {
+      flex: 1; padding: 12px 6px; display: flex; flex-direction: column; align-items: center; gap: 6px;
+      background: var(--bg); color: var(--muted); border: 1px solid var(--line); margin-top: 0;
+      border-radius: var(--radius-sm); font-size: 12px; font-weight: 600; cursor: pointer; transition: all 0.2s; height: auto;
     }
-    select:focus { outline: none; border-color: var(--acc); }
-    select optgroup { background: #0b1220; color: var(--muted); }
+    .strat-btn span { font-size: 10px; font-weight: 400; opacity: 0.8; }
+    .strat-btn:hover { border-color: var(--line-light); background: var(--card); color: var(--fg); }
+    .strat-btn.active { background: rgba(14, 165, 233, 0.1); border-color: var(--acc); color: var(--acc); }
 
-    /* Urun durum rozeti: hangi fazdasin, verin var mi */
-    .urun-durum { padding: 9px 11px; border-radius: var(--radius-sm);
-      font-size: 11px; line-height: 1.5; border-left: 3px solid; }
-    .urun-durum.faz1  { background: rgba(34,197,94,.10);  border-color: var(--ok); }
-    .urun-durum.faz0  { background: rgba(56,189,248,.10); border-color: var(--acc); }
-    .urun-durum.zayif { background: rgba(245,158,11,.10); border-color: var(--warn); }
+    /* Loader */
+    .loader-view { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 300px; text-align: center; }
+    .spinner {
+      width: 44px; height: 44px; border: 3px solid var(--line);
+      border-top-color: var(--acc); border-radius: 50%;
+      animation: spin 0.8s cubic-bezier(0.4, 0, 0.2, 1) infinite; margin-bottom: 20px;
+    }
+    .spin { animation: spin 1s linear infinite; display: inline-block; }
+    @keyframes spin { 100% { transform: rotate(360deg); } }
+
+    /* Indicators & Status */
+    .indicator { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; font-weight: 600; margin-right: 8px; padding: 4px 10px; border-radius: var(--radius-full); background: rgba(255,255,255,0.05); }
+    .i-ok { color: var(--ok); background: rgba(16, 185, 129, 0.1); }
+    .i-warn { color: var(--warn); background: rgba(245, 158, 11, 0.1); }
+    .i-danger { color: var(--danger); background: rgba(239, 68, 68, 0.1); }
+
+    .urun-durum { padding: 12px 14px; border-radius: var(--radius-sm); font-size: 11px; line-height: 1.5; border-left: 3px solid; margin-top: 10px; }
+    .urun-durum.faz1  { background: rgba(16, 185, 129, 0.08); border-color: var(--ok); }
+    .urun-durum.faz0  { background: rgba(14, 165, 233, 0.08); border-color: var(--acc); }
+    .urun-durum.zayif { background: rgba(245, 158, 11, 0.08); border-color: var(--warn); }
     .urun-durum b { font-size: 12px; }
 
-    /* Rakip gorseli: yer tutucu her zaman altta durur, gorsel uzerine biner */
-    .comp-thumb {
-      position: relative; width: 56px; height: 56px; flex-shrink: 0;
-      border-radius: 6px; background: #1e293b; overflow: hidden;
-    }
-    .comp-thumb-ph {
-      position: absolute; inset: 0; display: flex;
-      align-items: center; justify-content: center; font-size: 24px;
-    }
-    .comp-thumb img {
-      position: absolute; inset: 0;
-      width: 100%; height: 100%; object-fit: contain; background: #1e293b;
-    }
-    .comp-summary { display: flex; gap: 12px; padding: 8px 10px; border-radius: 8px; background: rgba(56, 189, 248, 0.08); margin-bottom: 10px; font-size: 11px; align-items: center; }
+    /* AI Plan & Timeline */
+    .camp-card { border-left: 4px solid var(--acc); background: var(--bg); padding: 12px; border-radius: 0 var(--radius-sm) var(--radius-sm) 0; margin-bottom: 8px; border-top: 1px solid var(--line); border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+    .timeline { position: relative; padding-left: 16px; }
+    .timeline::before { content: ''; position: absolute; left: 0; top: 4px; bottom: 4px; width: 2px; background: var(--line); }
+    .tl-item { position: relative; margin-bottom: 10px; font-size: 12px; line-height: 1.5; color: var(--fg); }
+    .tl-item::before { content: ''; position: absolute; left: -20px; top: 5px; width: 8px; height: 8px; border-radius: 50%; background: var(--acc); border: 2px solid var(--bg); }
+    
+    .feas { padding: 12px 14px; border-radius: var(--radius-sm); font-size: 12px; line-height: 1.5; margin-top: 12px; border-left: 3px solid; }
+    .feas.ok      { background: rgba(16, 185, 129, 0.08); border-color: var(--ok); }
+    .feas.tight   { background: rgba(245, 158, 11, 0.08); border-color: var(--warn); }
+    .feas.blocked { background: rgba(239, 68, 68, 0.08); border-color: var(--danger); }
+    .feas.unknown { background: rgba(148, 163, 184, 0.08); border-color: var(--muted); }
+    .feas ul { margin: 8px 0 0 16px; padding: 0; }
+    .feas li { margin-bottom: 4px; }
+    .feas-nums { display: flex; gap: 16px; margin-top: 8px; font-size: 11px; color: var(--muted); }
 
-    /* Loading view */
-    .loader-view {
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      height: 260px;
-      text-align: center;
-    }
-    .spinner {
-      width: 36px; height: 36px;
-      border: 3px solid var(--line);
-      border-top-color: var(--acc);
-      border-radius: 50%;
-      animation: spin 0.8s linear infinite;
-      margin-bottom: 14px;
-    }
-
-    /* Bid stratejisi secici */
-    .strat-btn {
-      flex: 1; margin-top: 0; padding: 8px 4px;
-      display: flex; flex-direction: column; align-items: center; gap: 2px;
-      background: var(--card); color: var(--muted);
-      border: 1px solid var(--line); border-radius: var(--radius-sm);
-      font-size: 11px; font-weight: 600; cursor: pointer;
-    }
-    .strat-btn span { font-size: 9px; font-weight: 400; opacity: 0.75; }
-    .strat-btn.active {
-      background: rgba(56, 189, 248, 0.14);
-      border-color: var(--acc); color: var(--acc);
-    }
-
-    table.outlook { width:100%; border-collapse:collapse; margin-top:8px; font-size:11px; }
-    table.outlook th { text-align:left; color:var(--muted); font-weight:600; font-size:10px;
-                       padding:3px 4px; border-bottom:1px solid var(--line); }
-    table.outlook td { padding:4px; border-bottom:1px solid rgba(255,255,255,.04); }
-
-    /* Bid uygulanabilirlik uyarisi */
-    .feas { padding: 9px 11px; border-radius: var(--radius-sm); font-size: 11px;
-            line-height: 1.45; margin-top: 12px; border-left: 3px solid; }
-    .feas.ok      { background: rgba(34,197,94,.10);  border-color: var(--ok); }
-    .feas.tight   { background: rgba(245,158,11,.10); border-color: var(--warn); }
-    .feas.blocked { background: rgba(239,68,68,.10);  border-color: var(--danger); }
-    .feas.unknown { background: rgba(148,163,184,.12); border-color: var(--muted); }
-    .feas ul { margin: 6px 0 0 15px; padding: 0; }
-    .feas li { margin-bottom: 3px; }
-    .feas-nums { display: flex; gap: 14px; margin-top: 6px; font-size: 10px; color: var(--muted); }
+    table.outlook { width:100%; border-collapse:collapse; margin-top:12px; font-size:11px; }
+    table.outlook th { text-align:left; color:var(--muted); font-weight:600; font-size:10px; padding:6px 8px; border-bottom:1px solid var(--line); text-transform:uppercase; letter-spacing:0.02em; }
+    table.outlook td { padding:8px; border-bottom:1px solid rgba(255,255,255,0.02); }
   </style>
 </head>
 <body>
   <header>
-    <b>🚀 PPC Launch Pro</b>
+    <b><span style="font-size:18px">🚀</span> PPC Launch Pro</b>
     <small id="status-text">Hazır</small>
-    <div style="cursor:pointer;" id="btn-reset" title="Her şeyi sıfırla ve baştan başla">🔄</div>
-    <div style="cursor:pointer;" id="api-settings-toggle">⚙️</div>
+    <div class="header-actions">
+      <button class="header-btn" id="btn-reset" title="Her şeyi sıfırla">🔄</button>
+      <button class="header-btn" id="api-settings-toggle" title="Ayarlar">⚙️</button>
+    </div>
   </header>
-  <div id="api-settings-panel" style="display:none; padding: 10px 16px; background: #0b1220; border-bottom: 1px solid var(--line);">
-    <label style="margin-top:0;">API URL</label>
+  
+  <div id="api-settings-panel" style="display:none;">
+    <label>API URL</label>
     <div class="row">
-      <input id="f-api-url" value="http://localhost:8642" />
-      <button class="ghost" id="btn-save-api" style="margin-top:0; padding:7px 10px; width:auto;">Kaydet</button>
+      <div style="flex:2"><input id="f-api-url" value="http://localhost:8642" /></div>
+      <div style="flex:1"><button class="ghost" id="btn-save-api" style="height:40px; margin:0;">Kaydet</button></div>
     </div>
-    <div style="display:flex; gap:6px; margin-top:8px;">
-      <button class="ghost" id="btn-api-local" style="margin-top:0; padding:6px; font-size:11px;">💻 Yerel (8642)</button>
-      <button class="ghost" id="btn-api-cloud" style="margin-top:0; padding:6px; font-size:11px;">☁️ Canlı Sunucu</button>
+    <div class="row" style="margin-top:12px;">
+      <button class="ghost" id="btn-api-local" style="margin:0; font-size:11px;">💻 Yerel (8642)</button>
+      <button class="ghost" id="btn-api-cloud" style="margin:0; font-size:11px;">☁️ Canlı Sunucu</button>
     </div>
-    <div id="api-status" class="muted" style="margin-top:6px; font-size:10px;"></div>
+    <div id="api-status" class="muted" style="margin-top:10px; font-size:11px;"></div>
   </div>
   
   <div class="steps-nav">
@@ -379,7 +316,7 @@
     <div class="step-panel active" id="step-1">
       <div class="card">
         <div class="tag">Ürün Analizi</div>
-        <div id="product-indicators" style="margin-bottom: 10px; display: none;">
+        <div id="product-indicators" style="margin-bottom: 16px; display: none;">
           <span class="indicator i-ok" id="ind-aplus">✓ A+ İçerik</span>
           <span class="indicator" id="ind-imgs">📸 0 Görsel</span>
           <span class="indicator" id="ind-rating">⭐ 0.0</span>
@@ -388,29 +325,28 @@
         <label>Başlık</label>
         <input id="f-title" placeholder="Amazon ürün sayfasını açın" />
         
-        <div class="row">
+        <div class="row" style="margin-top: 12px;">
           <div><label>ASIN</label><input id="f-asin" placeholder="B0..." /></div>
           <div><label>Fiyat ($)</label><input id="f-price" type="number" step="0.01" /></div>
         </div>
         
-        <div class="row">
-          <div><label>SKU (Opsiyonel)</label><input id="f-sku" placeholder="Satıcı SKU" /></div>
+        <div class="row" style="margin-top: 12px;">
+          <div><label>SKU <span style="text-transform:none; font-weight:400; opacity:0.6">(Opsiyonel)</span></label><input id="f-sku" placeholder="Satıcı SKU" /></div>
           <div><label>Marka</label><input id="f-brand" placeholder="Marka adı" /></div>
         </div>
 
-        <label>Uygulamadaki marka hesabı</label>
+        <label style="margin-top: 16px;">Uygulamadaki Marka Hesabı</label>
         <select id="f-brand-id">
-          <option value="">— seçilmedi (ölçülmüş veri kullanılmaz) —</option>
+          <option value="">— Seçilmedi (Ölçülmüş veri kullanılmaz) —</option>
         </select>
-        <div id="urun-durum" style="display:none; margin-top:8px;"></div>
-        <div id="brand-id-note" class="muted" style="margin-top:4px; font-size:10px;">
-          Faz 0 raporunu yüklediğin markayı seç — bid'ler o markanın gerçek
-          CPC/CVR'ından hesaplansın. Seçmezsen varsayım kullanılır.
+        <div id="urun-durum" style="display:none;"></div>
+        <div id="brand-id-note" class="muted" style="margin-top:8px;">
+          Faz 0 raporunu yüklediğin markayı seç. Bid'ler o markanın gerçek CPC/CVR verisinden hesaplanır. Seçmezsen ortalama varsayım kullanılır.
         </div>
         
-        <div class="row">
-          <div><label>Üretim Maliyeti (COGS $)</label><input id="f-cogs" type="number" step="0.01" placeholder="Kar analizi için" /></div>
-          <div><label>FBA Ücreti ($)</label><input id="f-fba" type="number" step="0.01" placeholder="Kar analizi için" /></div>
+        <div class="row" style="margin-top: 16px;">
+          <div><label>Üretim Maliyeti ($)</label><input id="f-cogs" type="number" step="0.01" placeholder="COGS" /></div>
+          <div><label>FBA Ücreti ($)</label><input id="f-fba" type="number" step="0.01" placeholder="FBA Fee" /></div>
         </div>
       </div>
       
@@ -421,28 +357,25 @@
     <!-- STEP 2: Rakip Keşfi -->
     <div class="step-panel" id="step-2">
       <div class="card">
-        <div class="tag">Rakip Hedefleri <span id="comp-count-title" style="color:var(--muted);float:right">0 seçildi</span></div>
-        <div class="muted" style="margin-bottom: 10px;">Otomatik bulunan rakipleri inceleyin. Güçlü rakipler (kırmızı), zayıf hedefler (yeşil).</div>
+        <div class="tag">Rakip Hedefleri <span id="comp-count-title" style="color:var(--muted); float:right; font-weight:500; font-size:11px;">0 seçildi</span></div>
+        <div class="muted" style="margin-bottom: 16px;">Otomatik bulunan rakipleri inceleyin. <b style="color:var(--danger)">Kırmızı</b> kartlar güçlü, <b style="color:var(--ok)">yeşil</b> kartlar zayıf hedeflerdir.</div>
 
-        <button class="ghost" id="btn-discover" style="margin-top:0; margin-bottom:10px; padding:9px;">
-          🔍 Rakipleri Otomatik Tara
-        </button>
-        <div id="discover-status" class="muted" style="display:none; margin-bottom:10px; font-size:11px;"></div>
+        <button class="ghost" id="btn-discover" style="margin-top:0; margin-bottom:12px;">🔍 Rakipleri Otomatik Tara</button>
+        <div id="discover-status" class="muted" style="display:none; margin-bottom:12px; text-align:center;"></div>
 
-        <div id="competitors-list" style="max-height: 280px; overflow-y: auto;">
+        <div id="competitors-list" style="max-height: 260px; overflow-y: auto; padding-right: 4px;">
           <!-- Competitor cards injected here -->
         </div>
         
-        <div style="margin-top: 10px;">
-          <div class="row">
-            <input id="f-manual-asin" placeholder="Manuel ASIN Ekle (B0...)" style="flex:2" />
-            <button class="ghost" id="btn-add-comp" style="margin-top:0; padding: 8px;">+ Ekle</button>
-          </div>
+        <div class="row" style="margin-top: 16px; margin-bottom:0;">
+          <div style="flex:2;"><input id="f-manual-asin" placeholder="ASIN Ekle (B0...)" /></div>
+          <div style="flex:1;"><button class="ghost" id="btn-add-comp" style="margin:0; height: 40px;">+ Ekle</button></div>
         </div>
       </div>
-      <div class="row">
+      
+      <div class="btn-row">
         <button class="ghost" id="btn-goto-1">← Geri</button>
-        <button class="primary" id="btn-step-2-next" style="flex: 2;">Devam Et →</button>
+        <button class="primary" id="btn-step-2-next">Devam Et →</button>
       </div>
     </div>
 
@@ -450,32 +383,32 @@
     <div class="step-panel" id="step-3">
       <div class="card">
         <div class="tag">Anahtar Kelime Fırsatları</div>
-        <div class="muted" style="margin-bottom: 10px;">Rakiplerden ve Amazon otomatik tamamlamadan (Autocomplete) elde edilen kelimeler:</div>
+        <div class="muted" style="margin-bottom: 12px;">Rakiplerden ve Amazon Autocomplete üzerinden toplanan potansiyel arama terimleri:</div>
         
-        <div id="keyword-loading" class="muted">Kelimeler toplanıyor <span class="spin">⏳</span></div>
+        <div id="keyword-loading" class="muted" style="text-align:center; padding: 20px 0;">Kelimeler toplanıyor <span class="spin" style="margin-left:8px;">⏳</span></div>
         
-        <div id="keywords-container" style="max-height: 300px; overflow-y: auto; display: none;">
+        <div id="keywords-container" style="max-height: 240px; overflow-y: auto; display: none; padding-right: 4px;">
           <!-- Chips injected here -->
         </div>
       </div>
       
       <div class="expert-note">
-        <b>💡 AI Stratejisi:</b> Bu kelimeler analiz edilerek bütçenize en uygun Exact, Phrase ve Broad kampanyalarına otomatik dağıtılacaktır.
+        <b>💡 AI Stratejisi:</b> Toplanan kelimeler analiz edilerek bütçenize en uygun Exact, Phrase ve Broad kampanyalarına optimum şekilde dağıtılacaktır.
       </div>
       
-      <div class="card" style="margin-top:12px;">
+      <div class="card">
         <div class="tag">💵 Bid Stratejisi</div>
-        <div class="muted" style="margin-top:4px;">Bid'ler kârlılık matematiğinden hesaplanır. Ne kadar agresif gireceğini sen seç.</div>
-        <div id="strategy-picker" style="display:flex; gap:6px; margin-top:8px;">
-          <button class="strat-btn active" data-strategy="profit">Kârlı<span>hedef ACOS'a sadık</span></button>
-          <button class="strat-btn" data-strategy="balanced">Dengeli<span>+%35 bid</span></button>
-          <button class="strat-btn" data-strategy="aggressive">Pazar Payı<span>+%90 bid</span></button>
+        <div class="muted" style="margin-bottom: 12px;">Hedeflerinize ulaşmak için açık artırma (bid) agresifliğini belirleyin.</div>
+        <div id="strategy-picker">
+          <button class="strat-btn active" data-strategy="profit">Kârlı<span>Hedef ACOS</span></button>
+          <button class="strat-btn" data-strategy="balanced">Dengeli<span>+%35 Bid</span></button>
+          <button class="strat-btn" data-strategy="aggressive">Pazar Payı<span>+%90 Bid</span></button>
         </div>
       </div>
 
-      <div class="row">
+      <div class="btn-row">
         <button class="ghost" id="btn-goto-2">← Geri</button>
-        <button class="primary" id="btn-analyze" style="flex: 2;">AI Analizi Başlat 🧠</button>
+        <button class="primary" id="btn-analyze">AI Analizi Başlat ✨</button>
       </div>
     </div>
 
@@ -483,68 +416,68 @@
     <div class="step-panel" id="step-4">
       <div id="loading-view" class="loader-view">
         <div class="spinner"></div>
-        <b style="font-size:16px;">AI Planı Oluşturuluyor...</b>
-        <div class="muted" style="margin-top:8px">Rakipler analiz ediliyor, CPC tahminleri yapılıyor ve optimal bütçe dağıtımı hesaplanıyor.</div>
-        <div id="loading-timer" class="muted" style="margin-top:10px; font-size:11px;">Geçen süre: 0 sn</div>
-        <button class="ghost" id="btn-cancel-analyze" style="width:auto; padding:6px 14px; margin-top:12px;">İptal</button>
+        <b style="font-size:16px; margin-bottom:8px;">AI Planı Hesaplanıyor...</b>
+        <div class="muted" style="max-width: 280px;">Rakipler çapraz sorgulanıyor, CPC tahminleri çıkarılıyor ve optimum bütçe dağıtımı tasarlanıyor.</div>
+        <div id="loading-timer" class="muted" style="margin-top:16px; font-weight:600;">Geçen süre: 0 sn</div>
+        <button class="ghost" id="btn-cancel-analyze" style="width:auto; padding:8px 24px; margin-top:20px; border-radius:var(--radius-full);">İptal Et</button>
       </div>
       
       <div id="plan-view" style="display: none;">
         <div id="plan-content">
           <!-- AI plan injected here -->
         </div>
-        <div class="row" style="margin-top:16px;">
+        <div class="btn-row">
           <button class="ghost" id="btn-goto-3">← Geri</button>
-          <button class="primary" id="btn-goto-5" style="flex: 2;">İndirme Adımına Geç →</button>
+          <button class="primary" id="btn-goto-5">İndirme Adımına Geç →</button>
         </div>
       </div>
     </div>
 
     <!-- STEP 5: İndir & Uygula -->
     <div class="step-panel" id="step-5">
-      <div class="card" style="text-align: center; padding: 24px 16px;">
-        <div style="font-size: 40px; margin-bottom: 12px;">✅</div>
-        <b style="font-size: 18px;">PPC Planınız Hazır!</b>
-        <div class="muted" style="margin-top: 8px;">Stratejiniz başarıyla oluşturuldu. Aşağıdaki dosyayı indirip doğrudan Seller Central'a yükleyebilirsiniz.</div>
+      <div class="card" style="text-align: center; padding: 32px 20px;">
+        <div style="font-size: 48px; margin-bottom: 16px; filter: drop-shadow(0 4px 8px rgba(16, 185, 129, 0.4));">✅</div>
+        <b style="font-size: 20px; letter-spacing:-0.02em;">PPC Planınız Hazır!</b>
+        <div class="muted" style="margin-top: 12px;">Stratejiniz başarıyla oluşturuldu. Dosyayı indirip Seller Central üzerinden direkt yükleyebilirsiniz.</div>
       </div>
       
       <div class="card">
-        <div class="tag">Özet Tablosu</div>
-        <div class="row" style="text-align: center; margin-top: 10px;">
-          <div>
-            <div style="font-size: 20px; font-weight: bold; color: var(--acc);" id="summary-budget">$0</div>
-            <div class="muted">Günlük Bütçe</div>
+        <div class="tag">Strateji Özeti</div>
+        <div class="row" style="text-align: center; margin-top: 16px; margin-bottom: 8px;">
+          <div style="background:var(--bg); padding:12px; border-radius:var(--radius-sm); border:1px solid var(--line);">
+            <div style="font-size: 22px; font-weight: 700; color: var(--acc);" id="summary-budget">$0</div>
+            <div class="muted" style="margin-top:4px;">Günlük Bütçe</div>
           </div>
-          <div>
-            <div style="font-size: 20px; font-weight: bold; color: var(--acc);" id="summary-camps">0</div>
-            <div class="muted">Kampanya</div>
+          <div style="background:var(--bg); padding:12px; border-radius:var(--radius-sm); border:1px solid var(--line);">
+            <div style="font-size: 22px; font-weight: 700; color: var(--acc);" id="summary-camps">0</div>
+            <div class="muted" style="margin-top:4px;">Kampanya</div>
           </div>
-          <div>
-            <div style="font-size: 20px; font-weight: bold; color: var(--acc);" id="summary-kws">0</div>
-            <div class="muted">Kelime/Hedef</div>
+          <div style="background:var(--bg); padding:12px; border-radius:var(--radius-sm); border:1px solid var(--line);">
+            <div style="font-size: 22px; font-weight: 700; color: var(--acc);" id="summary-kws">0</div>
+            <div class="muted" style="margin-top:4px;">Hedefleme</div>
           </div>
         </div>
       </div>
       
-      <div class="row" style="margin-top: 16px;">
+      <div class="btn-row" style="margin-top:20px;">
         <button class="ghost" id="btn-goto-4">← Geri</button>
-        <button class="success" id="btn-dl" style="flex: 2; font-size: 16px; padding: 14px;">⬇️ Bulk Sheet İndir (.xlsx)</button>
+        <button class="success" id="btn-dl" style="font-size: 14px; gap:10px;">⬇️ Bulk Sheet İndir (.xlsx)</button>
       </div>
-      <div id="faz0-box" style="display:none; margin-top:10px;">
-        <button class="ghost" id="btn-dl-faz0" style="padding:12px;">🔬 Önce Faz 0 İndir — CPC Keşfi (önerilen)</button>
-        <div class="muted" style="margin-top:4px; font-size:10px;">
-          Ölçülmüş CPC yok. Önce bunu yükle, 3 gün çalıştır, raporu uygulamaya
-          yükle — sonra gerçek verilerle asıl lansmanı kur.
+      
+      <div id="faz0-box" style="display:none; margin-top:16px;">
+        <button class="ghost" id="btn-dl-faz0" style="padding:14px; background: rgba(14, 165, 233, 0.05);">🔬 Önce Faz 0 İndir — CPC Keşfi (Önerilen)</button>
+        <div class="muted" style="margin-top:8px; text-align:center;">
+          Sistemde bu marka için ölçülmüş veri bulunamadı. Önce Faz 0 dosyasını yükleyerek 3-4 gün veri toplayın, ardından asıl lansmana geçin.
         </div>
       </div>
       
-      <div class="expert-note" style="margin-top: 16px; background: rgba(245, 158, 11, 0.1); border-color: var(--warn); color: var(--fg);">
-        <b>📌 Nasıl Yüklenir?</b>
-        <ol style="margin: 8px 0 0 16px; padding: 0; color: var(--muted);">
-          <li style="margin-bottom: 4px;">Amazon Seller Central'ı açın</li>
-          <li style="margin-bottom: 4px;">Campaign Manager > Bulk Operations</li>
-          <li style="margin-bottom: 4px;">"Choose file" diyerek indirdiğiniz dosyayı seçin</li>
-          <li>"Upload to process" butonuna tıklayın</li>
+      <div class="expert-note" style="margin-top: 24px; background: rgba(245, 158, 11, 0.08); border-color: var(--warn);">
+        <b style="color: var(--warn); display:flex; align-items:center; gap:6px;">📌 Yükleme Talimatları</b>
+        <ol style="margin: 10px 0 0 20px; padding: 0; color: var(--muted); font-size:12px; line-height:1.6;">
+          <li style="margin-bottom: 4px;">Amazon Seller Central'a giriş yapın</li>
+          <li style="margin-bottom: 4px;">Campaign Manager > Bulk Operations sekmesini açın</li>
+          <li style="margin-bottom: 4px;">"Choose file" butonuna tıklayıp indirdiğiniz Excel dosyasını seçin</li>
+          <li>"Upload to process" butonuna tıklayarak işlemi başlatın</li>
         </ol>
       </div>
     </div>

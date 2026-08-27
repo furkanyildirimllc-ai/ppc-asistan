@@ -7,19 +7,19 @@
 <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
   :root {
-    --bg: #050505;
-    --panel: rgba(18, 18, 20, 0.7);
-    --panel2: rgba(26, 26, 29, 0.85);
-    --border: rgba(255, 255, 255, 0.08);
-    --text: #F3F4F6;
-    --muted: #888888;
-    --accent: #38BDF8;      /* Neon Sky Blue */
-    --accent-glow: rgba(56, 189, 248, 0.35);
-    --green: #10B981;
-    --red: #F43F5E;
-    --blue: #6366F1;       /* Indigo */
-    --purple: #D946EF;     /* Fuchsia */
-    --glass-blur: blur(20px);
+    --bg: #090e17;
+    --panel: #111827;
+    --panel2: #1f2937;
+    --border: #1e293b;
+    --text: #f8fafc;
+    --muted: #94a3b8;
+    --accent: #0ea5e9;
+    --accent-glow: rgba(14, 165, 233, 0.35);
+    --green: #10b981;
+    --red: #ef4444;
+    --blue: #3b82f6;
+    --purple: #d946ef;
+    --glass-blur: blur(16px);
   }
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body {
@@ -46,18 +46,19 @@
   .hero-card:nth-child(4) { animation-delay: 0.3s; }
   
   header {
-    display: flex; justify-content: space-between; align-items: center; gap: 20px; padding: 18px 32px;
+    display: flex; justify-content: space-between; align-items: center; gap: 20px; padding: 16px 24px;
     border-bottom: 1px solid var(--border);
-    background: rgba(11, 14, 20, 0.85);
+    background: rgba(9, 14, 23, 0.85);
     backdrop-filter: blur(24px);
+    -webkit-backdrop-filter: blur(24px);
     position: sticky; top: 0; z-index: 100;
-    /* Sarmali olmali: 11 buton 1440px ekrana sigmiyordu ve overflow-x:auto +
-       gizli scrollbar yuzunden "Amazon'a Yukle" gibi ANA aksiyonlar ekran
-       disinda kalip hic kesfedilemiyordu. */
-    flex-wrap: wrap; row-gap: 10px;
-    box-shadow: 0 4px 30px rgba(0, 0, 0, 0.3);
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    scrollbar-width: none;
+    box-shadow: 0 4px 30px rgba(0, 0, 0, 0.4);
   }
-  .h-group { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  header::-webkit-scrollbar { display: none; }
+  .h-group { display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
   @media (max-width: 900px){
     header{padding:12px 16px}
     header h1{font-size:17px}
@@ -595,6 +596,25 @@
 .lt-task .task-tip{color:var(--muted);font-size:11.5px;margin-top:2px;line-height:1.4}
 .lt-progress{height:6px;background:var(--panel2);border-radius:3px;overflow:hidden;margin:8px 0 4px}
 .lt-progress-bar{height:100%;background:linear-gradient(90deg,var(--accent),var(--green));border-radius:3px;transition:width 0.4s ease}
+
+/* ======== KULLANICI DENEYİMİ (UX) VE DÜZEN GELİŞTİRMELERİ ======== */
+/* Uzun dikey listeleri (1 kilometre uzayan faz0, bugun ne yapmaliyim vs) yatay gridlere cevir ve maksimum yukseklik ver */
+#faz0Panel { display: grid; grid-template-columns: repeat(auto-fill, minmax(400px, 1fr)); gap: 16px; margin-bottom: 16px; align-items: start; max-height: 500px; overflow-y: auto; padding-right: 8px;}
+#todayPanel { display: grid; grid-template-columns: repeat(auto-fill, minmax(450px, 1fr)); gap: 16px; margin-bottom: 16px; max-height: 550px; overflow-y: auto; padding-right: 8px;}
+#oppPanel { display: grid; grid-template-columns: repeat(auto-fill, minmax(350px, 1fr)); gap: 16px; max-height: 500px; overflow-y: auto; padding-right: 8px;}
+.prio-list, .hist-list { max-height: 400px; overflow-y: auto; padding-right: 8px; }
+
+/* Grid öğelerinin modern ve premium görünümü */
+.today-item { margin-bottom: 0; height: 100%; border: 1px solid var(--border); background: var(--panel2); box-shadow: 0 4px 12px rgba(0,0,0,0.15); transition: 0.2s; }
+.today-item:hover { transform: translateY(-3px); box-shadow: 0 8px 24px rgba(0,0,0,0.3); border-color: rgba(14, 165, 233, 0.4); }
+
+.camp-card { max-height: 350px; overflow-y: auto; scrollbar-width: thin; }
+
+/* Özel Scrollbar genel tasarımı (Kaydırma çubukları zarif olsun) */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: rgba(0,0,0,0.1); border-radius: 4px; }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; transition: 0.2s; }
+::-webkit-scrollbar-thumb:hover { background: var(--accent); }
 </style>
 </head>
 <body>

@@ -1361,6 +1361,61 @@ def build_discovery_campaign(plan):
     return buf
 
 
+def build_batch_bulksheet(plans, discovery=False):
+    """Birden fazla urunun kampanyalarini TEK dosyada birlestirir.
+
+    8 urun icin 8 ayri dosya uretip 8 kez yuklemek yerine tek dosya.
+    Her urunun kampanya adinda kendi ASIN'i oldugu icin Amazon'da da,
+    sonraki raporlarda da birbirine karismazlar.
+    """
+    if not plans:
+        return None, []
+
+    wb = openpyxl.Workbook()
+    wb.remove(wb.active)
+    ws = wb.create_sheet("Sponsored Products Campaigns")
+    ws.append(BULK_HEADERS)
+    for cell in ws[1]:
+        cell.font = Font(bold=True, color="FFFFFF", size=10)
+        cell.fill = PatternFill("solid", fgColor="1F2937")
+    ws.freeze_panes = "A2"
+
+    ozet, gorulen_ad = [], set()
+    for plan in plans:
+        tekil = (build_discovery_campaign(plan) if discovery
+                 else build_bulksheet(plan))
+        if not tekil:
+            continue
+        kaynak = openpyxl.load_workbook(io.BytesIO(tekil.getvalue())).active
+        basliklar = [c.value for c in kaynak[1]]
+        idx = {h: i for i, h in enumerate(basliklar)}
+        satir_sayisi = 0
+        butce = 0.0
+        for r in kaynak.iter_rows(min_row=2):
+            v = [c.value for c in r]
+            # BULK_HEADERS sirasina gore yeniden diz (kaynak zaten ayni
+            # sirada ama savunmaci davran)
+            ws.append([v[idx[h]] if h in idx else "" for h in BULK_HEADERS])
+            satir_sayisi += 1
+            if v[idx["Entity"]] == "Campaign":
+                ad = v[idx["Campaign Name"]]
+                if ad in gorulen_ad:
+                    raise ValueError(
+                        f"Ayni kampanya adi iki kez uretildi: {ad}. "
+                        f"Urunlerin ASIN'leri farkli mi?")
+                gorulen_ad.add(ad)
+                butce += float(v[idx["Daily Budget"]] or 0)
+        p = plan.get("product") or {}
+        ozet.append({"asin": p.get("asin"), "title": (p.get("title") or "")[:60],
+                     "sku": p.get("sku"), "rows": satir_sayisi,
+                     "daily_budget": round(butce, 2)})
+
+    buf = io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+    return buf, ozet
+
+
 def build_bulksheet(plan):
     """plan -> BytesIO(xlsx). Amazon SP Create operasyonlari."""
     p = plan["product"]

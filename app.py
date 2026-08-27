@@ -1526,6 +1526,94 @@ def extension_download():
                  'attachment; filename="ppc-launch-extension.zip"'})
 
 
+class BatchLaunchIn(BaseModel):
+    """Coklu urun lansmani: her urun icin ayri plan, TEK dosya."""
+    products: list[LaunchProductIn] = []
+    discovery: bool = True          # True -> Faz 0, False -> Faz 1
+    brand_id: int | None = None
+    bid_strategy: str = "profit"
+    use_ai: bool = True
+
+
+@app.post("/api/launch/batch")
+def launch_batch(body: BatchLaunchIn):
+    """6-8 urunu tek seferde planla, TEK bulksheet dondur.
+
+    Her urun kendi ASIN'iyle etiketlendigi icin kampanyalar karismaz;
+    olculmus veri de urun bazinda ayrisir.
+    """
+    if not body.products:
+        raise HTTPException(400, "Urun listesi bos")
+    if len(body.products) > 20:
+        raise HTTPException(400, "Tek seferde en fazla 20 urun")
+
+    report_rows = ba_rows = None
+    brand_name = None
+    if body.brand_id:
+        with db() as c:
+            r = c.execute("SELECT name FROM brands WHERE id=?",
+                          (body.brand_id,)).fetchone()
+            brand_name = r["name"] if r else None
+            report_rows = _load_rows(c, body.brand_id, "targeting") or None
+            bs = c.execute(
+                "SELECT data FROM report_rows WHERE brand_id=? AND "
+                "report_type IN ('ba_search_query','ba_search_query_month')",
+                (body.brand_id,)).fetchall()
+            ba_rows = [json.loads(x["data"]) for x in bs] or None
+
+    planlar, hatalar = [], []
+    for u in body.products:
+        try:
+            urun = {
+                "title": u.title, "asin": (u.asin or "").strip().upper(),
+                "sku": u.sku, "price": u.price, "brand": u.brand,
+                "cogs": u.cogs, "fba_fee": u.fba_fee, "fee_pct": u.fee_pct,
+                "bullets": u.bullets, "description": u.description,
+                "rating": u.rating, "review_count": u.review_count,
+                "bsr": u.bsr, "search_suggestions": u.search_suggestions,
+                "catalog_products": u.catalog_products,
+            }
+            planlar.append(launch_mod.build_plan(
+                urun, [c.model_dump() for c in u.competitors],
+                use_ai=body.use_ai, bid_strategy=body.bid_strategy,
+                report_rows=report_rows, ba_rows=ba_rows,
+                brand_id=body.brand_id, brand_name=brand_name))
+        except Exception as e:
+            hatalar.append({"asin": u.asin, "title": u.title[:40], "error": str(e)})
+
+    if not planlar:
+        raise HTTPException(500, f"Hicbir plan uretilemedi: {hatalar[:2]}")
+    return {"plans": planlar, "errors": hatalar}
+
+
+@app.post("/api/launch/batch-bulksheet")
+def launch_batch_bulksheet(body: dict):
+    """Coklu planlari TEK bulksheet'e birlestirir."""
+    planlar = body.get("plans") or []
+    if not planlar:
+        raise HTTPException(400, "Plan listesi bos")
+    try:
+        buf, ozet = launch_mod.build_batch_bulksheet(
+            planlar, discovery=bool(body.get("discovery", True)))
+    except Exception as e:
+        raise HTTPException(500, f"Toplu bulksheet uretilemedi: {e}")
+    if not buf or not ozet:
+        # Faz 0 istenmis ama urunlerin olculmus CPC'si zaten var -> kesif
+        # gerekmiyor. Bos dosya vermek yerine ne yapmasi gerektigini soyle.
+        raise HTTPException(
+            400, "Uretilecek kampanya yok. Bu urunlerin olculmus CPC'si zaten "
+                 "var ise Faz 0 gerekmez - discovery=false ile Faz 1 iste.")
+    faz = "FAZ0" if body.get("discovery", True) else "FAZ1"
+    marka = (planlar[0].get("product", {}).get("brand") or "launch")
+    safe = "".join(ch for ch in str(marka)[:20] if ch.isalnum() or ch in " -_").strip() or "launch"
+    fname = f"{safe}_{faz}_TOPLU_{len(ozet)}urun_{datetime.now():%Y%m%d}.xlsx"
+    return StreamingResponse(
+        buf, media_type="application/vnd.openxmlformats-officedocument"
+        ".spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="{fname}"',
+                 "X-Product-Count": str(len(ozet))})
+
+
 @app.post("/api/launch/discovery-bulksheet")
 def launch_discovery_bulksheet(plan: dict):
     """FAZ 0 kesif kampanyasi (gercek CPC olcumu icin)."""

@@ -238,7 +238,10 @@ def asin_of_row(row):
     kondisyonerinkinden farklidir. Bizim urettigimiz kampanya adlarinda ASIN
     parantez icinde gomulu oldugu icin satiri urune baglayabiliyoruz.
     """
-    for alan in ("campaign", "ad_group", "targeting"):
+    # DIKKAT: "targeting" alanina BAKILMAZ. ASIN targeting satirlarinda orada
+    # RAKIBIN asini yazar (targeting='asin="B09..."') - kendi urunun degil.
+    # Ona bakmak, hedeflenen her rakibi "kendi urunum" saymak demekti.
+    for alan in ("campaign", "ad_group"):
         m = ASIN_RE.search(str(row.get(alan) or "").upper())
         if m:
             return m.group(1)
