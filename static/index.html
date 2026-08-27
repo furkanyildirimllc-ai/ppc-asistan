@@ -625,6 +625,7 @@
     <button onclick="openBrandDialog()">+ Marka</button>
     <button onclick="openBrandDialog(true)" id="editBtn" style="display:none">⚙ Ayarlar</button>
     <button onclick="openLaunchDlg()" title="Sıfır geçmişli yeni ürün için kampanya kur">🚀 Yeni Ürün Launch</button>
+    <button onclick="openBatchDlg()" title="6-8 ürünü tek seferde planla, tek dosya indir">📦 Toplu Lansman</button>
     <button onclick="openExtDlg()" title="Amazon sayfasından tek tıkla ürün çeken Chrome uzantısı">🧩 Chrome Uzantısı</button>
     <button onclick="helpDlg.showModal()">📖 Rehber</button>
   </div>
@@ -945,6 +946,53 @@
     </div>
   </div>
 </div>
+
+<dialog id="batchDlg" style="max-width:980px;width:94vw">
+  <h3>🚀 Toplu Lansman — birden fazla ürün, tek dosya</h3>
+  <div class="small muted" style="margin-bottom:10px">
+    Ürünleri aşağıya ekle, tek bulksheet üret. Her ürün kendi ASIN'iyle
+    etiketlenir; kampanyalar ve ölçümler birbirine karışmaz.
+  </div>
+
+  <div class="row" style="gap:8px;align-items:flex-end;margin-bottom:10px">
+    <div style="flex:2">
+      <label style="margin-top:0">ASIN listesi (her satıra bir tane)</label>
+      <textarea id="batchAsins" rows="3" placeholder="B0XXXXXXXX&#10;B0YYYYYYYY"
+        style="width:100%;padding:8px;border-radius:8px;border:1px solid var(--line,#334155);background:#0b1220;color:#e2e8f0;font-family:ui-monospace,monospace;font-size:12px"></textarea>
+    </div>
+    <button class="ghost" style="width:auto;padding:9px 14px" onclick="batchAsinEkle()">+ Ekle</button>
+    <button class="ghost" style="width:auto;padding:9px 14px" onclick="batchBilinenleriGetir()">📥 Bu markanın ürünlerini getir</button>
+  </div>
+
+  <div style="max-height:44vh;overflow:auto;border:1px solid var(--line,#334155);border-radius:8px">
+    <table id="batchTable" style="width:100%;border-collapse:collapse;font-size:12px">
+      <thead><tr style="position:sticky;top:0;background:#0b1220;z-index:1">
+        <th style="padding:7px 8px;text-align:left">ASIN</th>
+        <th style="text-align:left">Başlık</th>
+        <th>SKU</th><th>Fiyat</th><th>COGS</th><th>FBA</th><th>Durum</th><th></th>
+      </tr></thead>
+      <tbody id="batchBody"></tbody>
+    </table>
+  </div>
+
+  <div class="row" style="gap:14px;margin-top:12px;align-items:center;flex-wrap:wrap">
+    <label style="margin:0"><input type="radio" name="batchFaz" value="0" checked style="width:auto"> Faz 0 — CPC keşfi</label>
+    <label style="margin:0"><input type="radio" name="batchFaz" value="1" style="width:auto"> Faz 1 — gerçek lansman</label>
+    <select id="batchStrat" style="width:auto;padding:6px 10px">
+      <option value="profit">Kârlı</option>
+      <option value="balanced">Dengeli</option>
+      <option value="aggressive">Pazar Payı</option>
+    </select>
+    <label style="margin:0"><input type="checkbox" id="batchAi" checked style="width:auto"> AI ile keyword üret (yavaş ama iyi)</label>
+  </div>
+
+  <div id="batchInfo" class="small muted" style="margin-top:8px"></div>
+
+  <div class="actions">
+    <button onclick="batchDlg.close()">Kapat</button>
+    <button class="primary" onclick="batchUret()">⚙️ Planla ve dosyayı indir</button>
+  </div>
+</dialog>
 
 <dialog id="brandDlg">
   <h3 id="dlgTitle">Yeni Marka</h3>
@@ -2545,6 +2593,107 @@ function openBrandDialog(edit){
   renderProductsList();
   updateCalcPreview();
   $('brandDlg').showModal();
+}
+
+// ---- TOPLU LANSMAN ----
+// 6-8 urun icin ayri ayri akis yurutmek yerine tek tabloda topla, tek dosya al.
+let batchRows = [];
+
+function openBatchDlg(){
+  if(!brandId){ toast('Önce marka seç'); return; }
+  if(!batchRows.length) batchBilinenleriGetir();
+  else batchRender();
+  $('batchDlg').showModal();
+}
+
+function batchSatir(u){
+  return {asin:(u.asin||'').toUpperCase(), title:u.title||'', sku:u.sku||'',
+          price:u.price||'', cogs:u.cogs||'', fba:u.fba_fee||'',
+          measured:!!u.measured, cpc:u.cpc||null, clicks:u.clicks||0};
+}
+
+async function batchBilinenleriGetir(){
+  $('batchInfo').textContent='Bu markanın bilinen ürünleri getiriliyor…';
+  try{
+    const d=await(await api(`/api/brands/${brandId}/known-products`)).json();
+    const mevcut=new Set(batchRows.map(r=>r.asin));
+    d.products.forEach(u=>{ if(!mevcut.has(u.asin)) batchRows.push(batchSatir(u)); });
+    batchRender();
+    $('batchInfo').textContent=`${d.products.length} ürün bulundu. Eksik alanları doldur.`;
+  }catch(e){ $('batchInfo').textContent='Getirilemedi: '+e; }
+}
+
+function batchAsinEkle(){
+  const ham=$('batchAsins').value.split(/[\s,;]+/).map(x=>x.trim().toUpperCase())
+    .filter(x=>/^B0[A-Z0-9]{8}$/.test(x));
+  const mevcut=new Set(batchRows.map(r=>r.asin));
+  let n=0;
+  ham.forEach(a=>{ if(!mevcut.has(a)){ batchRows.push(batchSatir({asin:a})); n++; } });
+  $('batchAsins').value='';
+  batchRender();
+  $('batchInfo').textContent = n? `${n} ASIN eklendi.` : 'Geçerli yeni ASIN bulunamadı.';
+}
+
+function batchSil(i){ batchRows.splice(i,1); batchRender(); }
+
+function batchAlan(i,alan,el){ batchRows[i][alan]=el.value; }
+
+function batchRender(){
+  const inp=(i,alan,v,ph,w)=>`<input value="${v??''}" placeholder="${ph||''}"
+     style="width:${w||'100%'};padding:5px 7px;font-size:12px"
+     oninput="batchAlan(${i},'${alan}',this)">`;
+  $('batchBody').innerHTML = batchRows.length ? batchRows.map((r,i)=>`
+    <tr style="border-top:1px solid rgba(255,255,255,.06)">
+      <td style="padding:5px 8px"><code>${r.asin}</code></td>
+      <td>${inp(i,'title',r.title,'Ürün başlığı')}</td>
+      <td>${inp(i,'sku',r.sku,'SKU','110px')}</td>
+      <td>${inp(i,'price',r.price,'$','70px')}</td>
+      <td>${inp(i,'cogs',r.cogs,'$','70px')}</td>
+      <td>${inp(i,'fba',r.fba,'$','70px')}</td>
+      <td style="white-space:nowrap;color:${r.measured?'#22c55e':'#94a3b8'}">
+        ${r.measured?`✅ $${r.cpc}`:(r.clicks?`⏳ ${r.clicks} tık`:'—')}</td>
+      <td><button class="no" style="width:auto;padding:3px 8px;margin:0"
+            onclick="batchSil(${i})">sil</button></td>
+    </tr>`).join('') : `<tr><td colspan="8" style="padding:14px;color:#94a3b8">
+      Henüz ürün yok — ASIN yapıştır ya da "Bu markanın ürünlerini getir".</td></tr>`;
+}
+
+async function batchUret(){
+  const eksik=batchRows.filter(r=>!r.title||!r.sku||!r.price);
+  if(!batchRows.length){ toast('Ürün ekle'); return; }
+  if(eksik.length){ $('batchInfo').innerHTML=
+    `<b style="color:#f59e0b">${eksik.length} üründe başlık/SKU/fiyat eksik</b> — bunlar olmadan doğru hesap yapılamaz.`;
+    return; }
+  const faz0 = document.querySelector('input[name="batchFaz"]:checked').value==='0';
+  const btn=event?.target; if(btn){ btn.disabled=true; btn.textContent='Planlanıyor…'; }
+  $('batchInfo').textContent=`${batchRows.length} ürün planlanıyor${$('batchAi').checked?' (AI açık, sürebilir)':''}…`;
+  try{
+    const body={brand_id:brandId, discovery:faz0, use_ai:$('batchAi').checked,
+      bid_strategy:$('batchStrat').value,
+      products:batchRows.map(r=>({title:r.title, asin:r.asin, sku:r.sku,
+        price:Number(r.price)||null, cogs:Number(r.cogs)||null,
+        fba_fee:Number(r.fba)||null, brand:(brands.find(b=>b.id==brandId)||{}).name||''}))};
+    const pr=await api('/api/launch/batch',{method:'POST',
+      headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+    if(!pr.ok) throw new Error((await pr.json()).detail||pr.status);
+    const d=await pr.json();
+    $('batchInfo').textContent=`${d.plans.length} plan hazır, dosya üretiliyor…`;
+    const br=await api('/api/launch/batch-bulksheet',{method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({plans:d.plans, discovery:faz0})});
+    if(!br.ok) throw new Error((await br.json()).detail||br.status);
+    const blob=await br.blob();
+    const url=URL.createObjectURL(blob), a=document.createElement('a');
+    a.href=url; a.download=`toplu_${faz0?'FAZ0':'FAZ1'}_${d.plans.length}urun.xlsx`;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(()=>URL.revokeObjectURL(url),60000);
+    const butce=d.plans.reduce((s,p)=>s+(p.daily_budget_total||0),0);
+    $('batchInfo').innerHTML=`✅ <b>${d.plans.length} ürün</b> tek dosyada indi.
+      Toplam günlük bütçe: <b>$${butce.toFixed(0)}</b>`
+      +(d.errors.length?`<br><span style="color:#f59e0b">${d.errors.length} ürün atlandı</span>`:'');
+    toast(`✅ ${d.plans.length} ürün indirildi`);
+  }catch(e){ $('batchInfo').innerHTML=`<b style="color:#ef4444">Hata:</b> ${e.message||e}`; }
+  finally{ if(btn){ btn.disabled=false; btn.textContent='⚙️ Planla ve dosyayı indir'; } }
 }
 
 // ---- FAZ 0 SONUC PANELI ----

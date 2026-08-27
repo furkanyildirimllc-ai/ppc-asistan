@@ -1526,6 +1526,48 @@ def extension_download():
                  'attachment; filename="ppc-launch-extension.zip"'})
 
 
+@app.get("/api/brands/{brand_id}/known-products")
+def known_products(brand_id: int):
+    """Bu markada BILDIGIMIZ urunler: ASIN + baslik + fiyat + olculmus CPC.
+
+    Toplu lansmanda kullanicinin her urunu elle yazmasini onler. Kaynaklar:
+      - Brand Analytics katalog raporu (baslik + fiyat)
+      - Reklam raporundaki kampanya adlari (daha once reklam verilen ASIN'ler)
+      - Kayitli urunler tablosu
+    """
+    import benchmarks
+    with db() as c:
+        if not c.execute("SELECT 1 FROM brands WHERE id=?", (brand_id,)).fetchone():
+            raise HTTPException(404, "Marka bulunamadi")
+        katalog = _load_rows(c, brand_id, "ba_catalog")
+        hedef = _load_rows(c, brand_id, "targeting")
+        kayitli = [dict(r) for r in c.execute(
+            "SELECT asin,name,sell_price,cogs,fba_fee FROM products WHERE brand_id=?",
+            (brand_id,))]
+
+    urunler = {}
+    for k in katalog:
+        a = str(k.get("asin") or "").strip().upper()
+        if len(a) == 10:
+            urunler[a] = {"asin": a, "title": k.get("title") or "",
+                          "price": k.get("price"), "source": "katalog"}
+    for p_ in kayitli:
+        a = str(p_.get("asin") or "").strip().upper()
+        if len(a) == 10:
+            u = urunler.setdefault(a, {"asin": a, "title": "", "source": "kayitli"})
+            u.update({"title": u.get("title") or p_.get("name") or "",
+                      "price": u.get("price") or p_.get("sell_price"),
+                      "cogs": p_.get("cogs"), "fba_fee": p_.get("fba_fee")})
+    # Reklam verilmis ASIN'ler + olculmus performans
+    for m in benchmarks.products_in(hedef):
+        u = urunler.setdefault(m["asin"], {"asin": m["asin"], "title": "",
+                                           "source": "reklam"})
+        u.update({"clicks": m["clicks"], "cpc": m["cpc"], "cvr_pct": m["cvr_pct"],
+                  "measured": m["enough_for_cpc"]})
+    return {"brand_id": brand_id, "products": sorted(
+        urunler.values(), key=lambda x: (-(x.get("clicks") or 0), x["asin"]))}
+
+
 class BatchLaunchIn(BaseModel):
     """Coklu urun lansmani: her urun icin ayri plan, TEK dosya."""
     products: list[LaunchProductIn] = []
