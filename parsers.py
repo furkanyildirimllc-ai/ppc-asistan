@@ -8,6 +8,10 @@ import openpyxl
 # Rapor tipini ayirt eden imza kolonlari
 SIGNATURES = [
     ("bulk_ids", {"Entity", "Operation", "Campaign ID"}),
+    # Advertised Product raporu: ASIN <-> SKU eslesmesini tasiyan TEK reklam
+    # raporu. Diger raporlarda SKU yoktur; bulksheet icin SKU zorunludur.
+    ("advertised_product", {"Advertised SKU"}),
+    ("advertised_product", {"Advertised ASIN", "Impressions"}),
     ("search_term_is", {"Customer Search Term", "Search Term Impression Rank"}),
     ("search_term", {"Customer Search Term", "Match Type"}),
     ("targeting", {"Targeting", "Top-of-search Impression Share"}),
@@ -29,6 +33,7 @@ REPORT_LABELS = {
     "placement": "Placement Raporu",
     "campaign": "Kampanya Raporu",
     "bulk_ids": "Bulk Operations (Campaign/Ad Group ID eslemesi)",
+    "advertised_product": "Advertised Product Raporu (ASIN + SKU)",
     "ba_search_query": "Brand Analytics - Arama Terimi Performansi (Ceyrek)",
     "ba_search_query_month": "Brand Analytics - Arama Terimi Performansi (Ay)",
     "ba_catalog": "Brand Analytics - Katalog Performansi",
@@ -186,6 +191,8 @@ def parse(filename, content: bytes):
         return rtype, [_norm_placement(r) for r in rows]
     if rtype == "bulk_ids":
         return rtype, [_norm_bulk_ids(r) for r in rows]
+    if rtype == "advertised_product":
+        return rtype, [_norm_advertised(r) for r in rows]
     # impression share: simdilik saklamiyoruz
     return rtype, []
 
@@ -342,6 +349,31 @@ def _norm_placement(r):
         "bidding_strategy": str(r.get("Bidding strategy") or "").strip(),
     })
     return d
+
+
+def _norm_advertised(r):
+    """Advertised Product raporu: hangi ASIN hangi SKU ile reklam veriliyor.
+
+    Bu rapor, bulksheet icin zorunlu olan SKU'yu saglayan tek kaynaktir.
+    Ayrica urun bazinda performansi kampanya adindan cikarmaya gerek
+    kalmadan dogrudan verir.
+    """
+    def _f(*adlar):
+        for a in adlar:
+            if r.get(a) not in (None, ""):
+                return r.get(a)
+        return None
+    return {
+        "campaign": str(_f("Campaign Name", "Campaign") or "").strip(),
+        "ad_group": str(_f("Ad Group Name", "Ad Group") or "").strip(),
+        "asin": str(_f("Advertised ASIN", "ASIN") or "").strip().upper(),
+        "sku": str(_f("Advertised SKU", "SKU") or "").strip(),
+        "impressions": _num(_f("Impressions")),
+        "clicks": _num(_f("Clicks")),
+        "spend": _num(_f("Spend", "Spend(USD)", "Cost")),
+        "sales": _num(_f("7 Day Total Sales", "7 Day Total Sales (USD)", "Sales")),
+        "orders": _num(_f("7 Day Total Orders (#)", "Orders", "7 Day Total Orders")),
+    }
 
 
 def _norm_bulk_ids(r):

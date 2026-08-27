@@ -1541,6 +1541,7 @@ def known_products(brand_id: int):
             raise HTTPException(404, "Marka bulunamadi")
         katalog = _load_rows(c, brand_id, "ba_catalog")
         hedef = _load_rows(c, brand_id, "targeting")
+        reklamli = _load_rows(c, brand_id, "advertised_product")
         kayitli = [dict(r) for r in c.execute(
             "SELECT asin,name,sell_price,cogs,fba_fee FROM products WHERE brand_id=?",
             (brand_id,))]
@@ -1558,6 +1559,31 @@ def known_products(brand_id: int):
             u.update({"title": u.get("title") or p_.get("name") or "",
                       "price": u.get("price") or p_.get("sell_price"),
                       "cogs": p_.get("cogs"), "fba_fee": p_.get("fba_fee")})
+    # Advertised Product raporu: ASIN <-> SKU eslesmesi + urun bazinda
+    # performans. SKU'yu saglayan TEK kaynak bu.
+    ap = {}
+    for r in reklamli:
+        a = str(r.get("asin") or "").strip().upper()
+        if len(a) != 10:
+            continue
+        g = ap.setdefault(a, {"sku": "", "clicks": 0, "spend": 0.0,
+                              "orders": 0, "sales": 0.0})
+        if r.get("sku") and not g["sku"]:
+            g["sku"] = r["sku"]
+        g["clicks"] += r.get("clicks", 0) or 0
+        g["spend"] += r.get("spend", 0) or 0.0
+        g["orders"] += r.get("orders", 0) or 0
+        g["sales"] += r.get("sales", 0) or 0.0
+    for a, g in ap.items():
+        u = urunler.setdefault(a, {"asin": a, "title": "", "source": "reklam"})
+        if g["sku"]:
+            u["sku"] = g["sku"]
+        if g["clicks"]:
+            u.setdefault("clicks", g["clicks"])
+            u.setdefault("cpc", round(g["spend"] / g["clicks"], 2))
+            u.setdefault("cvr_pct", round(100 * g["orders"] / g["clicks"], 2))
+            u.setdefault("measured", g["clicks"] >= benchmarks.MIN_CLICKS_CPC)
+
     # Reklam verilmis ASIN'ler + olculmus performans
     for m in benchmarks.products_in(hedef):
         u = urunler.setdefault(m["asin"], {"asin": m["asin"], "title": "",
