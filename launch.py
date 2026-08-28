@@ -11,6 +11,7 @@ Seller Central > Bulk Operations'a dogrudan yuklenebilir.
 """
 import concurrent.futures
 import io
+import math
 import re
 from datetime import datetime
 
@@ -559,7 +560,7 @@ BID_STRATEGIES = {
 }
 
 
-def suggest_bids_v2(price, econ, bench, strategy="profit"):
+def suggest_bids_v2(price, econ, bench, strategy="profit", max_acos=1.00):
     """Bid'i OLCULMUS referanslardan hesaplar (bench = benchmarks.resolve()).
 
         odenebilir_bid = fiyat x beklenen_CVR x hedef_ACOS
@@ -588,6 +589,7 @@ def suggest_bids_v2(price, econ, bench, strategy="profit"):
     w = BID_STRATEGIES[strategy]["market_weight"]
 
     out = {}
+    capped = []
     for key, cvr in bench["cvr"].items():
         # Ciro match type'a gore degisir; olculmusse onu kullan.
         rev = float((bench.get("aov") or {}).get(key) or 0) or hesap_aov
@@ -607,7 +609,26 @@ def suggest_bids_v2(price, econ, bench, strategy="profit"):
             bid = afford + (market - afford) * w
             if w >= 0.9:
                 bid = max(bid, market)     # pazar payi: pazari karsila
+
+        # EKONOMIK TAVAN - HER STRATEJIDE SON SOZ.
+        #
+        # HATA GECMISI: "dengeli"/"pazar payi" stratejileri pazar CPC'sine
+        # capa atiyordu. Ama pazar CPC'si bu markanin ekonomisini tasiyor
+        # olmak zorunda DEGIL. Natural'da tiklama basina ciro $1.47 iken
+        # pazar CPC'si $2.20-2.89'du; arac $3.60-4.20 teklif uretti ve o
+        # kampanyalar %353 ACOS yapti - kullanicinin kendi eski
+        # kampanyalarindan (%114) belirgin kotu.
+        #
+        # Tavan = tiklama basina ciro x kabul edilen azami ACOS.
+        # Uzerinde teklif vermek yapisal zarar satin almaktir.
+        tavan = benchmarks.economic_ceiling(rev, cvr, max_acos)
+        if tavan > 0 and bid > tavan:
+            bid = tavan
+            capped.append(key)
         out[key] = round(max(0.15, bid), 2)
+    # Tavana carpanlar cagirana ayri kanaldan bildirilir; donen sozluk
+    # sadece match type -> bid tasir (downstream bunu varsayiyor).
+    suggest_bids_v2.last_capped = capped
     return out
 
 
@@ -1177,6 +1198,28 @@ SP_MATCH_TYPES = {
     "Campaign Negative Keyword": {"negativeExact", "negativePhrase"},
 }
 # Create islemi icin entity bazinda zorunlu alanlar.
+def guard_row(row):
+    """Her bulksheet satiri buradan gecer. Amazon'un reddedecegi satiri
+    dosyaya KOYMAYIZ - yukleme raporundan hata ayiklamak zorunda kalmazsin.
+
+    Doner: (satir veya None, uyari veya None). None donerse satir atlanir.
+
+    NEDEN TEK NOKTA: kural her yazma yerinde ayri ayri uygulanirsa biri
+    unutulur. Gercekte oldu: hasat dosyasinda 4 kelime reddedildi cunku
+    arama terimi raporundan gelen ham metin dogrudan yazilmisti.
+    """
+    e = row.get("Entity")
+    if e in ("Keyword", "Negative Keyword", "Campaign Negative Keyword"):
+        ham = row.get("Keyword Text")
+        temiz, sebep = sanitize_keyword(ham)
+        if temiz is None:
+            return None, f"kelime atlandi ({sebep}): {str(ham)[:60]}"
+        if temiz != ham:
+            row = dict(row)
+            row["Keyword Text"] = temiz
+    return row, None
+
+
 SP_REQUIRED = {
     "Campaign": ["Campaign ID", "Campaign Name", "Daily Budget",
                  "Targeting Type", "State", "Start Date", "Bidding Strategy"],
@@ -1256,6 +1299,28 @@ def enforce_budget_floor(campaigns, min_clicks=MIN_CLICKS_PER_DAY):
         else:
             notlar.append(f"KAPATILDI {c['name'][-28:]} (butce yetmiyor, "
                           f"${round(ih)} gerekirdi)")
+    # ASLA BOS DONME.
+    #
+    # HATA GECMISI: butce cok dusukse bu fonksiyon TUM kampanyalari
+    # kapatiyor ve bos dosya uretiyordu. Kullanici kampanya isteyip bos
+    # dosya alamaz - bu, olu kampanya uretmekten daha kotu bir hatadir.
+    #
+    # Dogru davranis: en oncelikli kampanyayi TUT ve butcesini tabana
+    # YUKSELT. Kullanicinin istediginden fazla para harcanacagi icin bu
+    # acikca soylenir - sessizce yapilmaz.
+    if not tutulan and sirali:
+        c = sirali[0]
+        ih = float(c.get("default_bid") or 0) * min_clicks
+        if ih > 0:
+            c["budget"] = int(math.ceil(ih))
+            tutulan = [c]
+            notlar = [n for n in notlar if c["name"][-28:] not in n]
+            notlar.insert(0,
+                f"DIKKAT: toplam butce (${toplam:.0f}) hicbir kampanyayi "
+                f"tasiyamiyordu. {c['name'][-28:]} korundu ve butcesi "
+                f"${c['budget']}'a YUKSELTILDI (gunde {min_clicks} tiklama "
+                f"icin gereken taban). Diger kampanyalar acilmadi.")
+
     # Artan parayi en oncelikli kampanyaya ekle
     if tutulan and kalan >= 1:
         tutulan[0]["budget"] = int(round(tutulan[0]["budget"] + kalan))
@@ -1360,6 +1425,13 @@ def build_discovery_campaign(plan):
     problems = []
 
     def emit(d_):
+        # TEK KAPI: her satir once guard_row'dan gecer.
+        d_, uyari = guard_row(d_)
+        if d_ is None:
+            problems.append(uyari)
+            return
+        if uyari:
+            problems.append(uyari)
         problems.extend(validate_bulk_row(d_))
         ws.append([d_.get(h, "") for h in BULK_HEADERS])
 
@@ -1456,6 +1528,21 @@ def build_batch_bulksheet(plans, discovery=False):
     if not plans:
         return None, []
 
+    # BUTCE TABANI - dosya uretilmeden once uygulanir.
+    #
+    # HATA GECMISI: enforce_budget_floor yazilmisti ama HICBIR YERDEN
+    # CAGRILMIYORDU. Sonucta $4/gun butceli bir urun 4 x $1 kampanyaya
+    # bolunuyordu; $2.79 teklifle bu gunde 0.4 tiklama demek - kampanya olu
+    # dogar. Gercekte oldu: Stemcell 20 kampanyanin 8'i, Natural 15'i.
+    taban_notlari = []
+    for pl in plans:
+        if not pl.get("campaigns"):
+            continue
+        pl["campaigns"], notlar = enforce_budget_floor(pl["campaigns"])
+        if notlar:
+            a = (pl.get("product") or {}).get("asin") or "?"
+            taban_notlari.extend(f"[{a}] {n}" for n in notlar)
+
     wb = openpyxl.Workbook()
     wb.remove(wb.active)
     ws = wb.create_sheet("Sponsored Products Campaigns")
@@ -1495,6 +1582,12 @@ def build_batch_bulksheet(plans, discovery=False):
                      "sku": p.get("sku"), "rows": satir_sayisi,
                      "daily_budget": round(butce, 2)})
 
+    if taban_notlari:
+        # Kullaniciya gorunur olsun: butce/kampanya sayisi degistiyse
+        # bunu ozette soyleriz, sessizce yapmayiz.
+        ozet.append({"asin": None, "title": "BUTCE TABANI UYGULANDI",
+                     "notes": taban_notlari})
+
     buf = io.BytesIO()
     wb.save(buf)
     buf.seek(0)
@@ -1521,6 +1614,13 @@ def build_bulksheet(plan):
     problems = []
 
     def emit(d):
+        # TEK KAPI: her satir once guard_row'dan gecer.
+        d, uyari = guard_row(d)
+        if d is None:
+            problems.append(uyari)
+            return
+        if uyari:
+            problems.append(uyari)
         problems.extend(validate_bulk_row(d))
         ws.append([d.get(h, "") for h in BULK_HEADERS])
 

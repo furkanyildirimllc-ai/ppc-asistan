@@ -19,6 +19,8 @@ import math
 
 import openpyxl
 
+import benchmarks
+
 SHEET = "Sponsored Products Campaigns"
 
 # Bir kampanya gunde en az bu kadar tiklama alabilmeli. Altindaysa
@@ -50,9 +52,8 @@ DEFAULT_ACOS_CEILING = 1.00
 
 
 def economic_ceiling(aov, cvr, acos_ceiling=DEFAULT_ACOS_CEILING):
-    """Bu match type icin savunulabilir maksimum teklif.
-    acos_ceiling=1.00 -> reklam harcamasi = satis (zarar: urun maliyeti+komisyon)."""
-    return round(_f(aov) * _f(cvr) * _f(acos_ceiling), 2)
+    """benchmarks'a yonlendirir - kural TEK YERDE yasar."""
+    return benchmarks.economic_ceiling(aov, cvr, acos_ceiling)
 
 
 def _f(v):
@@ -63,12 +64,8 @@ def _f(v):
 
 
 def zero_order_confidence(clicks, cvr):
-    """cvr dogruysa, bu kadar tiklamada HIC siparis gelmeme ihtimali dusuktur.
-    Donen deger: 'gercekten kotu' oldugumuza duydugumuz guven."""
-    c, v = _f(clicks), _f(cvr)
-    if c <= 0 or v <= 0:
-        return 0.0
-    return 1.0 - (1.0 - v) ** c
+    """benchmarks'a yonlendirir - kural TEK YERDE yasar."""
+    return benchmarks.zero_order_confidence(clicks, cvr)
 
 
 def read_bulk(source):

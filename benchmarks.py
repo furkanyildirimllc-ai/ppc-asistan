@@ -175,6 +175,43 @@ def lookup_query(qstats, keyword, min_clicks=30, require_tokens=None):
     return None, None
 
 
+def zero_order_confidence(clicks, cvr):
+    """0 siparis gercekten kotu mu, yoksa sans eseri mi?
+
+    TEK KAYNAK. Onceden analysis.py ve bulk_doctor.py'de ayri kopyalari vardi;
+    biri degisip digeri kalirsa ayni veri iki farkli karar uretir.
+
+    cvr'a sahip IYI bir kelimenin `clicks` tiklamada hic siparis almama
+    olasiligi (1-cvr)^clicks. Guven = 1 - bu olasilik.
+    Ornek: CVR %10, 12 tik -> guven %72 (10 kelimeden ~3'unu haksiz keseriz).
+           30 tik -> %96.
+    """
+    try:
+        c, v = float(clicks), float(cvr)
+    except (TypeError, ValueError):
+        return 0.0
+    if c <= 0 or v <= 0:
+        return 0.0
+    return 1.0 - (1.0 - v) ** c
+
+
+def economic_ceiling(aov, cvr, acos_ceiling=1.00):
+    """Bu match type icin savunulabilir MAKSIMUM teklif. TEK KAYNAK.
+
+    Bir tiklama ortalama (aov x cvr) kadar ciro getirir. Bu, %100 ACOS'taki
+    maksimum tekliftir. Uzerinde teklif vermek yapisal olarak zarar satin
+    almaktir - hicbir optimizasyon kurtaramaz.
+
+    Olculdu: Natural'da tiklama basina ciro $1.47 iken ortanca teklif $3.60
+    idi (=%245 ACOS yapisal). Gozlenen ACOS %353. Hesaptaki kotu ACOS'un tek
+    basina en buyuk sebebi buydu.
+    """
+    try:
+        return round(float(aov or 0) * float(cvr or 0) * float(acos_ceiling or 0), 2)
+    except (TypeError, ValueError):
+        return 0.0
+
+
 def spend_capacity(campaign_rows, days=30):
     """Bir hesabin GERCEKTE ne kadar harcayabildigini olcer.
 

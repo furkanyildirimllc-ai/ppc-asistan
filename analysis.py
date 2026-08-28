@@ -16,6 +16,7 @@ AUTO_TARGETS = {"loose-match", "close-match", "substitutes", "complements", "*"}
 # Bu match tiplerindeki search termler kesif kaynagi sayilir
 DISCOVERY_MATCH = {"BROAD", "PHRASE", "-"}
 import re
+import benchmarks
 import keepa_engine
 
 
@@ -44,16 +45,9 @@ def account_cvr(rows):
 
 
 def zero_order_confidence(clicks, cvr):
-    """0 siparis gercekten kotu performans mi, yoksa sans eseri mi?
+    """benchmarks.zero_order_confidence'a yonlendirir - kural TEK YERDE yasar."""
+    return benchmarks.zero_order_confidence(clicks, cvr)
 
-    Hesabin ortalama CVR'ina sahip IYI bir kelimenin `clicks` tiklamada hic
-    siparis almama olasiligi (1-cvr)^clicks'tir. Guven = 1 - bu olasilik.
-    Ornek: CVR %10, 12 tik -> guven sadece %72 (yani 10 kelimeden ~3'unu
-    haksiz yere keserdik). 30 tik -> %96.
-    """
-    if clicks <= 0 or cvr <= 0:
-        return 0.0
-    return 1.0 - (1.0 - cvr) ** clicks
 
 
 def clicks_for_confidence(cvr, target=0.95):
