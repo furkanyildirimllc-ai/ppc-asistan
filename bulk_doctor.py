@@ -14,8 +14,8 @@ kisit ayirt edilir ve COZUMLERI ZITTIR:
   - talep kisiti  -> teklif artir (para duruyor, acik artirma kazanilmiyor)
 Ters yapmak parayi bosa koyar.
 """
-import datetime
 import io
+import math
 
 import openpyxl
 
@@ -149,13 +149,27 @@ def diagnose(bulk, target_acos_pct, expected_cvr, fallback_bid=2.00):
         elif gost == 0:
             sebep = "henuz gosterim yok - cok yeni, dokunulmuyor"
 
-        # Butce tabani: gosterim almaya baslamis kampanyalarda uygulanir.
-        # Hic yayinlanmamis yeni kampanyada erken mudahale gereksiz.
-        taban = round(yeni_bid * MIN_CLICKS_PER_DAY)
-        if gost > 0 and yeni_butce < taban:
+        # BUTCE TABANI HER ZAMAN UYGULANIR - gosterim sartina baglanmaz.
+        #
+        # HATA GECMISI: taban "gosterim > 0" sartina bagliydi. Mantik
+        # doguruydu: $1 butceli kampanya zar zor yayinlanir, gosterim almaz,
+        # gosterim almadigi icin "cok yeni" sayilip $1'de birakilirdi.
+        # Kampanya sonsuza kadar olu kalirdi.
+        #
+        # Ayrim su: TEKLIF degisikligi bir performans yargisidir, veri ister.
+        # BUTCE TABANI yapisal bir kusurdur - kampanyanin iyi mi kotu mu
+        # oldugunu bilmeye gerek yok, $1 butce $2.79 teklifi zaten tasiyamaz.
+        # ceil kullaniliyor: round() ile $2.67 x 5 = 13.35 -> 13 olup taban
+        # yine saglanmiyordu (4.9 tik/gun).
+        taban = math.ceil(yeni_bid * MIN_CLICKS_PER_DAY)
+        if yeni_butce < taban:
             yeni_butce = taban
+            onceki = f"{butce/yeni_bid:.1f}" if yeni_bid else "0"
+            # "cok yeni - dokunulmuyor" notu artik gecersiz; butce degisiyor.
+            if sebep and "cok yeni" in sebep:
+                sebep = None
             sebep = ((sebep + " + ") if sebep else "") + \
-                f"butce teklifi tasimiyordu ({butce/yeni_bid:.1f} tik/gun)"
+                f"butce teklifi tasimiyordu ({onceki} tik/gun)"
             if agirlik == "bilgi":
                 agirlik = "uyari"
 
