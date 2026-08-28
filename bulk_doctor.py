@@ -37,6 +37,23 @@ MAX_BID_CUT = 0.50
 
 MIN_BID = 0.20
 
+# EKONOMIK TAVAN
+# Bir tiklama ortalama (AOV x CVR) kadar ciro getirir. Bu deger, %100 ACOS'taki
+# maksimum tekliftir - yani reklam harcamasinin satisa esit oldugu nokta.
+# Bunun USTUNDE teklif vermek, yapisal olarak zarar satin almaktir; hicbir
+# optimizasyon kurtaramaz.
+#
+# Olculdu: Natural'da tiklama basina ciro $1.47 iken ortanca teklif $3.60'ti
+# (=%245 ACOS, yapisal). Gozlenen ACOS %353. Stemcell'de $2.20'ye karsi $2.55.
+# Bu, hesaptaki kotu ACOS'un tek basina en buyuk sebebiydi.
+DEFAULT_ACOS_CEILING = 1.00
+
+
+def economic_ceiling(aov, cvr, acos_ceiling=DEFAULT_ACOS_CEILING):
+    """Bu match type icin savunulabilir maksimum teklif.
+    acos_ceiling=1.00 -> reklam harcamasi = satis (zarar: urun maliyeti+komisyon)."""
+    return round(_f(aov) * _f(cvr) * _f(acos_ceiling), 2)
+
 
 def _f(v):
     try:
