@@ -1620,3 +1620,60 @@ def build_bulksheet(plan):
     wb.save(buf)
     buf.seek(0)
     return buf
+
+
+# Amazon kelime kurallari (yukleme hatasindan ogrenildi, 4 kelime reddedildi):
+#   - en fazla 80 karakter
+#   - en fazla 10 kelime
+#   - noktalama yok (virgul, arti, vs.) - sadece harf, rakam, bosluk, tire, kesme
+#   - ASCII disi karakter kabul edilmez (accented harfler dahil)
+# Arama terimi raporundan hasat ederken bu kurallar ihlal edilebilir, cunku
+# musterinin YAZDIGI sey her zaman gecerli bir KELIME degildir.
+KEYWORD_MAX_CHARS = 80
+KEYWORD_MAX_WORDS = 10
+
+
+def sanitize_keyword(text):
+    """Arama terimini gecerli bir Amazon kelimesine cevirir.
+
+    Doner: (temiz_kelime veya None, sebep)
+    None donerse kelime kurtarilamaz - dosyaya KOYULMAMALI. Gecersiz kelime
+    koymak tum satirin reddedilmesine yol acar.
+    """
+    import unicodedata
+    ham = str(text or "").strip()
+    if not ham:
+        return None, "bos"
+    # Aksanli harfleri ASCII karsiligina indir (ú -> u). Anlami korur.
+    d = unicodedata.normalize("NFKD", ham)
+    t = "".join(c for c in d if not unicodedata.combining(c))
+    # Izinli olmayan her seyi bosluga cevir, sonra bosluklari tekille.
+    t = "".join(c if (c.isalnum() or c in " -'") else " " for c in t)
+    t = " ".join(t.split()).lower()
+    if not t:
+        return None, "temizlikten sonra bos kaldi"
+    if any(ord(c) > 127 for c in t):
+        return None, "ASCII disi karakter cevrilemedi"
+    kelimeler = t.split()
+    if len(kelimeler) > KEYWORD_MAX_WORDS:
+        # Kirpmak exact match'in anlamini degistirir - kirpma, at.
+        return None, f"{len(kelimeler)} kelime (sinir {KEYWORD_MAX_WORDS})"
+    if len(t) > KEYWORD_MAX_CHARS:
+        return None, f"{len(t)} karakter (sinir {KEYWORD_MAX_CHARS})"
+    return t, ("temizlendi" if t != ham.lower() else "degismedi")
+
+
+def sanitize_keywords(terimler):
+    """Liste halinde temizler. Doner: (gecerliler, atilanlar)."""
+    ok, atilan = [], []
+    gorulen = set()
+    for t in terimler:
+        temiz, sebep = sanitize_keyword(t)
+        if temiz is None:
+            atilan.append({"term": t, "reason": sebep})
+        elif temiz in gorulen:
+            atilan.append({"term": t, "reason": "mukerrer"})
+        else:
+            gorulen.add(temiz)
+            ok.append({"keyword": temiz, "original": t, "note": sebep})
+    return ok, atilan
