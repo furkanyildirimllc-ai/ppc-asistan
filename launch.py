@@ -491,7 +491,7 @@ def discovery_plan(price, econ, bench, keywords=None, market_price=None):
     }
 
 
-def bid_feasibility_v2(price, econ, profit_bids, bench):
+def bid_feasibility_v2(price, econ, bench, profit_bids):
     """Karli bid pazarin gercek CPC'sini karsiliyor mu?
 
     Karsilamiyorsa bu bir bid ayari sorunu degil, fiyat/maliyet sorunudur.
@@ -574,14 +574,23 @@ def suggest_bids_v2(price, econ, bench, strategy="profit"):
         return {k: 0.30 for k in bench["cvr"]}
     # ACOS ciro tabanlidir. Coklu adet siparisler yuzunden siparis basina ciro
     # (AOV) birim fiyattan yuksek olabilir; olculmusse onu kullan, yoksa fiyat.
-    rev = float((bench.get("account") or {}).get("aov") or 0) or p
+    hesap_aov = float((bench.get("account") or {}).get("aov") or 0) or p
 
     be = float((econ or {}).get("break_even_acos_pct") or 40.0) / 100.0
     target = float((econ or {}).get("recommended_target_acos_pct") or be * 70) / 100.0
-    w = BID_STRATEGIES.get(strategy, BID_STRATEGIES["profit"])["market_weight"]
+    # SESSIZ DUSUS YASAK. Bilinmeyen strateji adi onceden sessizce "profit"e
+    # dusuyordu: kullanici "Pazar Payi" secip karli bid aliyordu ve bunu
+    # hicbir yerde goremiyordu. Artik acikca patlar.
+    if strategy not in BID_STRATEGIES:
+        raise ValueError(
+            f"Bilinmeyen bid stratejisi: {strategy!r}. "
+            f"Gecerli olanlar: {', '.join(BID_STRATEGIES)}")
+    w = BID_STRATEGIES[strategy]["market_weight"]
 
     out = {}
     for key, cvr in bench["cvr"].items():
+        # Ciro match type'a gore degisir; olculmusse onu kullan.
+        rev = float((bench.get("aov") or {}).get(key) or 0) or hesap_aov
         if cvr is None:
             # CVR olculmemis ve varsayilmamis: bid hesaplanamaz. Uydurma sayi
             # uretmektense bos birak; cagiran taraf kullaniciya sorar.
@@ -602,16 +611,17 @@ def suggest_bids_v2(price, econ, bench, strategy="profit"):
     return out
 
 
-def bid_outlook_v2(price, econ, bids, bench):
+def bid_outlook_v2(price, econ, bench, bids):
     """Secilen bid'lerle gercekte ne olur: tahmini ACOS, gosterim sansi, karlilik.
     Tum sayilar bench'teki OLCULMUS CVR/CPC uzerinden hesaplanir."""
     p = float(price or 0)
     if p <= 0 or not bids:
         return {}
     be = float((econ or {}).get("break_even_acos_pct") or 0) / 100.0
-    rev = float((bench.get("account") or {}).get("aov") or 0) or p
+    hesap_aov = float((bench.get("account") or {}).get("aov") or 0) or p
     rows = {}
     for key, bid in bids.items():
+        rev = float((bench.get("aov") or {}).get(key) or 0) or hesap_aov
         if bid is None:
             rows[key] = {"bid": None, "note": "CVR verisi yok - hesaplanamadi"}
             continue
@@ -634,7 +644,11 @@ def bid_outlook_v2(price, econ, bids, bench):
     return {
         "per_match": rows,
         "break_even_acos_pct": round(be * 100, 1),
-        "revenue_per_order": round(rev, 2),
+        # HATA GECMISI: burada dongu degiskeni `rev` sizmisti - hangi match
+        # type son islendiyse onun AOV'si "hesap cirosu" diye raporlanıyordu.
+        # Match bazinda AOV zaten per_match icinde; burasi hesap ortalamasi.
+        "revenue_per_order": round(hesap_aov, 2),
+        "revenue_per_order_by_match": bench.get("aov"),
         "cpc_source": bench["cpc_source"],
         "ramp_pct": round(bench["ramp"] * 100),
         "calibration": bench["calibration_note"],
@@ -1008,7 +1022,7 @@ def build_plan(product, competitors=None, use_ai=True, model=None,
     bids = suggest_bids_v2(price, econ, bench,
                            strategy=(bid_strategy if bench.get("has_cpc") else "profit"))
     budgets = suggest_budgets(price, bids)
-    outlook = bid_outlook_v2(price, econ, bids, bench)
+    outlook = bid_outlook_v2(price, econ, bench, bids)
     # Uyari her zaman "karli" bid'e gore hesaplanir: strateji degistirmek
     # fiyat/maliyet gercegini degistirmez, sadece ne kadar zarara razi
     # oldugunu degistirir.
@@ -1023,7 +1037,7 @@ def build_plan(product, competitors=None, use_ai=True, model=None,
             f"gibi hesaplandi. Pazara capa atmak icin once Faz 0 ile gercek "
             f"CPC'yi olc.")
     profit_bids = suggest_bids_v2(price, econ, bench, strategy="profit")
-    feasibility = bid_feasibility_v2(price, econ, profit_bids, bench)
+    feasibility = bid_feasibility_v2(price, econ, bench, profit_bids)
     prefix = _campaign_prefix(product.get("brand"), title, asin)
 
     campaigns = [

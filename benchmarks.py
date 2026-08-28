@@ -31,10 +31,16 @@ import re
 # ve tek basina kullanilmaz.
 # =====================================================================
 
-# Match type'lar arasi goreli CVR iliskisi (phrase = 1.00).
-# Niyet genisligi mekaniktir: exact en dar niyet, broad/auto en genis.
-RELATIVE_CVR = {"exact": 1.05, "phrase": 1.00, "broad": 0.38,
-                "auto": 0.40, "pt": 0.55}
+# Match type'lar arasi goreli CVR iliskisi.
+# TABAN = HESAP ORTALAMASI (1.00), RELATIVE_CPC ile ayni taban.
+#
+# HATA GECMISI: bu carpanlar once "phrase = 1.00" tabanina gore yazilmisti
+# ama kodda HESAP ORTALAMASIYLA carpiliyordu. Iki farkli taban karisinca
+# tum match type'larda CVR %19-24 DUSUK tahmin ediliyordu; bu da odenebilir
+# bid'i ayni oranda dusuruyor ve kampanyalarin gosterim almasini zorlastiriyordu.
+# Gercek olcumle (BATCI, 6208 tik) yeniden kalibre edildi.
+RELATIVE_CVR = {"exact": 1.36, "phrase": 1.31, "broad": 0.47,
+                "auto": 0.50, "pt": 0.69}
 # Match type'lar arasi goreli CPC iliskisi (hesap ortalamasi = 1.00).
 RELATIVE_CPC = {"exact": 1.15, "phrase": 1.20, "broad": 0.75,
                 "auto": 0.80, "pt": 0.68}
@@ -167,6 +173,69 @@ def lookup_query(qstats, keyword, min_clicks=30, require_tokens=None):
         out["match_score"] = round(best_score, 2)
         return out, "partial"
     return None, None
+
+
+def spend_capacity(campaign_rows, days=30):
+    """Bir hesabin GERCEKTE ne kadar harcayabildigini olcer.
+
+    KRITIK: butce harcama DEGILDIR. Harcama, kazanilan acik artirma
+    sayisiyla sinirlidir. Olculdu: bu hesapta butcenin %19-28'i harcaniyor.
+    Butceye gore plan yapmak, gelmeyecek ciroyu ongormek demektir.
+
+    Iki farkli kisit vardir ve COZUMLERI ZITTIR:
+      - butce kisiti (kullanim >= %80): para koy, hacim gelir
+      - talep kisiti (kullanim < %30): para koymak ise yaramaz,
+        TEKLIF artmali (daha fazla acik artirma kazanmalisin)
+    """
+    kalemler = []
+    for r in campaign_rows or []:
+        b = float(r.get("budget") or 0)
+        s_ = float(r.get("spend") or 0)
+        if b <= 0:
+            continue
+        gunluk = s_ / max(days, 1)
+        kalemler.append({
+            "campaign": r.get("campaign"),
+            "budget": round(b, 2),
+            "daily_spend": round(gunluk, 2),
+            "utilization": round(gunluk / b, 3),
+            "limit": ("butce" if gunluk / b >= 0.8 else
+                      "talep" if gunluk / b < 0.3 else "karisik"),
+        })
+    if not kalemler:
+        return None
+    tb = sum(k["budget"] for k in kalemler)
+    th = sum(k["daily_spend"] for k in kalemler)
+    return {
+        "campaigns": kalemler,
+        "total_budget": round(tb, 2),
+        "total_daily_spend": round(th, 2),
+        "utilization": round(th / tb, 3) if tb else 0,
+        "budget_limited": [k for k in kalemler if k["limit"] == "butce"],
+        "demand_limited": [k for k in kalemler if k["limit"] == "talep"],
+        "note": ("Butce kisitli kampanyalarda BUTCE artir; talep kisitli "
+                 "olanlarda TEKLIF artir. Ters yapmak parayi bosa koyar."),
+    }
+
+
+def realistic_spend(target_daily_spend, utilization, floor=0.15):
+    """Hedeflenen harcamaya ulasmak icin ne kadar butce koymak gerekir?
+
+    Kullanim %25 ise $50 harcamak icin ~$200 butce lazim. Ama bu tek basina
+    yetmez: talep kisitliysa butce artmasi harcamayi artirmaz. Bu yuzden
+    sonuc her zaman "teklif de artmali mi" uyarisiyla birlikte doner.
+    """
+    u = max(float(utilization or 0), floor)
+    gereken = target_daily_spend / u
+    return {
+        "target_spend": round(target_daily_spend, 2),
+        "utilization_used": round(u, 3),
+        "budget_needed": round(gereken, 2),
+        "bid_increase_needed": u < 0.5,
+        "note": ("Kullanim %50'nin altinda: butce artirmak tek basina "
+                 "harcamayi artirmaz, TEKLIF de artmali."
+                 if u < 0.5 else "Butce artisi harcamaya donusur."),
+    }
 
 
 def diagnose_discovery(rows, probe_bid=None):
@@ -458,16 +527,33 @@ def resolve(rows=None, ba_rows=None, brand_id=None, brand_name=None,
     cvr, cpc, src = {}, {}, {}
     for key in MATCH_KEYS:
         got = m.get(key) or {}
+        # RAMPA SADECE OLCULMEMIS CVR'A UYGULANIR.
+        # HATA GECMISI: rampa (0.65) olculmus CVR'a da uygulaniyordu. Markanin
+        # KENDI calisan reklamindan olculen %15.15, %9.85'e dusuruluyordu -
+        # oysa o zaten gercek, su anki donusum orani. Sonuc: odenebilir bid
+        # %35 dusuk cikiyor, kampanyalar gosterim alamiyordu.
+        # Rampa yalnizca "bu urun henuz yeni, olgun CVR'a ulasmadi" varsayimi
+        # icin vardir; olculmus veride boyle bir varsayima gerek yoktur.
+        olculmus = False
         if got.get("clicks", 0) >= MIN_CLICKS_CVR and got.get("cvr") is not None:
             v = got["cvr"]
-            src[key] = "olculdu (bu marka)"
+            src[key] = f"olculdu (bu marka, {got['clicks']:.0f} tik)"
+            olculmus = True
+        elif acct.get("clicks", 0) >= MIN_CLICKS_CVR and base_cvr is not None:
+            # Hesap geneli olculmus; match dagilimi goreli carpanla yapilir.
+            v = base_cvr * RELATIVE_CVR[key]
+            src[key] = cvr_basis
+            olculmus = True
         elif base_cvr is not None:
             v = base_cvr * RELATIVE_CVR[key]
             src[key] = cvr_basis
         else:
             v = None
             src[key] = "veri yok"
-        cvr[key] = round(max(0.005, v * ramp), 4) if v is not None else None
+        if v is None:
+            cvr[key] = None
+        else:
+            cvr[key] = round(max(0.005, v if olculmus else v * ramp), 4)
 
         # O match type'in KENDI olcumu varsa dogrudan kullan. Hesap
         # ortalamasina goreli carpan uygulamak, veri zaten o match type'tan
@@ -479,8 +565,20 @@ def resolve(rows=None, ba_rows=None, brand_id=None, brand_name=None,
         else:
             cpc[key] = None
 
+    # AOV MATCH TYPE'A GORE DEGISIR (olculdu: -%24 ile +%31 arasi sapma).
+    # Tek hesap ortalamasi kullanmak bid'i o oranda kaydirir. Olculmusse
+    # match bazinda, degilse hesap ortalamasi.
+    aov = {}
+    hesap_aov = (acct or {}).get("aov")
+    for key in MATCH_KEYS:
+        got = m.get(key) or {}
+        if got.get("orders", 0) >= 5 and got.get("sales"):
+            aov[key] = round(got["sales"] / got["orders"], 2)
+        else:
+            aov[key] = hesap_aov
+
     return {
-        "cvr": cvr, "cpc": cpc, "cvr_source": src,
+        "cvr": cvr, "cpc": cpc, "aov": aov, "cvr_source": src,
         "cvr_basis": cvr_basis, "cpc_source": cpc_basis,
         "ramp": ramp, "account": acct or None,
         "query_stats": qs, "scope": scope, "warnings": warnings,
