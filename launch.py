@@ -1177,6 +1177,77 @@ SP_REQUIRED = {
 }
 
 
+# Bir kampanyanin YASAYABILMESI icin butcesi teklifinin en az bu kati olmali.
+# Altinda kalirsa gunde birkac tiklama bile alamaz; Amazon kampanyayi
+# neredeyse hic yayinlamaz. Gercekte yasandi: $1 butce + $2.79 teklif =
+# gunde 0.4 tiklama -> kampanya olu dogar, harcama da satis da olmaz.
+MIN_CLICKS_PER_DAY = 5
+
+
+def budget_health(budget, bid):
+    """Butce/teklif oraninin saglikli olup olmadigini soyler."""
+    try:
+        b = float(budget or 0); t = float(bid or 0)
+    except (TypeError, ValueError):
+        return None
+    if t <= 0:
+        return None
+    tik = b / t
+    return {
+        "clicks_per_day": round(tik, 1),
+        "min_needed": round(t * MIN_CLICKS_PER_DAY, 2),
+        "ok": tik >= MIN_CLICKS_PER_DAY,
+        "severity": ("iyi" if tik >= MIN_CLICKS_PER_DAY else
+                     "dusuk" if tik >= 2 else "olu"),
+    }
+
+
+def enforce_budget_floor(campaigns, min_clicks=MIN_CLICKS_PER_DAY):
+    """Butcesi teklifini tasimayan kampanyalari duzeltir.
+
+    Iki yol var ve ikisi de kullanilir:
+      1) Butceyi tabana cek (teklif x min_clicks)
+      2) Toplam butce bunu kaldiramiyorsa kampanya SAYISINI azalt -
+         parayi 4'e bolup hepsini oldurmektense 1-2 kampanyayi yasat.
+    Doner: (duzeltilmis_kampanyalar, yapilan_degisiklikler)
+    """
+    if not campaigns:
+        return campaigns, []
+    toplam = sum(float(c.get("budget") or 0) for c in campaigns)
+    notlar = []
+
+    # Once her kampanyanin ihtiyaci ne kadar?
+    ihtiyac = [(c, float(c.get("default_bid") or 0) * min_clicks) for c in campaigns]
+    gereken = sum(i for _, i in ihtiyac)
+
+    if gereken <= toplam:
+        # Para yetiyor: sadece tabanin altindakileri yukselt
+        for c, ih in ihtiyac:
+            if float(c.get("budget") or 0) < ih:
+                notlar.append(f"{c['name'][-28:]}: ${c['budget']} -> ${round(ih)}")
+                c["budget"] = int(round(ih))
+        return campaigns, notlar
+
+    # Para yetmiyor: oncelik sirasina gore kampanya sec (exact > phrase >
+    # auto > broad > pt). Kalanlari birak.
+    oncelik = {"exact": 0, "phrase": 1, "auto": 2, "broad": 3, "pt": 4}
+    sirali = sorted(campaigns, key=lambda c: oncelik.get(c.get("key"), 9))
+    tutulan, kalan = [], toplam
+    for c in sirali:
+        ih = float(c.get("default_bid") or 0) * min_clicks
+        if kalan >= ih and ih > 0:
+            c["budget"] = int(round(ih))
+            kalan -= ih
+            tutulan.append(c)
+        else:
+            notlar.append(f"KAPATILDI {c['name'][-28:]} (butce yetmiyor, "
+                          f"${round(ih)} gerekirdi)")
+    # Artan parayi en oncelikli kampanyaya ekle
+    if tutulan and kalan >= 1:
+        tutulan[0]["budget"] = int(round(tutulan[0]["budget"] + kalan))
+    return tutulan, notlar
+
+
 def validate_bulk_row(d):
     """Tek bir bulksheet satirini Amazon kurallarina gore denetler.
 
