@@ -1183,6 +1183,43 @@ async function docScan(){
   }catch(e){ docOut.innerHTML=`<p style="color:#ef4444">${esc(e.message||'Hata')}</p>`; }
   finally{ docScanBtn.disabled=false; }
 }
+// Yukleme SONRASI dogrulama. Tarama "ne yapmali" der, dogrulama
+// "yaptigimiz oldu mu" der. Ikisi farkli sorulardir.
+async function docVerify(){
+  const g=_docForm(); if(!g) return;
+  docVerifyBtn.disabled=true; docOut.innerHTML='<p class="muted">Doğrulanıyor…</p>';
+  try{
+    const r=await api(`/api/brands/${currentBrand}/bulk-doctor/verify`,
+                      {method:'POST',body:g.fd});
+    const d=await r.json();
+    const renk=x=>x==='kritik'?'#ef4444':x==='uyari'?'#f59e0b':'#64748b';
+    docOut.innerHTML=`
+      <div style="padding:10px;border-radius:8px;margin-bottom:10px;
+           background:${d.clean?'#064e3b':'#7f1d1d'};color:#fff">
+        <b style="font-size:16px">${d.clean?'✓ TEMİZ':'✗ '+d.critical+' KRİTİK SORUN'}</b>
+        ${d.warnings?` · ${d.warnings} uyarı`:''}
+      </div>
+      <div class="row" style="gap:18px;flex-wrap:wrap;margin-bottom:10px">
+        <div><b>${d.campaigns_live}</b>/${d.campaigns_total} aktif kampanya</div>
+        <div>$${d.daily_budget.toFixed(0)}/gün bütçe</div>
+        <div>kullanım <b>%${Math.round(d.utilization*100)}</b></div>
+        <div>bütçe kısıtlı ${d.budget_limited} · talep kısıtlı ${d.demand_limited}</div>
+      </div>
+      ${d.ceilings?`<p class="muted">Ekonomik tavan (%${d.acos_ceiling_pct} ACOS):
+        ${Object.entries(d.ceilings).map(([k,v])=>`${k} $${v}`).join(' · ')}</p>`:''}
+      ${d.findings.length?`<table class="tbl"><thead><tr><th>Önem</th><th>Tür</th>
+        <th>Kampanya</th><th>Detay</th></tr></thead><tbody>
+        ${d.findings.map(f=>`<tr>
+          <td style="color:${renk(f.severity)}"><b>${f.severity}</b></td>
+          <td>${esc(f.type)}</td>
+          <td style="max-width:260px">${esc(f.campaign)}</td>
+          <td>${esc(f.detail)}</td></tr>`).join('')}
+        </tbody></table>`:'<p class="muted">Hiçbir sorun bulunamadı.</p>'}`;
+    docDlBtn.style.display='none';
+  }catch(e){ docOut.innerHTML=`<p style="color:#ef4444">${esc(e.message||'Hata')}</p>`; }
+  finally{ docVerifyBtn.disabled=false; }
+}
+
 async function docDownload(){
   const g=_docForm(); if(!g) return;
   docDlBtn.disabled=true;
@@ -3548,6 +3585,7 @@ loadBrands();
              placeholder="boş = break-even" style="width:150px">
     </label>
     <button onclick="docScan()" id="docScanBtn">Tara</button>
+    <button onclick="docVerify()" id="docVerifyBtn" title="Yükleme sonrası: hesap istediğimiz halde mi?">✓ Doğrula</button>
   </div>
   <div id="docOut"></div>
   <div class="row" style="justify-content:flex-end;gap:8px;margin-top:14px">

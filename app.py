@@ -25,6 +25,7 @@ import bulksheet
 import launch as launch_mod
 import benchmarks
 import bulk_doctor
+import verify as verify_mod
 import chat as chat_mod
 import market_intel
 import brain
@@ -1736,6 +1737,29 @@ async def bulk_doctor_teshis(brand_id: int, file: UploadFile,
         "actions": d["actions"],
         "untouched": d["notes"],
     }
+
+
+@app.post("/api/brands/{brand_id}/bulk-doctor/verify")
+async def bulk_doctor_dogrula(brand_id: int, file: UploadFile,
+                              acos_ceiling: float = 1.00):
+    """Yukleme SONRASI dogrulama: hesap gercekten istedigimiz halde mi?
+
+    "106/109 basarili" demek "hesap dogru" demek degildir. Bu uc, yazilan
+    degere degil, hesabin SON HALINE bakar."""
+    ham = await file.read()
+    try:
+        bulk = bulk_doctor.read_bulk(ham)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    with db() as c:
+        rows = _load_rows(c, brand_id, "targeting")
+        brand = c.execute("SELECT * FROM brands WHERE id=?", (brand_id,)).fetchone()
+    ad = (dict(brand).get("name") if brand else None)
+    tavan = verify_mod.ceilings_for(rows, ad, acos_ceiling) if rows else None
+    sonuc = verify_mod.audit(bulk, ceilings=tavan)
+    sonuc["ceilings"] = tavan
+    sonuc["acos_ceiling_pct"] = round(acos_ceiling * 100)
+    return sonuc
 
 
 @app.post("/api/brands/{brand_id}/bulk-doctor/file")

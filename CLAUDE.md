@@ -34,6 +34,7 @@ Ayrı hat (yeni ürün lansmanı):
 | `insights.py` | 801 | Dashboard, KPI, sağlık skoru, SKAG/TOS/brand-defense, `campaign_advisor` |
 | `analysis.py` | 684 | Deterministik motor: harvest, negatif, bid, placement, bütçe |
 | `launch.py` | 547 | Yeni ürün lansman planı + lansman bulksheet'i |
+| `verify.py` | 210 | **Yükleme sonrası denetim**: hesabın son hali kurallara uyuyor mu (yazılana değil, olana bakar) |
 | `bulk_doctor.py` | 250 | **Canlı hesap doktoru**: Bulk Operations dosyasını okur, teşhis eder, `Operation=Update` düzeltme dosyası üretir |
 | `benchmarks.py` | 600 | Ölçülmüş CVR/CPC/AOV çözümleyici, marka izolasyonu, harcama kapasitesi |
 | `bulksheet.py` | 541 | Amazon Bulk Operations formatı (kolon sırası kritik) |
@@ -59,7 +60,7 @@ Analiz: `.../insights`, `.../today`, `.../opportunities`, `POST .../opportunitie
 Export: `.../export`, `.../export-bulksheet`, `.../bulk-readiness`, `.../campaign-ad-groups`
 Ürün: `GET/POST .../products`, `PUT/DELETE /api/products/{id}`
 Lansman: `POST /api/launch/analyze`, `POST /api/launch/bulksheet`
-Doktor: `POST /api/brands/{id}/bulk-doctor` (teşhis), `.../bulk-doctor/file` (düzeltme dosyası)
+Doktor: `POST /api/brands/{id}/bulk-doctor` (teşhis), `.../bulk-doctor/file` (düzeltme dosyası), `.../bulk-doctor/verify` (yükleme sonrası denetim)
 Eklenti: `/api/extension/files|file/{name}|download`
 
 ## DB (ppc.db, SQLite — git'te değil)
@@ -127,6 +128,23 @@ Seller hesabında ASIN geçerli SKU değildir → Product Ad satırları reddedi
   "profit"e düşmez.
 - **Az veriyle karar verme.** 15 tık altında "kötü" denmez; sıfır sipariş kararı için
   `zero_order_confidence >= %80` aranır.
+- **EKONOMİK TAVAN her stratejide son sözdür.** Tıklama başına ciro = AOV × CVR; bu,
+  %100 ACOS'taki maksimum tekliftir. Pazar CPC'si bu markanın ekonomisini taşımak
+  zorunda değil — pazara çapa atmadan önce tavan gelir. `benchmarks.economic_ceiling()`.
+- **Kelimeler `guard_row()` kapısından geçer.** Amazon: max 80 karakter, max 10 kelime,
+  noktalama yok, ASCII dışı yok. Arama terimi ≠ geçerli kelime.
+- **`enforce_budget_floor()` asla boş dönmez.** Bütçe hiçbir kampanyayı taşımıyorsa en
+  öncelikli kampanya korunur ve bütçesi yükseltilir; boş dosya üretmek daha kötüdür.
+
+### Kural yazmak ≠ kural uygulamak
+
+Bu projede bir kez oldu: `economic_ceiling`, `sanitize_keyword`, `enforce_budget_floor`
+ve `spend_capacity` yazıldı ama **hiçbir yerden çağrılmadı**. Araç eski hatalarını
+üretmeye devam etti. Yeni kural eklerken:
+1. Kuralı **tek yerde** tanımla (tercihen `benchmarks.py`)
+2. Tüm yollara bağla, tek kapıdan geçir (`guard_row`, `emit`)
+3. Kuralın **ihlal edildiği bir girdiyle** test et — geçtiğini değil, engellediğini gör
+4. `verify.py`'ye denetim maddesi ekle
 
 ## Konvansiyonlar
 
