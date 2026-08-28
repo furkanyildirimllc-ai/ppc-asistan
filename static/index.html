@@ -626,6 +626,7 @@
     <button onclick="openBrandDialog(true)" id="editBtn" style="display:none">⚙ Ayarlar</button>
     <button onclick="openLaunchDlg()" title="Sıfır geçmişli yeni ürün için kampanya kur">🚀 Yeni Ürün Launch</button>
     <button onclick="openBatchDlg()" title="6-8 ürünü tek seferde planla, tek dosya indir">📦 Toplu Lansman</button>
+    <button onclick="openRekabetDlg()" title="Teklifim pazarı karşılıyor mu? Gösterim alabilir miyim?">🎯 Rekabet Gücü</button>
     <button onclick="openDoctorDlg()" title="Amazon Bulk Operations dosyanı yükle, düzeltme dosyası al">🩺 Kampanya Doktoru</button>
     <button onclick="openExtDlg()" title="Amazon sayfasından tek tıkla ürün çeken Chrome uzantısı">🧩 Chrome Uzantısı</button>
     <button onclick="helpDlg.showModal()">📖 Rehber</button>
@@ -1236,6 +1237,53 @@ async function docDownload(){
     toast('Düzeltme dosyası indirildi');
   }catch(e){ /* api() zaten toast atti */ }
   finally{ docDlBtn.disabled=false; }
+}
+
+
+// ---- Rekabet Gucu ------------------------------------------------------
+// Kullanicinin en buyuk endisesi: "teklif dusuk kalir, gosterim gelmez".
+// Bu panel onu TAHMIN degil OLCUM olarak gosterir.
+function openRekabetDlg(){
+  if(!currentBrand){ toast('Önce marka seç'); return; }
+  rekOut.innerHTML=''; rekabetDlg.showModal(); rekYukle();
+}
+async function rekYukle(){
+  const a=Number(rekAcos.value||100)/100;
+  rekBtn.disabled=true; rekOut.innerHTML='<p class="muted">Hesaplanıyor…</p>';
+  try{
+    const r=await api(`/api/brands/${currentBrand}/competitiveness?acos_ceiling=${a}`);
+    const d=await r.json();
+    const renk=s=>s==='rahat'?'#22c55e':s==='sinirda'?'#f59e0b':'#ef4444';
+    const etiket=s=>s==='rahat'?'RAHAT':s==='sinirda'?'SINIRDA':'YETMEZ';
+    rekOut.innerHTML=`
+      <div style="padding:10px;border-radius:8px;margin-bottom:12px;
+           background:${d.uncompetitive?'#7f1d1d':'#064e3b'};color:#fff">
+        ${esc(d.verdict)}
+      </div>
+      <table class="tbl"><thead><tr>
+        <th>Match</th><th>Tık başına ciro</th><th>Max teklif</th>
+        <th>Pazar CPC</th><th>Durum</th><th>Rekabet için gereken ACOS</th>
+      </tr></thead><tbody>
+      ${d.rows.map(x=>`<tr>
+        <td><b>${esc(x.match)}</b></td>
+        <td>$${x.revenue_per_click.toFixed(2)}</td>
+        <td>$${x.ceiling.toFixed(2)}</td>
+        <td>$${x.market_cpc.toFixed(2)}</td>
+        <td style="color:${renk(x.status)}"><b>${etiket(x.status)}</b>
+            <span class="muted">(${x.ratio}x)</span></td>
+        <td>${x.acos_to_compete_pct!=null
+              ?`<b style="color:${x.acos_to_compete_pct>d.acos_ceiling_pct?'#f59e0b':'#22c55e'}">
+                 %${x.acos_to_compete_pct}</b>`:'—'}</td>
+      </tr>`).join('')}
+      </tbody></table>
+      <p class="muted" style="margin-top:10px">
+        <b>Nasıl okunur:</b> "Rekabet için gereken ACOS" senin kabul ettiğinden yüksekse,
+        o trafiği almak zarar demektir. Seçeneklerin: (1) daha yüksek ACOS'u bilerek kabul et,
+        (2) sepeti büyüt (paket/çoklu adet), (3) dönüşümü artır (liste, fiyat, yorum),
+        (4) o match type'tan çekil, kârlı olanlara yüklen.
+      </p>`;
+  }catch(e){ rekOut.innerHTML=`<p style="color:#ef4444">${esc(e.message||'Hata')}</p>`; }
+  finally{ rekBtn.disabled=false; }
 }
 
 </script>
@@ -3591,6 +3639,27 @@ loadBrands();
   <div class="row" style="justify-content:flex-end;gap:8px;margin-top:14px">
     <button onclick="doctorDlg.close()">Kapat</button>
     <button id="docDlBtn" onclick="docDownload()" style="display:none">⬇ Düzeltme dosyasını indir</button>
+  </div>
+</dialog>
+
+
+<dialog id="rekabetDlg" style="max-width:820px;width:94vw">
+  <h3>🎯 Rekabet Gücü — teklifim gösterim alabilir mi?</h3>
+  <p class="muted" style="margin:6px 0 12px">
+    Bir tıklama ortalama <b>AOV × CVR</b> kadar ciro getirir. Bu, kabul ettiğin ACOS'ta
+    verebileceğin <b>en yüksek tekliftir</b>. Pazar CPC'sinin altında kalıyorsa
+    o match type'ta gösterim alamazsın — bütçe artırmak bunu çözmez.
+  </p>
+  <div class="row" style="gap:10px;align-items:flex-end;margin-bottom:12px">
+    <label>Kabul ettiğin ACOS %
+      <input type="number" id="rekAcos" value="100" min="10" max="500" step="10" style="width:130px">
+    </label>
+    <button onclick="rekYukle()" id="rekBtn">Hesapla</button>
+    <span class="muted">%100 = reklam harcaması satışa eşit (zarar: ürün maliyeti)</span>
+  </div>
+  <div id="rekOut"></div>
+  <div class="row" style="justify-content:flex-end;margin-top:14px">
+    <button onclick="rekabetDlg.close()">Kapat</button>
   </div>
 </dialog>
 

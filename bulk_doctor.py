@@ -72,7 +72,18 @@ def read_bulk(source):
     """Bulk dosyasini oku. source: dosya yolu ya da bytes."""
     if isinstance(source, (bytes, bytearray)):
         source = io.BytesIO(source)
-    wb = openpyxl.load_workbook(source, data_only=True)
+    # openpyxl xlsx olmayan girdide ValueError DISINDA istisnalar firlatir
+    # (zipfile.BadZipFile, KeyError, ...). Hepsini kullaniciya anlasilir tek
+    # mesaja cevir - yoksa arayuz "Internal Server Error" gosterir.
+    try:
+        wb = openpyxl.load_workbook(source, data_only=True)
+    except ValueError:
+        raise
+    except Exception as e:
+        raise ValueError(
+            "Dosya okunamadi - gecerli bir .xlsx degil ya da bozuk. "
+            "Amazon Ads > Bulk operations > Download ile indirdigin dosyayi "
+            f"sec. (teknik: {type(e).__name__})") from e
     if SHEET not in wb.sheetnames:
         raise ValueError(
             f"'{SHEET}' sayfasi bulunamadi. Bu bir Amazon Bulk Operations "

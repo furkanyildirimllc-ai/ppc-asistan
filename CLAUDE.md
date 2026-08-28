@@ -60,6 +60,7 @@ Analiz: `.../insights`, `.../today`, `.../opportunities`, `POST .../opportunitie
 Export: `.../export`, `.../export-bulksheet`, `.../bulk-readiness`, `.../campaign-ad-groups`
 Ürün: `GET/POST .../products`, `PUT/DELETE /api/products/{id}`
 Lansman: `POST /api/launch/analyze`, `POST /api/launch/bulksheet`
+Rekabet: `GET /api/brands/{id}/competitiveness` (teklif pazarı karşılıyor mu)
 Doktor: `POST /api/brands/{id}/bulk-doctor` (teşhis), `.../bulk-doctor/file` (düzeltme dosyası), `.../bulk-doctor/verify` (yükleme sonrası denetim)
 Eklenti: `/api/extension/files|file/{name}|download`
 
@@ -128,6 +129,13 @@ Seller hesabında ASIN geçerli SKU değildir → Product Ad satırları reddedi
   "profit"e düşmez.
 - **Az veriyle karar verme.** 15 tık altında "kötü" denmez; sıfır sipariş kararı için
   `zero_order_confidence >= %80` aranır.
+- **Kanıtlanmış kelimeye ham CVR ile teklif verme — "kazananın laneti".** Terimleri
+  kazandıkları için seçeriz, ölçülen CVR yukarı sapar. 2 tıkta 1 sipariş = %50 değildir.
+  `benchmarks.shrunk_cvr()` küçük örneği hesap ortalamasına çeker (k=30 tık).
+  `benchmarks.keyword_bid()` bunu kullanır ve teklifi pazar CPC'sinin 3 katıyla sınırlar.
+- **Hesap ortalaması tavanı, kanıtlanmış kelimeye uygulanmaz.** Hasat kelimeleri hesap
+  ortalamasından çok daha iyi dönüşür (ölçüldü: Natural %56 vs hesap %4.67). Hesap
+  tavanını onlara uygulamak teklifi karşılıksız bırakır — gösterim gelmez.
 - **EKONOMİK TAVAN her stratejide son sözdür.** Tıklama başına ciro = AOV × CVR; bu,
   %100 ACOS'taki maksimum tekliftir. Pazar CPC'si bu markanın ekonomisini taşımak
   zorunda değil — pazara çapa atmadan önce tavan gelir. `benchmarks.economic_ceiling()`.

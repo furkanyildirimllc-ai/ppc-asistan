@@ -212,6 +212,60 @@ def economic_ceiling(aov, cvr, acos_ceiling=1.00):
         return 0.0
 
 
+# Kelime bazinda CVR tahmininde "kazananin laneti" (winner's curse):
+# Terimleri KAZANDIKLARI ICIN seciyoruz, dolayisiyla olculen CVR'lari
+# sistematik olarak yukari sapmalidir. 2 tikta 1 siparis alan bir terimin
+# gercek CVR'i %50 degildir - sansli olmustur. Ham degeri ileri dogru
+# yansitmak teklifi fahis yukseltir.
+#
+# Cozum: kucuk ornekleri hesap ortalamasina dogru CEK (shrinkage).
+# k = "prior'a esdeger tiklama sayisi". k=30 ile:
+#    2 tik / 1 siparis, prior %5   -> %8.1  (ham %50 degil)
+#   50 tik / 10 siparis, prior %5  -> %13.8 (ham %20'ye yakin)
+# Ornek buyudukce olculen deger agir basar; kucukken prior korur.
+CVR_SHRINKAGE_K = 30
+
+
+def shrunk_cvr(orders, clicks, prior_cvr, k=CVR_SHRINKAGE_K):
+    """Kucuk orneklem CVR'ini hesap ortalamasina dogru ceker.
+
+    Kanitlanmis kelimelere teklif verirken ham CVR kullanmak, sansi
+    performans sanmaktir. Bu fonksiyon o hatayi engeller.
+    """
+    try:
+        o, c, p = float(orders or 0), float(clicks or 0), float(prior_cvr or 0)
+    except (TypeError, ValueError):
+        return 0.0
+    if c <= 0:
+        return max(p, 0.0)
+    return (o + k * p) / (c + k)
+
+
+def keyword_bid(orders, clicks, sales, prior_cvr, target_acos=1.00,
+                market_cpc=None, max_multiple=3.0):
+    """Kanitlanmis bir kelime icin savunulabilir teklif.
+
+    Ham CVR yerine shrunk CVR kullanir; boylece 1-2 tiklik sansli terimler
+    fahis teklif almaz, gercek kazananlar ise pazari karsilayacak teklif alir.
+
+    market_cpc verilirse teklif onun max_multiple katiyla sinirlanir:
+    olculmus pazarin cok uzerine cikmak parayi bosa harcamaktir (ikinci
+    fiyat acik artirmasinda zaten rakibin uzerini odersin).
+    """
+    try:
+        o, c, sa = float(orders or 0), float(clicks or 0), float(sales or 0)
+    except (TypeError, ValueError):
+        return 0.0
+    cvr = shrunk_cvr(o, c, prior_cvr)
+    aov = (sa / o) if o > 0 else 0.0
+    if aov <= 0:
+        return 0.0
+    bid = aov * cvr * float(target_acos or 0)
+    if market_cpc and market_cpc > 0:
+        bid = min(bid, float(market_cpc) * max_multiple)
+    return round(max(bid, 0.15), 2)
+
+
 def spend_capacity(campaign_rows, days=30):
     """Bir hesabin GERCEKTE ne kadar harcayabildigini olcer.
 

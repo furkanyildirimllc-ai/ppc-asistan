@@ -1676,7 +1676,9 @@ def _marka_hedefleri(brand_id):
         rows = _load_rows(c, brand_id, "targeting")
         brand = c.execute("SELECT * FROM brands WHERE id=?",
                           (brand_id,)).fetchone()
-    b = dict(brand) if brand else {}
+    if brand is None:
+        raise HTTPException(404, "Marka bulunamadi")
+    b = dict(brand)
     bench = benchmarks.resolve(rows=rows, brand_id=brand_id,
                                brand_name=b.get("name"))
     acct = bench.get("account") or {}
@@ -1739,6 +1741,61 @@ async def bulk_doctor_teshis(brand_id: int, file: UploadFile,
     }
 
 
+@app.get("/api/brands/{brand_id}/competitiveness")
+def rekabet_gucu(brand_id: int, acos_ceiling: float = 1.00):
+    """TEKLIFIM PAZARI KARSILIYOR MU?
+
+    Kullanicinin en buyuk endisesi: teklif dusuk kalir, gosterim gelmez,
+    ciro tutmaz. Bu uc onu OLCER - tahmin degil, olculmus veriyle.
+
+    Ekonomik tavan (tiklama basina ciro x kabul edilen ACOS) pazar CPC'sini
+    karsilamiyorsa, o match type'ta rekabet edilemez. Cozum ya sepeti/CVR'i
+    buyutmek ya da daha yuksek ACOS'u bilerek kabul etmektir.
+    """
+    with db() as c:
+        rows = _load_rows(c, brand_id, "targeting")
+        brand = c.execute("SELECT * FROM brands WHERE id=?", (brand_id,)).fetchone()
+    if brand is None:
+        raise HTTPException(404, "Marka bulunamadi")
+    if not rows:
+        raise HTTPException(400, "Targeting raporu yok - once veri yukle.")
+    bench = benchmarks.resolve(rows=rows, brand_name=dict(brand).get("name"))
+    acct = bench.get("account") or {}
+    out = []
+    for k in ("exact", "phrase", "broad", "auto", "pt"):
+        cvr = (bench.get("cvr") or {}).get(k)
+        cpc = (bench.get("cpc") or {}).get(k)
+        aov = (bench.get("aov") or {}).get(k) or acct.get("aov")
+        if not cvr or not cpc or not aov:
+            continue
+        rpc = round(aov * cvr, 2)                 # tiklama basina ciro
+        tavan = benchmarks.economic_ceiling(aov, cvr, acos_ceiling)
+        oran = (tavan / cpc) if cpc else 0
+        out.append({
+            "match": k,
+            "revenue_per_click": rpc,
+            "ceiling": tavan,
+            "market_cpc": round(cpc, 2),
+            "ratio": round(oran, 2),
+            "status": ("rahat" if oran >= 1.15 else
+                       "sinirda" if oran >= 0.95 else "yetmez"),
+            # Pazari karsilamak icin kabul edilmesi gereken ACOS
+            "acos_to_compete_pct": round(cpc / rpc * 100) if rpc else None,
+        })
+    yetmez = [o for o in out if o["status"] == "yetmez"]
+    return {
+        "brand": dict(brand).get("name"),
+        "acos_ceiling_pct": round(acos_ceiling * 100),
+        "rows": out,
+        "uncompetitive": len(yetmez),
+        "verdict": ("Mevcut ekonomiyle pazarda rekabet edebilirsin."
+                    if not yetmez else
+                    f"{len(yetmez)} match type'ta teklif pazari karsilamiyor - "
+                    f"gosterim alamazsin. Ya daha yuksek ACOS kabul et, ya "
+                    f"sepeti/donusumu buyut."),
+    }
+
+
 @app.post("/api/brands/{brand_id}/bulk-doctor/verify")
 async def bulk_doctor_dogrula(brand_id: int, file: UploadFile,
                               acos_ceiling: float = 1.00):
@@ -1754,7 +1811,9 @@ async def bulk_doctor_dogrula(brand_id: int, file: UploadFile,
     with db() as c:
         rows = _load_rows(c, brand_id, "targeting")
         brand = c.execute("SELECT * FROM brands WHERE id=?", (brand_id,)).fetchone()
-    ad = (dict(brand).get("name") if brand else None)
+    if brand is None:
+        raise HTTPException(404, "Marka bulunamadi")
+    ad = dict(brand).get("name")
     tavan = verify_mod.ceilings_for(rows, ad, acos_ceiling) if rows else None
     sonuc = verify_mod.audit(bulk, ceilings=tavan)
     sonuc["ceilings"] = tavan
