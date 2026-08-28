@@ -1,4 +1,4 @@
-# PPC Asistan — proje haritası
+# Performans Analiz Uzmanı — proje haritası
 
 Amazon Sponsored Products için AI destekli optimizasyon aracı. FastAPI + vanilla JS + SQLite.
 Toplam ~10.700 satır. **Bu dosya, kod okumadan doğru yeri bulmak içindir — önce burayı oku, sonra sadece gereken dosyayı/satır aralığını aç.**
@@ -34,6 +34,8 @@ Ayrı hat (yeni ürün lansmanı):
 | `insights.py` | 801 | Dashboard, KPI, sağlık skoru, SKAG/TOS/brand-defense, `campaign_advisor` |
 | `analysis.py` | 684 | Deterministik motor: harvest, negatif, bid, placement, bütçe |
 | `launch.py` | 547 | Yeni ürün lansman planı + lansman bulksheet'i |
+| `growth.py` | 190 | **Hedef planlayıcı**: %30 marjlı büyüme planı + açığı kapatacak kaldıraçlar (CTR/CVR/AOV/hacim) |
+| `listing.py` | 220 | **Listing optimizasyonu**: reklam verisinden başlık/bullet/arka plan önerisi, rakip marka koruması |
 | `verify.py` | 210 | **Yükleme sonrası denetim**: hesabın son hali kurallara uyuyor mu (yazılana değil, olana bakar) |
 | `bulk_doctor.py` | 250 | **Canlı hesap doktoru**: Bulk Operations dosyasını okur, teşhis eder, `Operation=Update` düzeltme dosyası üretir |
 | `benchmarks.py` | 600 | Ölçülmüş CVR/CPC/AOV çözümleyici, marka izolasyonu, harcama kapasitesi |
@@ -61,6 +63,8 @@ Export: `.../export`, `.../export-bulksheet`, `.../bulk-readiness`, `.../campaig
 Ürün: `GET/POST .../products`, `PUT/DELETE /api/products/{id}`
 Lansman: `POST /api/launch/analyze`, `POST /api/launch/bulksheet`
 Rekabet: `GET /api/brands/{id}/competitiveness` (teklif pazarı karşılıyor mu)
+Büyüme: `POST /api/brands/{id}/growth-plan` (%30 marjlı hedef planı)
+Listing: `GET /api/brands/{id}/listing-plan` (başlık/arka plan önerisi)
 Doktor: `POST /api/brands/{id}/bulk-doctor` (teşhis), `.../bulk-doctor/file` (düzeltme dosyası), `.../bulk-doctor/verify` (yükleme sonrası denetim)
 Eklenti: `/api/extension/files|file/{name}|download`
 
@@ -143,6 +147,16 @@ Seller hesabında ASIN geçerli SKU değildir → Product Ad satırları reddedi
   noktalama yok, ASCII dışı yok. Arama terimi ≠ geçerli kelime.
 - **`enforce_budget_floor()` asla boş dönmez.** Bütçe hiçbir kampanyayı taşımıyorsa en
   öncelikli kampanya korunur ve bütçesi yükseltilir; boş dosya üretmek daha kötüdür.
+
+- **Öneri üreten her yol `analysis.cap_recommendations()`'dan geçer.** Ham CVR yerine
+  `benchmarks.shrunk_cvr()` kullanılır — 3 siparişle %20 CVR görüp bid'i +%40 artırmak
+  kazananın lanetidir.
+- **Rakip marka adı reklamda meşru, listede ihlaldir.** Arama terimi raporundaki en kârlı
+  terimler sık sık rakip markadır. `listing.looks_like_brand()` bunları ayırır; şüpheliyse
+  listeye yazmamak doğru taraftır (asimetrik risk: yanlış pozitif = küçük kayıp,
+  yanlış negatif = liste askıya alınır).
+- **Projeksiyon %30 marjla yapılır** (`growth.SAFETY_MARGIN`). Hedefe tam oturan plan,
+  %30 sapmada hedefi kaçırır.
 
 ### Kural yazmak ≠ kural uygulamak
 

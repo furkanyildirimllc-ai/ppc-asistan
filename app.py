@@ -26,6 +26,8 @@ import launch as launch_mod
 import benchmarks
 import bulk_doctor
 import verify as verify_mod
+import growth as growth_mod
+import listing as listing_mod
 import chat as chat_mod
 import market_intel
 import brain
@@ -1739,6 +1741,80 @@ async def bulk_doctor_teshis(brand_id: int, file: UploadFile,
         "actions": d["actions"],
         "untouched": d["notes"],
     }
+
+
+def _kampanya_ozeti(bulk):
+    """Bulk dosyasindan growth.plan() girdisi uretir."""
+    g = lambda r, k: bulk_doctor._get(bulk, r, k)
+    ag = {g(r, "Campaign ID"): bulk_doctor._f(g(r, "Ad Group Default Bid"))
+          for r in bulk["rows"] if g(r, "Entity") == "Ad Group"}
+    out = []
+    for r in bulk["rows"]:
+        if g(r, "Entity") != "Campaign" or g(r, "State") != "enabled":
+            continue
+        out.append({
+            "name": str(g(r, "Campaign Name") or ""),
+            "budget": bulk_doctor._f(g(r, "Daily Budget")),
+            "spend": bulk_doctor._f(g(r, "Spend")),
+            "sales": bulk_doctor._f(g(r, "Sales")),
+            "clicks": bulk_doctor._f(g(r, "Clicks")),
+            "orders": bulk_doctor._f(g(r, "Orders")),
+            "impressions": bulk_doctor._f(g(r, "Impressions")),
+            "bid": ag.get(g(r, "Campaign ID"), 0),
+        })
+    return out
+
+
+@app.post("/api/brands/{brand_id}/growth-plan")
+async def buyume_plani(brand_id: int, file: UploadFile,
+                       monthly_target: float = 5000, days: int = 30,
+                       accepted_acos: float = None):
+    """Hedefe giden plan - %30 guvenlik marjiyla.
+
+    Reklam olceklemesi hedefi karsilamiyorsa ACIGI ve onu kapatacak
+    kaldiraclari (CTR/CVR/AOV/hacim) sayisal olarak dondurur."""
+    ham = await file.read()
+    try:
+        bulk = bulk_doctor.read_bulk(ham)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    kamp = _kampanya_ozeti(bulk)
+    for k in kamp:
+        k["days"] = days
+    pl = growth_mod.plan(kamp, monthly_target, days=days,
+                         accepted_acos_pct=accepted_acos)
+    im = sum(k["impressions"] for k in kamp)
+    cl = sum(k["clicks"] for k in kamp)
+    o = sum(k["orders"] for k in kamp)
+    sa = sum(k["sales"] for k in kamp)
+    ay = max(days / 30.0, 0.01)
+    pl["levers"] = growth_mod.gap_levers(
+        pl["gap_monthly"], cl / ay, (o / cl if cl else 0),
+        (sa / o if o else 0), (cl / im if im else 0), im / ay)
+    pl["funnel"] = {"impressions": round(im), "clicks": round(cl),
+                    "orders": round(o), "sales": round(sa, 2),
+                    "ctr_pct": round(cl / im * 100, 2) if im else 0,
+                    "cvr_pct": round(o / cl * 100, 2) if cl else 0,
+                    "aov": round(sa / o, 2) if o else 0}
+    return pl
+
+
+@app.get("/api/brands/{brand_id}/listing-plan")
+def listing_plani(brand_id: int, asin: str = "", title: str = ""):
+    """Reklam verisinden baslik/bullet/arka plan onerisi.
+
+    Uydurma kelime onermez - yalnizca SATIS uretmis terimlerden calisir.
+    Rakip marka adlarini ayirir (reklamda mesru, listede ihlal)."""
+    with db() as c:
+        rows = _load_rows(c, brand_id, "search_term")
+        brand = c.execute("SELECT * FROM brands WHERE id=?", (brand_id,)).fetchone()
+    if brand is None:
+        raise HTTPException(404, "Marka bulunamadi")
+    if not rows:
+        raise HTTPException(400, "Arama terimi raporu yok - once yukle.")
+    if asin:
+        rows = [r for r in rows if benchmarks.asin_of_row(r) == asin.upper()] or rows
+    return listing_mod.suggest(rows, title, dict(brand).get("name") or "")
 
 
 @app.get("/api/brands/{brand_id}/competitiveness")

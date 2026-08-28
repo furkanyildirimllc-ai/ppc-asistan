@@ -428,6 +428,53 @@ def expansion(brand, targets):
     return recs
 
 
+def cap_recommendations(recs, targets, aov, acos_ceiling=1.00):
+    """HER bid onerisini ekonomik tavana karsi kirpar. TEK KAPI.
+
+    NEDEN: bir tiklama ortalama (aov x cvr) kadar ciro getirir. Bunun
+    uzerinde teklif vermek yapisal olarak zarar satin almaktir - hicbir
+    "organik siralama" ya da "buyume" gerekcesi bunu degistirmez.
+
+    Olculdu (bu hesapta): tavan asilan kampanyalarda ACOS %353'e cikti,
+    kullanicinin kendi eski kampanyalari (%114) belirgin daha iyiydi.
+
+    Ayrica kirpilan oneriye SEBEP yazilir - sessizce kismayiz.
+    """
+    if not recs:
+        return recs
+    # Match type bazinda tavan; olcum yoksa hesap ortalamasi.
+    m = benchmarks.measure(targets) if targets else {}
+    acct = m.get("_account") or {}
+    hesap_cvr = acct.get("cvr") or 0
+    tavanlar = {}
+    for k in ("exact", "phrase", "broad", "auto", "pt"):
+        d = m.get(k) or {}
+        cvr = d.get("cvr") if d.get("clicks", 0) >= 100 else hesap_cvr
+        a = (d["sales"] / d["orders"]) if d.get("orders", 0) >= 5 else aov
+        tv = benchmarks.economic_ceiling(a, cvr, acos_ceiling)
+        if tv > 0:
+            tavanlar[k] = tv
+    genel = benchmarks.economic_ceiling(aov, hesap_cvr, acos_ceiling)
+
+    for r in recs:
+        yeni = r.get("suggested_value")
+        if not isinstance(yeni, (int, float)) or yeni <= 0:
+            continue
+        mt = str(r.get("match_type") or "").lower()
+        anahtar = ("exact" if "exact" in mt else "phrase" if "phrase" in mt
+                   else "broad" if "broad" in mt else "auto" if "auto" in mt
+                   else "pt" if "asin" in mt or "product" in mt else None)
+        tv = tavanlar.get(anahtar) or genel
+        if tv > 0 and yeni > tv:
+            r["suggested_value"] = round(tv, 2)
+            r["capped_from"] = round(yeni, 2)
+            r["reason"] = (str(r.get("reason") or "") +
+                           f" ⛔ EKONOMİK TAVAN: önerilen ${yeni:.2f} yerine ${tv:.2f} "
+                           f"uygulandı — bir tıklama ortalama ${tv:.2f} ciro getiriyor, "
+                           f"üzerinde teklif vermek yapısal zarardır.")
+    return recs
+
+
 def bids(brand, targets, aov):
     """Kural 1-3: Ciro Odakli RPC bazli bid onerileri."""
     tacos = brand["target_acos"]
@@ -446,7 +493,11 @@ def bids(brand, targets, aov):
             continue
         acos = spend / sales if sales > 0 else None
         rpc = sales / clicks if clicks else 0
-        cvr = orders / clicks if clicks else 0  # Conversion Rate (Donusum Orani)
+        # HAM CVR DEGIL SHRUNK CVR. 3 siparis / 15 tik = %20 gorunur ama
+        # gercek degildir; kelimeleri iyi performansi ICIN sectigimiz surece
+        # olculen CVR yukari sapar (kazananin laneti). Kucuk ornegi hesap
+        # ortalamasina cekeriz; ornek buyudukce olculen deger agir basar.
+        cvr = benchmarks.shrunk_cvr(orders, clicks, acc_cvr)
         
         # 🚀 UZMAN STRATEJISI: ORGANIC RANKING PUSH (Sira Yukseltme)
         # Eger donusum orani (CVR) %15'in uzerindeyse, bu kelime tam bu urune gore!
@@ -550,7 +601,7 @@ def bids(brand, targets, aov):
             "auto_apply": auto_apply
         })
     recs.sort(key=lambda r: -r["metrics"]["spend"])
-    return recs
+    return cap_recommendations(recs, targets, aov)
 
 
 # Performans raporundaki placement metnini Amazon Bulk'un resmi enum degerine

@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>PPC Asistan</title>
+<title>Performans Analiz Uzmanı</title>
 <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
   :root {
@@ -620,12 +620,14 @@
 <body>
 <header>
   <div class="h-group">
-    <h1>PPC <span>Asistan</span> <span class="ver">v1.3 · pro</span></h1>
+    <h1>Performans <span>Analiz Uzmanı</span> <span class="ver">v2.0 · faz motoru</span></h1>
     <select id="brandSel" onchange="selectBrand(this.value)"></select>
     <button onclick="openBrandDialog()">+ Marka</button>
     <button onclick="openBrandDialog(true)" id="editBtn" style="display:none">⚙ Ayarlar</button>
     <button onclick="openLaunchDlg()" title="Sıfır geçmişli yeni ürün için kampanya kur">🚀 Yeni Ürün Launch</button>
     <button onclick="openBatchDlg()" title="6-8 ürünü tek seferde planla, tek dosya indir">📦 Toplu Lansman</button>
+    <button onclick="openBuyumeDlg()" title="Hedefe giden plan — %30 güvenlik marjıyla">📈 Büyüme Planı</button>
+    <button onclick="openListingDlg()" title="Reklam verisinden başlık/bullet önerisi">📝 Listing Planı</button>
     <button onclick="openRekabetDlg()" title="Teklifim pazarı karşılıyor mu? Gösterim alabilir miyim?">🎯 Rekabet Gücü</button>
     <button onclick="openDoctorDlg()" title="Amazon Bulk Operations dosyanı yükle, düzeltme dosyası al">🩺 Kampanya Doktoru</button>
     <button onclick="openExtDlg()" title="Amazon sayfasından tek tıkla ürün çeken Chrome uzantısı">🧩 Chrome Uzantısı</button>
@@ -1284,6 +1286,95 @@ async function rekYukle(){
       </p>`;
   }catch(e){ rekOut.innerHTML=`<p style="color:#ef4444">${esc(e.message||'Hata')}</p>`; }
   finally{ rekBtn.disabled=false; }
+}
+
+
+// ---- Buyume Plani ------------------------------------------------------
+function openBuyumeDlg(){
+  if(!currentBrand){ toast('Önce marka seç'); return; }
+  buyOut.innerHTML=''; buyumeDlg.showModal();
+}
+async function buyYukle(){
+  const f=buyFile.files[0];
+  if(!f){ toast('Bulk Operations dosyasını seç'); return; }
+  const fd=new FormData(); fd.append('file',f);
+  buyBtn.disabled=true; buyOut.innerHTML='<p class="muted">Hesaplanıyor…</p>';
+  try{
+    const q=`monthly_target=${buyHedef.value}&days=${buyGun.value}&accepted_acos=${buyAcos.value}`;
+    const r=await api(`/api/brands/${currentBrand}/growth-plan?${q}`,{method:'POST',body:fd});
+    const d=await r.json(); const fn=d.funnel;
+    buyOut.innerHTML=`
+      <div style="padding:12px;border-radius:8px;margin-bottom:12px;
+           background:${d.reaches_target?'#064e3b':'#78350f'};color:#fff">
+        <b style="font-size:15px">${d.reaches_target
+          ? '✓ Reklam ölçeklemesi hedefi karşılıyor'
+          : `⚠ Reklam ölçeklemesi yetmiyor — açık $${d.gap_monthly.toLocaleString()}/ay`}</b><br>
+        <span style="opacity:.9">hedef $${d.monthly_target.toLocaleString()} →
+        %${d.margin_pct} marjla $${d.target_with_margin.toLocaleString()} ·
+        projeksiyon $${d.projected_monthly_sales.toLocaleString()}/ay ·
+        ACOS %${d.projected_acos_pct ?? '—'}</span>
+      </div>
+      <p class="muted">Huni: ${fn.impressions.toLocaleString()} gösterim →
+        ${fn.clicks} tık (CTR %${fn.ctr_pct}) → ${fn.orders} sipariş
+        (CVR %${fn.cvr_pct}) → $${fn.sales.toLocaleString()} (AOV $${fn.aov})</p>
+      <h4 style="margin:14px 0 6px">Ölçeklenecek kampanyalar</h4>
+      <table class="tbl"><thead><tr><th>Kampanya</th><th>ROAS</th><th>Kısıt</th>
+        <th>Aksiyon</th><th>Beklenen/ay</th></tr></thead><tbody>
+      ${d.allocations.map(a=>`<tr>
+        <td style="max-width:260px">${esc(a.name)}</td>
+        <td><b>${a.roas}x</b></td>
+        <td><span style="color:${a.limit==='butce'?'#22c55e':'#f59e0b'}">${esc(a.limit)}</span></td>
+        <td>${esc(a.action)}</td>
+        <td><b>$${a.projected_monthly_sales.toLocaleString()}</b></td></tr>`).join('')}
+      </tbody></table>
+      ${d.levers.length?`<h4 style="margin:16px 0 6px">Açığı kapatacak kaldıraçlar</h4>
+      <table class="tbl"><thead><tr><th>Kaldıraç</th><th>Şimdi</th><th>Gereken</th>
+        <th>Nasıl</th><th>Maliyet</th></tr></thead><tbody>
+      ${d.levers.map(l=>`<tr${l.lever.includes('ÜÇÜ')?' style="background:rgba(34,197,94,.12)"':''}>
+        <td><b>${esc(l.lever)}</b></td><td>${esc(l.current)}</td><td><b>${esc(l.needed)}</b></td>
+        <td>${esc(l.how)}</td><td class="muted">${esc(l.cost)}</td></tr>`).join('')}
+      </tbody></table>`:''}`;
+  }catch(e){ buyOut.innerHTML=`<p style="color:#ef4444">${esc(e.message||'Hata')}</p>`; }
+  finally{ buyBtn.disabled=false; }
+}
+
+// ---- Listing Plani -----------------------------------------------------
+function openListingDlg(){
+  if(!currentBrand){ toast('Önce marka seç'); return; }
+  lisOut.innerHTML=''; listingDlg.showModal();
+}
+async function lisYukle(){
+  lisBtn.disabled=true; lisOut.innerHTML='<p class="muted">Analiz ediliyor…</p>';
+  try{
+    const r=await api(`/api/brands/${currentBrand}/listing-plan?title=`+
+                      encodeURIComponent(lisTitle.value||''));
+    const d=await r.json(); const bk=d.backend_keywords;
+    lisOut.innerHTML=`
+      <h4 style="margin:10px 0 6px">Başlığa ekle — satış üretiyor ama başlıkta yok</h4>
+      ${d.missing_from_title.length?`<table class="tbl"><thead><tr><th>Tema</th>
+        <th>Terim</th><th>Satış</th><th>ROAS</th></tr></thead><tbody>
+      ${d.missing_from_title.map(t=>`<tr><td><b>${esc(t.theme)}</b></td>
+        <td>${t.terms}</td><td>$${t.sales}</td><td>${t.roas}x</td></tr>`).join('')}
+      </tbody></table>
+      <p style="margin-top:8px"><b>İlk 80 karaktere koy</b> (mobilde sadece bu görünür):
+        <code>${d.title_priority.map(esc).join(' · ')}</code></p>`
+      :'<p class="muted">Başlık zaten satış üreten temaları içeriyor.</p>'}
+      ${d.remove_from_title.length?`<h4 style="margin:14px 0 6px">Başlıktan çıkar — para yakıyor</h4>
+        <ul>${d.remove_from_title.map(t=>
+          `<li><b>${esc(t.theme)}</b> — $${t.spend} harcandı, 0 satış</li>`).join('')}</ul>`:''}
+      ${d.competitor_brands.length?`<div style="padding:10px;border-radius:8px;
+        background:#7f1d1d;color:#fff;margin:14px 0">
+        <b>⚠ Rakip marka uyarısı</b><br>${esc(d.competitor_warning)}<br>
+        <span style="opacity:.9">${d.competitor_brands.map(t=>
+          `${esc(t.theme)} ($${t.sales}, ${t.roas}x)`).join(' · ')}</span></div>`:''}
+      <h4 style="margin:14px 0 6px">Arka plan arama terimleri
+        <span class="muted">(${bk.bytes}/${bk.limit} byte)</span></h4>
+      <code style="display:block;padding:10px;background:rgba(128,128,128,.12);
+        border-radius:6px;word-break:break-word">${esc(bk.keywords.join(' '))}</code>
+      <p class="muted" style="margin-top:8px">Başlıkta zaten olan kelimeler buraya
+        yazılmaz — 249 byte'lık alan israf olur.</p>`;
+  }catch(e){ lisOut.innerHTML=`<p style="color:#ef4444">${esc(e.message||'Hata')}</p>`; }
+  finally{ lisBtn.disabled=false; }
 }
 
 </script>
@@ -2515,7 +2606,7 @@ async function openBulkWizard(){
         <div class="num">✓</div>
         <div class="body">
           <div class="title">Bittiği zaman:</div>
-          <div class="desc">1 hafta bekle → yeni rapor indir → PPC Asistan'a yükle → süreci tekrar et. Amazon attribution 2-3 gün geç, dolayısıyla dünkü değişiklikleri hemen ölçme.</div>
+          <div class="desc">1 hafta bekle → yeni rapor indir → Performans Analiz Uzmanı'na yükle → süreci tekrar et. Amazon attribution 2-3 gün geç, dolayısıyla dünkü değişiklikleri hemen ölçme.</div>
         </div>
       </div>
 
@@ -3373,7 +3464,7 @@ function renderLaunchChecklist(plan) {
         { text: 'Kârlı Exact kelimelerin bid\'ini kademeli (+%10) artır', tip: 'Birden fazla artış yapma — 2-3 günde bir kontrol et' },
         { text: 'Top of Search ACOS düşükse placement multiplier +%25 ekle', tip: 'Campaign Settings → Adjust bids by placement' },
         { text: 'Kazanan kampanyanın günlük bütçesini %20-30 artır', tip: 'Bütçe erken tükeniyorsa zaten artırman lazım' },
-        { text: 'İlk 14 günlük verileri PPC Asistan\'a yükle — tam AI analiz al', tip: 'Search Term + Targeting raporlarını yükle → AI Strateji çalıştır' },
+        { text: 'İlk 14 günlük verileri Performans Analiz Uzmanı\'na yükle — tam AI analiz al', tip: 'Search Term + Targeting raporlarını yükle → AI Strateji çalıştır' },
         { text: 'Genel ACOS hedefinin altında mı kontrol et', tip: `Hedef ACOS: %${e.recommended_target_acos_pct || Math.round(beAcos * 0.7)}` },
       ]
     }
@@ -3661,6 +3752,43 @@ loadBrands();
   <div class="row" style="justify-content:flex-end;margin-top:14px">
     <button onclick="rekabetDlg.close()">Kapat</button>
   </div>
+</dialog>
+
+
+<dialog id="buyumeDlg" style="max-width:960px;width:96vw">
+  <h3>📈 Büyüme Planı — hedefe giden yol, %30 güvenlik marjıyla</h3>
+  <p class="muted" style="margin:6px 0 12px">
+    Projeksiyonlar sapar: ölçek büyüdükçe CPC artar, CVR düşer. Hedefe <b>tam</b>
+    oturan plan %30 sapmada hedefi kaçırır. Bu yüzden hedefin %30 üstüne planlanır.
+  </p>
+  <div class="row" style="gap:10px;align-items:flex-end;flex-wrap:wrap;margin-bottom:12px">
+    <label style="flex:1;min-width:240px">Bulk Operations dosyası
+      <input type="file" id="buyFile" accept=".xlsx"></label>
+    <label>Aylık hedef $<input type="number" id="buyHedef" value="5000" step="500" style="width:120px"></label>
+    <label>Rapor gün<input type="number" id="buyGun" value="60" style="width:90px"></label>
+    <label>Kabul ACOS %<input type="number" id="buyAcos" value="100" style="width:110px"></label>
+    <button onclick="buyYukle()" id="buyBtn">Planla</button>
+  </div>
+  <div id="buyOut"></div>
+  <div class="row" style="justify-content:flex-end;margin-top:14px">
+    <button onclick="buyumeDlg.close()">Kapat</button></div>
+</dialog>
+
+<dialog id="listingDlg" style="max-width:880px;width:94vw">
+  <h3>📝 Listing Planı — reklam verisinden başlık önerisi</h3>
+  <p class="muted" style="margin:6px 0 12px">
+    Anahtar kelime araçları arama <b>hacmini</b> gösterir, <b>dönüşümü</b> değil.
+    Bu panel yalnızca senin reklamında <b>satış üretmiş</b> terimlerden çalışır —
+    uydurma kelime önermez.
+  </p>
+  <div class="row" style="gap:10px;align-items:flex-end;margin-bottom:12px">
+    <label style="flex:1">Mevcut başlığın (varsa)
+      <input type="text" id="lisTitle" placeholder="Ürünün Amazon'daki başlığını yapıştır"></label>
+    <button onclick="lisYukle()" id="lisBtn">Analiz Et</button>
+  </div>
+  <div id="lisOut"></div>
+  <div class="row" style="justify-content:flex-end;margin-top:14px">
+    <button onclick="listingDlg.close()">Kapat</button></div>
 </dialog>
 
 </body>
