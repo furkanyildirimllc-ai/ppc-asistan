@@ -34,6 +34,8 @@ Ayrı hat (yeni ürün lansmanı):
 | `insights.py` | 801 | Dashboard, KPI, sağlık skoru, SKAG/TOS/brand-defense, `campaign_advisor` |
 | `analysis.py` | 684 | Deterministik motor: harvest, negatif, bid, placement, bütçe |
 | `launch.py` | 547 | Yeni ürün lansman planı + lansman bulksheet'i |
+| `bulk_doctor.py` | 250 | **Canlı hesap doktoru**: Bulk Operations dosyasını okur, teşhis eder, `Operation=Update` düzeltme dosyası üretir |
+| `benchmarks.py` | 600 | Ölçülmüş CVR/CPC/AOV çözümleyici, marka izolasyonu, harcama kapasitesi |
 | `bulksheet.py` | 541 | Amazon Bulk Operations formatı (kolon sırası kritik) |
 | `extension/popup.js` | 471 | Chrome eklentisi UI |
 | `parsers.py` | 375 | Excel okuma + rapor tipi tespiti + satır normalizasyonu |
@@ -57,6 +59,7 @@ Analiz: `.../insights`, `.../today`, `.../opportunities`, `POST .../opportunitie
 Export: `.../export`, `.../export-bulksheet`, `.../bulk-readiness`, `.../campaign-ad-groups`
 Ürün: `GET/POST .../products`, `PUT/DELETE /api/products/{id}`
 Lansman: `POST /api/launch/analyze`, `POST /api/launch/bulksheet`
+Doktor: `POST /api/brands/{id}/bulk-doctor` (teşhis), `.../bulk-doctor/file` (düzeltme dosyası)
 Eklenti: `/api/extension/files|file/{name}|download`
 
 ## DB (ppc.db, SQLite — git'te değil)
@@ -105,6 +108,25 @@ gerçek yüklemede kabul edildiği doğrulandı.
 
 **SKU tuzağı:** `launch.py` SKU boşsa ASIN'e düşer (`sku = product.get("sku") or asin`).
 Seller hesabında ASIN geçerli SKU değildir → Product Ad satırları reddedilir. Formda SKU doldurulmalı.
+
+## Kritik hesap kuralları (bozarsan sayılar sessizce yanlış çıkar)
+
+- **`RELATIVE_CVR` ve `RELATIVE_CPC` aynı tabana göredir: hesap ortalaması = 1.00.**
+  Biri phrase tabanına göre yazılıp diğeriyle aynı şekilde çarpılırsa tüm CVR
+  tahminleri ~%20 kayar. Değiştirmeden önce gerçek veriyle kalibre et.
+- **Lansman rampası (0.65) yalnızca ÖLÇÜM YOKKEN uygulanır.** Ölçülmüş CVR zaten
+  gerçek; rampa uygulamak bid'i olması gerekenin altına indirir.
+- **Bütçe harcama değildir.** Bu hesapta bütçenin %19-28'i harcanıyor. Bütçe kısıtlı
+  (kullanım ≥%80) ve talep kısıtlı (<%30) kampanyaların çözümü ZITTIR: biri bütçe,
+  diğeri teklif ister. `benchmarks.spend_capacity()` bunu ayırır.
+- **Bütçe ≥ teklif × 5.** Altındaysa kampanya günde 5 tıklama bile alamaz, ölü doğar.
+  `launch.enforce_budget_floor()` ve `bulk_doctor.MIN_CLICKS_PER_DAY` bunu uygular.
+- **Kampanya raporunda Campaign ID YOKTUR.** Güncelleme dosyası yalnızca Bulk
+  Operations indirmesinden üretilebilir.
+- **Sessiz düşüş yasak.** Bilinmeyen bid stratejisi `ValueError` fırlatır; sessizce
+  "profit"e düşmez.
+- **Az veriyle karar verme.** 15 tık altında "kötü" denmez; sıfır sipariş kararı için
+  `zero_order_confidence >= %80` aranır.
 
 ## Konvansiyonlar
 

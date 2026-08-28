@@ -3,6 +3,7 @@ Calistir: .venv/bin/uvicorn app:app --port 8642
 """
 import io
 import json
+import re
 import sqlite3
 import zipfile
 from datetime import datetime
@@ -22,6 +23,8 @@ import supervisor
 import insights
 import bulksheet
 import launch as launch_mod
+import benchmarks
+import bulk_doctor
 import chat as chat_mod
 import market_intel
 import brain
@@ -1652,6 +1655,122 @@ def launch_batch(body: BatchLaunchIn):
     if not planlar:
         raise HTTPException(500, f"Hicbir plan uretilemedi: {hatalar[:2]}")
     return {"plans": planlar, "errors": hatalar}
+
+
+# ---------------------------------------------------------------- bulk doktor
+# Amazon konsol raporlarinda Campaign ID YOKTUR; guncelleme dosyasi ancak
+# Bulk Operations indirmesinden uretilebilir. Bu iki uc onu yapar.
+
+def _sayi(v):
+    try:
+        return float(v)
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def _marka_hedefleri(brand_id):
+    """Markanin OLCULMUS CVR'i ve hedef ACOS'u. Varsayim uretmez -
+    olcum yoksa cagiran tarafa None doner ve kullaniciya sorulur."""
+    with db() as c:
+        rows = _load_rows(c, brand_id, "targeting")
+        brand = c.execute("SELECT * FROM brands WHERE id=?",
+                          (brand_id,)).fetchone()
+    b = dict(brand) if brand else {}
+    bench = benchmarks.resolve(rows=rows, brand_id=brand_id,
+                               brand_name=b.get("name"))
+    acct = bench.get("account") or {}
+    # Hedef ACOS oncelik sirasi:
+    #   1) cagirinin verdigi deger (endpoint parametresi)
+    #   2) break-even  - fiyat/maliyet girilmisse hesaplanir
+    #   3) markanin kayitli hedef ACOS'u
+    # Ucu de yoksa VARSAYIM URETILMEZ; kullaniciya sorulur.
+    be = None
+    fiyat = _sayi(b.get("sell_price"))
+    if fiyat > 0:
+        econ = launch_mod.break_even(
+            fiyat, _sayi(b.get("cogs")),
+            _sayi(b.get("amazon_fee_pct")) or 0.15, _sayi(b.get("fba_fee")))
+        be = econ.get("break_even_acos_pct")
+    if not be:
+        kayitli = _sayi(b.get("target_acos"))
+        if kayitli > 0:
+            # target_acos oran olarak tutulur (0.30 = %30)
+            be = kayitli * 100 if kayitli <= 1 else kayitli
+    return {"cvr": acct.get("cvr"), "cvr_clicks": acct.get("clicks"),
+            "break_even_acos_pct": be, "cpc": acct.get("cpc"),
+            "brand_name": b.get("name"),
+            "acos_source": ("break-even (fiyat/maliyetten)" if fiyat > 0
+                            else "markanin kayitli hedef ACOS'u")}
+
+
+@app.post("/api/brands/{brand_id}/bulk-doctor")
+async def bulk_doctor_teshis(brand_id: int, file: UploadFile,
+                             target_acos: float = None):
+    """Bulk Operations dosyasini teshis et. Dosya URETMEZ - once gosterir."""
+    ham = await file.read()
+    try:
+        bulk = bulk_doctor.read_bulk(ham)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+    h = _marka_hedefleri(brand_id)
+    if not h["cvr"]:
+        raise HTTPException(400,
+            "Bu marka icin olculmus donusum orani yok. Once Targeting "
+            "raporunu yukle - varsayimla teklif degistirmek riskli.")
+    hedef = target_acos or h["break_even_acos_pct"]
+    if not hedef:
+        raise HTTPException(400,
+            "Hedef ACOS belirlenemedi. Marka ayarlarinda fiyat/maliyet ya da "
+            "hedef ACOS gir, veya bu ekrandan hedef ACOS yaz.")
+
+    d = bulk_doctor.diagnose(bulk, hedef, h["cvr"],
+                             fallback_bid=h.get("cpc") or 2.00)
+    u = bulk_doctor.utilization(bulk)
+    return {
+        "campaigns_live": d["campaigns_live"],
+        "target_acos_pct": round(hedef, 1),
+        "measured_cvr_pct": round(h["cvr"] * 100, 2),
+        "cvr_clicks": h["cvr_clicks"],
+        "utilization": u,
+        "actions": d["actions"],
+        "untouched": d["notes"],
+    }
+
+
+@app.post("/api/brands/{brand_id}/bulk-doctor/file")
+async def bulk_doctor_dosya(brand_id: int, file: UploadFile,
+                            target_acos: float = None):
+    """Teshisi uygulayan Update dosyasini uretir."""
+    ham = await file.read()
+    try:
+        bulk = bulk_doctor.read_bulk(ham)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+    h = _marka_hedefleri(brand_id)
+    if not h["cvr"]:
+        raise HTTPException(400, "Olculmus donusum orani yok - once "
+                                 "Targeting raporunu yukle.")
+    hedef = target_acos or h["break_even_acos_pct"]
+    if not hedef:
+        raise HTTPException(400, "Hedef ACOS belirlenemedi.")
+
+    d = bulk_doctor.diagnose(bulk, hedef, h["cvr"],
+                             fallback_bid=h.get("cpc") or 2.00)
+    if not d["actions"]:
+        raise HTTPException(400, "Duzeltilecek bir sey bulunamadi - "
+                                 "kampanyalar hedefle uyumlu gorunuyor.")
+    veri, sayac = bulk_doctor.build_update(bulk, d["actions"])
+    ad = re.sub(r"[^A-Za-z0-9]+", "-",
+                (h.get("brand_name") or f"marka{brand_id}")).strip("-")
+    return StreamingResponse(
+        io.BytesIO(veri),
+        media_type="application/vnd.openxmlformats-officedocument."
+                   "spreadsheetml.sheet",
+        headers={"Content-Disposition":
+                 f'attachment; filename="{ad}-DUZELTME.xlsx"',
+                 "X-Changes": json.dumps(sayac)})
 
 
 @app.post("/api/launch/batch-bulksheet")

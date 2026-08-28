@@ -626,6 +626,7 @@
     <button onclick="openBrandDialog(true)" id="editBtn" style="display:none">⚙ Ayarlar</button>
     <button onclick="openLaunchDlg()" title="Sıfır geçmişli yeni ürün için kampanya kur">🚀 Yeni Ürün Launch</button>
     <button onclick="openBatchDlg()" title="6-8 ürünü tek seferde planla, tek dosya indir">📦 Toplu Lansman</button>
+    <button onclick="openDoctorDlg()" title="Amazon Bulk Operations dosyanı yükle, düzeltme dosyası al">🩺 Kampanya Doktoru</button>
     <button onclick="openExtDlg()" title="Amazon sayfasından tek tıkla ürün çeken Chrome uzantısı">🧩 Chrome Uzantısı</button>
     <button onclick="helpDlg.showModal()">📖 Rehber</button>
   </div>
@@ -1128,7 +1129,79 @@
 
 <div id="toast"></div>
 
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js">
+// ---- Kampanya Doktoru -------------------------------------------------
+// Bulk Operations dosyasindan canli hesabi teshis eder ve Operation=Update
+// dosyasi uretir. Yeni kampanya ACMAZ - mukerrer ad hatasi vermez.
+function openDoctorDlg(){
+  if(!currentBrand){ toast('Önce marka seç'); return; }
+  docOut.innerHTML=''; docDlBtn.style.display='none';
+  doctorDlg.showModal();
+}
+function _docForm(){
+  const f=docFile.files[0];
+  if(!f){ toast('Bulk Operations dosyasını seç'); return null; }
+  const fd=new FormData(); fd.append('file',f);
+  return {fd, acos: docAcos.value ? Number(docAcos.value) : null};
+}
+async function docScan(){
+  const g=_docForm(); if(!g) return;
+  docScanBtn.disabled=true; docOut.innerHTML='<p class="muted">Taranıyor…</p>';
+  try{
+    const q=g.acos ? `?target_acos=${g.acos}` : '';
+    const r=await api(`/api/brands/${currentBrand}/bulk-doctor${q}`,
+                      {method:'POST',body:g.fd});
+    const d=await r.json();
+    const u=d.utilization;
+    const sev=x=>x==='kritik'?'#ef4444':x==='uyari'?'#f59e0b':'#64748b';
+    docOut.innerHTML=`
+      <div class="row" style="gap:18px;flex-wrap:wrap;margin-bottom:10px">
+        <div><b>${d.campaigns_live}</b> aktif kampanya</div>
+        <div>bütçe kullanımı <b>%${Math.round(u.utilization*100)}</b></div>
+        <div>bütçe kısıtlı <b>${u.budget_limited}</b> · talep kısıtlı <b>${u.demand_limited}</b></div>
+        <div>hedef ACOS <b>%${d.target_acos_pct}</b></div>
+        <div class="muted">ölçülen CVR %${d.measured_cvr_pct} (${Math.round(d.cvr_clicks)} tık)</div>
+      </div>
+      ${u.utilization<0.5?`<p style="color:#f59e0b;margin:4px 0 10px">
+        ⚠ Kullanım %${Math.round(u.utilization*100)} — bütçe artırmak harcamayı
+        artırmaz. Hacim için <b>teklif</b> yükseltilmeli.</p>`:''}
+      <table class="tbl"><thead><tr><th>Kampanya</th><th>Teklif</th>
+        <th>Bütçe</th><th>Sebep</th></tr></thead><tbody>
+      ${d.actions.map(a=>`<tr>
+        <td style="max-width:300px">${esc(a.campaign)}</td>
+        <td>${a.new_bid&&Math.abs(a.new_bid-a.bid)>0.01
+              ?`$${a.bid.toFixed(2)} → <b>$${a.new_bid.toFixed(2)}</b>`:'—'}</td>
+        <td>${Math.abs(a.new_budget-a.budget)>0.5
+              ?`$${a.budget.toFixed(0)} → <b>$${a.new_budget.toFixed(0)}</b>`:'—'}</td>
+        <td style="color:${sev(a.severity)}">${esc(a.reason)}</td></tr>`).join('')}
+      </tbody></table>
+      ${d.untouched.length?`<details style="margin-top:10px">
+        <summary class="muted">${d.untouched.length} kampanyaya bilerek dokunulmadı</summary>
+        <ul class="muted">${d.untouched.map(n=>
+          `<li>${esc(n.campaign)} — ${esc(n.note)}</li>`).join('')}</ul></details>`:''}`;
+    docDlBtn.style.display = d.actions.length ? '' : 'none';
+  }catch(e){ docOut.innerHTML=`<p style="color:#ef4444">${esc(e.message||'Hata')}</p>`; }
+  finally{ docScanBtn.disabled=false; }
+}
+async function docDownload(){
+  const g=_docForm(); if(!g) return;
+  docDlBtn.disabled=true;
+  try{
+    const q=g.acos ? `?target_acos=${g.acos}` : '';
+    const r=await api(`/api/brands/${currentBrand}/bulk-doctor/file${q}`,
+                      {method:'POST',body:g.fd});
+    const b=await r.blob();
+    const cd=r.headers.get('Content-Disposition')||'';
+    const m=cd.match(/filename="([^"]+)"/);
+    const a=document.createElement('a');
+    a.href=URL.createObjectURL(b); a.download=m?m[1]:'duzeltme.xlsx';
+    a.click(); URL.revokeObjectURL(a.href);
+    toast('Düzeltme dosyası indirildi');
+  }catch(e){ /* api() zaten toast atti */ }
+  finally{ docDlBtn.disabled=false; }
+}
+
+</script>
 <script>
 const $=id=>document.getElementById(id);
 
@@ -3458,5 +3531,30 @@ function renderAI(data){
 
 loadBrands();
 </script>
+
+<dialog id="doctorDlg" style="max-width:920px;width:94vw">
+  <h3>🩺 Kampanya Doktoru — canlı hesabı tara, düzeltme dosyası üret</h3>
+  <p class="muted" style="margin:6px 0 12px">
+    Amazon Ads → <b>Sponsored Ads</b> → <b>Bulk operations</b> → tarih aralığı seç → <b>Download</b>.
+    O dosyayı buraya yükle. Konsolun kampanya raporunda Campaign ID yoktur; güncelleme
+    dosyası <u>yalnızca</u> Bulk Operations indirmesinden üretilebilir.
+  </p>
+  <div style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap;margin-bottom:12px">
+    <label style="flex:1;min-width:260px">Bulk Operations dosyası (.xlsx)
+      <input type="file" id="docFile" accept=".xlsx">
+    </label>
+    <label>Hedef ACOS %
+      <input type="number" id="docAcos" step="1" min="1" max="500"
+             placeholder="boş = break-even" style="width:150px">
+    </label>
+    <button onclick="docScan()" id="docScanBtn">Tara</button>
+  </div>
+  <div id="docOut"></div>
+  <div class="row" style="justify-content:flex-end;gap:8px;margin-top:14px">
+    <button onclick="doctorDlg.close()">Kapat</button>
+    <button id="docDlBtn" onclick="docDownload()" style="display:none">⬇ Düzeltme dosyasını indir</button>
+  </div>
+</dialog>
+
 </body>
 </html>
