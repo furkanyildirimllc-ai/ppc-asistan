@@ -34,6 +34,7 @@ Ayrı hat (yeni ürün lansmanı):
 | `insights.py` | 801 | Dashboard, KPI, sağlık skoru, SKAG/TOS/brand-defense, `campaign_advisor` |
 | `analysis.py` | 684 | Deterministik motor: harvest, negatif, bid, placement, bütçe |
 | `launch.py` | 547 | Yeni ürün lansman planı + lansman bulksheet'i |
+| `autopilot.py` | 260 | **Otopilot**: tek dosyadan tam analiz; `did` (araç yaptı) / `todo` (insan yapmalı) ayrımı |
 | `phases.py` | 230 | **Faz motoru (TEK KAYNAK)**: hangi fazdasın, neden, sıradaki iş, çıkış kriteri |
 | `growth.py` | 190 | **Hedef planlayıcı**: %30 marjlı büyüme planı + açığı kapatacak kaldıraçlar (CTR/CVR/AOV/hacim) |
 | `listing.py` | 220 | **Listing optimizasyonu**: reklam verisinden başlık/bullet/arka plan önerisi, rakip marka koruması |
@@ -64,6 +65,7 @@ Export: `.../export`, `.../export-bulksheet`, `.../bulk-readiness`, `.../campaig
 Ürün: `GET/POST .../products`, `PUT/DELETE /api/products/{id}`
 Lansman: `POST /api/launch/analyze`, `POST /api/launch/bulksheet`
 Rekabet: `GET /api/brands/{id}/competitiveness` (teklif pazarı karşılıyor mu)
+Otopilot: `POST /api/brands/{id}/autopilot` (tam analiz) · `.../autopilot/file` (tek düzeltme dosyası)
 Faz: `GET /api/brands/{id}/phase` (faz + neden + yapılacaklar) · `.../autofill` (ürünleri otomatik doldur)
 Büyüme: `POST /api/brands/{id}/growth-plan` (%30 marjlı hedef planı)
 Listing: `GET /api/brands/{id}/listing-plan` (başlık/arka plan önerisi)

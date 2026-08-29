@@ -25,6 +25,7 @@ import bulksheet
 import launch as launch_mod
 import benchmarks
 import bulk_doctor
+import autopilot as autopilot_mod
 import phases as phases_mod
 import verify as verify_mod
 import growth as growth_mod
@@ -1798,6 +1799,106 @@ async def buyume_plani(brand_id: int, file: UploadFile,
                     "cvr_pct": round(o / cl * 100, 2) if cl else 0,
                     "aov": round(sa / o, 2) if o else 0}
     return pl
+
+
+def _marka_ekonomi(b):
+    """Markanin break-even ACOS'u (fiyat/maliyet girilmisse)."""
+    fiyat = _sayi(b.get("sell_price"))
+    if fiyat <= 0:
+        return None
+    return launch_mod.break_even(
+        fiyat, _sayi(b.get("cogs")),
+        _sayi(b.get("amazon_fee_pct")) or 0.15,
+        _sayi(b.get("fba_fee"))).get("break_even_acos_pct")
+
+
+@app.post("/api/brands/{brand_id}/autopilot")
+async def otopilot(brand_id: int, file: UploadFile,
+                   monthly_target: float = 5000, days: int = 30,
+                   accepted_acos: float = None, title: str = ""):
+    """TEK DOSYA -> TAM ANALIZ. Panelleri tek tek gezmeye gerek yok.
+
+    Faz tespiti + hesap teshisi + olu katman avi + hasat + buyume plani +
+    listing onerisi hepsi bir kerede. Iki liste doner:
+      did  : aracin yaptiklari (duzeltme dosyasinda)
+      todo : yalnizca insanin yapabilecegi isler, nasil/nerede/ne kadar
+             surer bilgisiyle
+    """
+    ham = await file.read()
+    try:
+        bulk = bulk_doctor.read_bulk(ham)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    with db() as c:
+        brand = c.execute("SELECT * FROM brands WHERE id=?", (brand_id,)).fetchone()
+        if brand is None:
+            raise HTTPException(404, "Marka bulunamadi")
+        tg = _load_rows(c, brand_id, "targeting")
+        st = _load_rows(c, brand_id, "search_term")
+        cp = _load_rows(c, brand_id, "campaign")
+    b = dict(brand)
+    h = _sayi(b.get("target_acos"))
+    rapor, islemler = autopilot_mod.run(
+        bulk, tg, st, cp, monthly_target=monthly_target, days=days,
+        accepted_acos_pct=accepted_acos,
+        break_even_acos_pct=_marka_ekonomi(b),
+        target_acos_pct=(h * 100 if 0 < h <= 1 else h or None),
+        brand_name=b.get("name") or "", current_title=title)
+    _OTOPILOT[brand_id] = islemler          # dosya uretimi icin sakla
+    rapor["brand"] = b.get("name")
+    rapor["action_count"] = len(islemler)
+    return rapor
+
+
+# Otopilot islemleri: rapor ile dosya arasinda tasinmasi icin.
+# Kullanici raporu gorup ONAYLADIKTAN sonra dosyayi indirir; ayni analizi
+# iki kez calistirmamak icin burada tutulur.
+_OTOPILOT = {}
+
+
+@app.post("/api/brands/{brand_id}/autopilot/file")
+async def otopilot_dosya(brand_id: int, file: UploadFile,
+                         monthly_target: float = 5000, days: int = 30,
+                         accepted_acos: float = None):
+    """Otopilot raporundaki duzeltmeleri TEK dosyada uretir."""
+    ham = await file.read()
+    try:
+        bulk = bulk_doctor.read_bulk(ham)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    islemler = _OTOPILOT.get(brand_id)
+    if not islemler:
+        # Rapor calistirilmamissa burada yeniden uret - kullaniciyi
+        # "once tara" diye geri gondermeyelim.
+        with db() as c:
+            brand = c.execute("SELECT * FROM brands WHERE id=?", (brand_id,)).fetchone()
+            if brand is None:
+                raise HTTPException(404, "Marka bulunamadi")
+            tg = _load_rows(c, brand_id, "targeting")
+            st = _load_rows(c, brand_id, "search_term")
+            cp = _load_rows(c, brand_id, "campaign")
+        b = dict(brand)
+        h = _sayi(b.get("target_acos"))
+        _, islemler = autopilot_mod.run(
+            bulk, tg, st, cp, monthly_target=monthly_target, days=days,
+            accepted_acos_pct=accepted_acos,
+            break_even_acos_pct=_marka_ekonomi(b),
+            target_acos_pct=(h * 100 if 0 < h <= 1 else h or None),
+            brand_name=b.get("name") or "")
+    if not islemler:
+        raise HTTPException(400, "Duzeltilecek bir sey bulunamadi - hesap "
+                                 "hedefle uyumlu gorunuyor.")
+    veri, sayac = bulk_doctor.build_update(bulk, islemler)
+    with db() as c:
+        brand = c.execute("SELECT name FROM brands WHERE id=?", (brand_id,)).fetchone()
+    ad = re.sub(r"[^A-Za-z0-9]+", "-", (brand["name"] if brand else "marka")).strip("-")
+    return StreamingResponse(
+        io.BytesIO(veri),
+        media_type="application/vnd.openxmlformats-officedocument."
+                   "spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="{ad}-OTOPILOT.xlsx"',
+                 "X-Changes": json.dumps(sayac),
+                 "Access-Control-Expose-Headers": "X-Changes"})
 
 
 @app.get("/api/brands/{brand_id}/phase")

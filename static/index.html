@@ -680,6 +680,26 @@ dialog{max-height:88vh;overflow:auto}
 .faz-metrik{display:flex;gap:22px;flex-wrap:wrap;margin-top:12px;font-size:12.5px}
 .faz-metrik b{display:block;font-size:17px;margin-top:2px}
 
+
+.otopilot-btn{background:linear-gradient(135deg,#3b82f6,#22c55e);color:#fff;border:0;
+  padding:9px 16px;border-radius:9px;font-weight:600;font-size:13.5px;cursor:pointer;
+  white-space:nowrap;margin-right:8px}
+.otopilot-btn:hover{filter:brightness(1.1)}
+.oto-bolum{border:1px solid rgba(255,255,255,.10);border-radius:12px;padding:14px 16px;margin:12px 0}
+.oto-bolum h4{margin:0 0 10px;font-size:14px}
+.oto-liste{list-style:none;padding:0;margin:0}
+.oto-liste li{padding:10px 0;border-top:1px solid rgba(255,255,255,.07)}
+.oto-liste li:first-child{border-top:0}
+.oto-yaptim li{border-left:3px solid #22c55e;padding-left:12px;margin-bottom:2px;border-top:0}
+.oto-kalan li{border-left:3px solid #f59e0b;padding-left:12px;margin-bottom:8px;border-top:0}
+.etki{display:inline-block;padding:2px 8px;border-radius:999px;font-size:11px;margin-left:6px}
+.etki-cok{background:rgba(239,68,68,.2);color:#fca5a5}
+.etki-yuksek{background:rgba(245,158,11,.2);color:#fcd34d}
+.etki-orta{background:rgba(96,165,250,.2);color:#93c5fd}
+.etki-risk{background:rgba(148,163,184,.2);color:#cbd5e1}
+.kopyala-kutu{display:block;padding:8px 10px;background:rgba(128,128,128,.14);
+  border-radius:6px;margin-top:6px;word-break:break-word;font-size:12px}
+
 </style>
 </head>
 <body>
@@ -691,6 +711,9 @@ dialog{max-height:88vh;overflow:auto}
   </div>
 
   <nav class="h-group" id="anaMenu">
+    <button class="otopilot-btn" onclick="openOtoDlg()"
+      title="Tek dosya at — analiz, düzeltme ve yapılacaklar listesi bir kerede">
+      ⚡ Otopilot</button>
     <div class="menu">
       <button class="menu-bas" data-menu="m-analiz">Analiz <span class="ok">▾</span></button>
       <div class="menu-liste" id="m-analiz">
@@ -1284,6 +1307,124 @@ async function renderFaz(){
       </ul>
     </div>`;
   }catch(e){ box.style.display='none'; }
+}
+
+
+// ---- Otopilot: tek dosya -> tam analiz --------------------------------
+// Kullanici panelleri tek tek gezmesin; her sey bir kerede yapilsin ve
+// "arac ne yapti / bana ne kaldi" ayrimi net olsun.
+function openOtoDlg(){
+  if(!brandId){ toast('Önce marka seç'); return; }
+  otoOut.innerHTML=''; otoDlBtn.style.display='none'; otoDlg.showModal();
+}
+function _otoQuery(){
+  return `monthly_target=${otoHedef.value||5000}&days=${otoGun.value||30}`+
+         `&accepted_acos=${otoAcos.value||100}`;
+}
+async function otoCalistir(){
+  const f=otoFile.files[0];
+  if(!f){ toast('Bulk Operations dosyasını seç'); return; }
+  const fd=new FormData(); fd.append('file',f);
+  otoBtn.disabled=true; otoOut.innerHTML='<p class="muted">Analiz ediliyor… (faz, teşhis, hasat, büyüme, listing)</p>';
+  try{
+    const r=await api(`/api/brands/${brandId}/autopilot?${_otoQuery()}`,{method:'POST',body:fd});
+    const d=await r.json(); const p=d.phase, fn=d.funnel, g=d.growth;
+    const etkiSinif=e=>e==='çok yüksek'?'etki-cok':e==='yüksek'?'etki-yuksek':
+                       e==='orta'?'etki-orta':'etki-risk';
+    otoOut.innerHTML=`
+      <div style="padding:12px 14px;border-radius:10px;margin-bottom:14px;
+        background:linear-gradient(135deg,rgba(59,130,246,.18),rgba(34,197,94,.14))">
+        <b style="font-size:15px">FAZ ${p.phase} — ${esc(p.name)}</b>
+        <span class="muted"> · ${esc(p.goal)}</span><br>
+        <span class="muted small">${esc(p.why)}</span>
+      </div>
+
+      <div class="faz-metrik" style="margin-bottom:10px">
+        <span>Gösterim<b>${fn.impressions.toLocaleString()}</b></span>
+        <span>Tıklama<b>${fn.clicks.toLocaleString()}</b></span>
+        <span>CTR<b>%${fn.ctr_pct}</b></span>
+        <span>CVR<b>%${fn.cvr_pct}</b></span>
+        <span>Sepet<b>$${fn.aov}</b></span>
+        <span>Satış<b>$${fn.sales.toLocaleString()}</b></span>
+      </div>
+
+      <div class="oto-bolum" style="border-color:rgba(34,197,94,.35)">
+        <h4>✓ Senin için yaptım — ${d.action_count} işlem</h4>
+        <ul class="oto-liste oto-yaptim">
+          ${d.did.map(x=>`<li><b>${esc(x.is)}</b>
+            <span class="muted small" style="display:block">${esc(x.detay)}</span></li>`).join('')
+            || '<li class="muted">Düzeltilecek bir şey bulunamadı — hesap uyumlu.</li>'}
+        </ul>
+      </div>
+
+      <div class="oto-bolum" style="border-color:rgba(245,158,11,.35)">
+        <h4>! Sadece senin yapabileceğin işler — ${d.todo.length} madde</h4>
+        <ul class="oto-liste oto-kalan">
+          ${d.todo.map(x=>`<li>
+            <b>${esc(x.is)}</b><span class="etki ${etkiSinif(x.etki)}">${esc(x.etki)}</span>
+            <span class="muted small" style="display:block;margin-top:3px">${esc(x.neden)}</span>
+            ${x.nerede&&x.nerede!=='—'?`<span class="muted small" style="display:block">
+              📍 ${esc(x.nerede)} · ⏱ ${esc(x.sure)}</span>`:''}
+            ${x.kopyala?`<code class="kopyala-kutu">${esc(x.kopyala)}</code>
+              <button style="margin-top:6px;padding:4px 10px;font-size:11.5px"
+                onclick="navigator.clipboard.writeText(this.previousElementSibling.textContent);toast('Kopyalandı')">
+                Kopyala</button>`:''}
+            ${x.detay?`<span class="muted small" style="display:block">${esc(x.detay)}</span>`:''}
+            <span class="muted small" style="display:block;opacity:.6;margin-top:3px">
+              ℹ ${esc(x.neden_ben_yapamam)}</span>
+          </li>`).join('') || '<li class="muted">Elle yapılacak bir şey yok.</li>'}
+        </ul>
+      </div>
+
+      ${g?`<div class="oto-bolum">
+        <h4>📈 Hedefe giden yol (%${g.margin_pct} güvenlik marjıyla)</h4>
+        <p>Hedef $${g.monthly_target.toLocaleString()} → marjlı $${g.target_with_margin.toLocaleString()}
+           · projeksiyon <b>$${g.projected_monthly_sales.toLocaleString()}/ay</b>
+           ${g.reaches_target?'<span style="color:#22c55e">— hedef karşılanıyor</span>'
+             :`<span style="color:#f59e0b">— açık $${g.gap_monthly.toLocaleString()}/ay</span>`}</p>
+        ${d.levers&&d.levers.length?`<table class="tbl"><thead><tr><th>Kaldıraç</th>
+          <th>Şimdi</th><th>Gereken</th><th>Maliyet</th></tr></thead><tbody>
+          ${d.levers.map(l=>`<tr${l.lever.includes('ÜÇÜ')?' style="background:rgba(34,197,94,.12)"':''}>
+            <td><b>${esc(l.lever)}</b></td><td>${esc(l.current)}</td>
+            <td><b>${esc(l.needed)}</b></td><td class="muted">${esc(l.cost)}</td></tr>`).join('')}
+        </tbody></table>`:''}
+      </div>`:''}
+
+      ${d.dead_layers&&d.dead_layers.length?`<div class="oto-bolum" style="border-color:rgba(239,68,68,.3)">
+        <h4>Üretmeyen kampanya katmanları — kapatıldı</h4>
+        ${d.dead_layers.map(k=>`<div>• <b>${esc(k.prefix)}</b> — ${k.campaigns} kampanya,
+          $${k.budget}/gün bütçe, ${k.impressions.toLocaleString()} gösterim, $0 satış</div>`).join('')}
+      </div>`:''}
+
+      ${d.harvest&&d.harvest.length?`<div class="oto-bolum">
+        <h4>🌾 Hasat edilen kanıtlanmış kelimeler (${d.harvest.length})</h4>
+        <table class="tbl"><thead><tr><th>Kelime</th><th>Sipariş</th><th>Satış</th>
+          <th>ROAS</th><th>Yeni teklif</th></tr></thead><tbody>
+        ${d.harvest.slice(0,12).map(h=>`<tr><td>${esc(h.keyword)}</td>
+          <td>${h.orders}</td><td>$${h.sales}</td><td>${h.roas}x</td>
+          <td><b>$${h.bid}</b></td></tr>`).join('')}
+        </tbody></table>
+        ${d.harvest.length>12?`<p class="muted small">…ve ${d.harvest.length-12} kelime daha</p>`:''}
+      </div>`:''}`;
+    otoDlBtn.style.display = d.action_count ? '' : 'none';
+  }catch(e){ otoOut.innerHTML=`<p style="color:#ef4444">${esc(e.message||'Hata')}</p>`; }
+  finally{ otoBtn.disabled=false; }
+}
+async function otoIndir(){
+  const f=otoFile.files[0]; if(!f) return;
+  const fd=new FormData(); fd.append('file',f);
+  otoDlBtn.disabled=true;
+  try{
+    const r=await api(`/api/brands/${brandId}/autopilot/file?${_otoQuery()}`,{method:'POST',body:fd});
+    const b=await r.blob();
+    const cd=r.headers.get('Content-Disposition')||'';
+    const m=cd.match(/filename="([^"]+)"/);
+    const a=document.createElement('a');
+    a.href=URL.createObjectURL(b); a.download=m?m[1]:'otopilot.xlsx'; a.click();
+    URL.revokeObjectURL(a.href);
+    toast('Düzeltme dosyası indirildi — Bulk operations → Upload');
+  }catch(e){}
+  finally{ otoDlBtn.disabled=false; }
 }
 
 </script>
@@ -4023,6 +4164,124 @@ async function renderFaz(){
   }catch(e){ box.style.display='none'; }
 }
 
+
+// ---- Otopilot: tek dosya -> tam analiz --------------------------------
+// Kullanici panelleri tek tek gezmesin; her sey bir kerede yapilsin ve
+// "arac ne yapti / bana ne kaldi" ayrimi net olsun.
+function openOtoDlg(){
+  if(!brandId){ toast('Önce marka seç'); return; }
+  otoOut.innerHTML=''; otoDlBtn.style.display='none'; otoDlg.showModal();
+}
+function _otoQuery(){
+  return `monthly_target=${otoHedef.value||5000}&days=${otoGun.value||30}`+
+         `&accepted_acos=${otoAcos.value||100}`;
+}
+async function otoCalistir(){
+  const f=otoFile.files[0];
+  if(!f){ toast('Bulk Operations dosyasını seç'); return; }
+  const fd=new FormData(); fd.append('file',f);
+  otoBtn.disabled=true; otoOut.innerHTML='<p class="muted">Analiz ediliyor… (faz, teşhis, hasat, büyüme, listing)</p>';
+  try{
+    const r=await api(`/api/brands/${brandId}/autopilot?${_otoQuery()}`,{method:'POST',body:fd});
+    const d=await r.json(); const p=d.phase, fn=d.funnel, g=d.growth;
+    const etkiSinif=e=>e==='çok yüksek'?'etki-cok':e==='yüksek'?'etki-yuksek':
+                       e==='orta'?'etki-orta':'etki-risk';
+    otoOut.innerHTML=`
+      <div style="padding:12px 14px;border-radius:10px;margin-bottom:14px;
+        background:linear-gradient(135deg,rgba(59,130,246,.18),rgba(34,197,94,.14))">
+        <b style="font-size:15px">FAZ ${p.phase} — ${esc(p.name)}</b>
+        <span class="muted"> · ${esc(p.goal)}</span><br>
+        <span class="muted small">${esc(p.why)}</span>
+      </div>
+
+      <div class="faz-metrik" style="margin-bottom:10px">
+        <span>Gösterim<b>${fn.impressions.toLocaleString()}</b></span>
+        <span>Tıklama<b>${fn.clicks.toLocaleString()}</b></span>
+        <span>CTR<b>%${fn.ctr_pct}</b></span>
+        <span>CVR<b>%${fn.cvr_pct}</b></span>
+        <span>Sepet<b>$${fn.aov}</b></span>
+        <span>Satış<b>$${fn.sales.toLocaleString()}</b></span>
+      </div>
+
+      <div class="oto-bolum" style="border-color:rgba(34,197,94,.35)">
+        <h4>✓ Senin için yaptım — ${d.action_count} işlem</h4>
+        <ul class="oto-liste oto-yaptim">
+          ${d.did.map(x=>`<li><b>${esc(x.is)}</b>
+            <span class="muted small" style="display:block">${esc(x.detay)}</span></li>`).join('')
+            || '<li class="muted">Düzeltilecek bir şey bulunamadı — hesap uyumlu.</li>'}
+        </ul>
+      </div>
+
+      <div class="oto-bolum" style="border-color:rgba(245,158,11,.35)">
+        <h4>! Sadece senin yapabileceğin işler — ${d.todo.length} madde</h4>
+        <ul class="oto-liste oto-kalan">
+          ${d.todo.map(x=>`<li>
+            <b>${esc(x.is)}</b><span class="etki ${etkiSinif(x.etki)}">${esc(x.etki)}</span>
+            <span class="muted small" style="display:block;margin-top:3px">${esc(x.neden)}</span>
+            ${x.nerede&&x.nerede!=='—'?`<span class="muted small" style="display:block">
+              📍 ${esc(x.nerede)} · ⏱ ${esc(x.sure)}</span>`:''}
+            ${x.kopyala?`<code class="kopyala-kutu">${esc(x.kopyala)}</code>
+              <button style="margin-top:6px;padding:4px 10px;font-size:11.5px"
+                onclick="navigator.clipboard.writeText(this.previousElementSibling.textContent);toast('Kopyalandı')">
+                Kopyala</button>`:''}
+            ${x.detay?`<span class="muted small" style="display:block">${esc(x.detay)}</span>`:''}
+            <span class="muted small" style="display:block;opacity:.6;margin-top:3px">
+              ℹ ${esc(x.neden_ben_yapamam)}</span>
+          </li>`).join('') || '<li class="muted">Elle yapılacak bir şey yok.</li>'}
+        </ul>
+      </div>
+
+      ${g?`<div class="oto-bolum">
+        <h4>📈 Hedefe giden yol (%${g.margin_pct} güvenlik marjıyla)</h4>
+        <p>Hedef $${g.monthly_target.toLocaleString()} → marjlı $${g.target_with_margin.toLocaleString()}
+           · projeksiyon <b>$${g.projected_monthly_sales.toLocaleString()}/ay</b>
+           ${g.reaches_target?'<span style="color:#22c55e">— hedef karşılanıyor</span>'
+             :`<span style="color:#f59e0b">— açık $${g.gap_monthly.toLocaleString()}/ay</span>`}</p>
+        ${d.levers&&d.levers.length?`<table class="tbl"><thead><tr><th>Kaldıraç</th>
+          <th>Şimdi</th><th>Gereken</th><th>Maliyet</th></tr></thead><tbody>
+          ${d.levers.map(l=>`<tr${l.lever.includes('ÜÇÜ')?' style="background:rgba(34,197,94,.12)"':''}>
+            <td><b>${esc(l.lever)}</b></td><td>${esc(l.current)}</td>
+            <td><b>${esc(l.needed)}</b></td><td class="muted">${esc(l.cost)}</td></tr>`).join('')}
+        </tbody></table>`:''}
+      </div>`:''}
+
+      ${d.dead_layers&&d.dead_layers.length?`<div class="oto-bolum" style="border-color:rgba(239,68,68,.3)">
+        <h4>Üretmeyen kampanya katmanları — kapatıldı</h4>
+        ${d.dead_layers.map(k=>`<div>• <b>${esc(k.prefix)}</b> — ${k.campaigns} kampanya,
+          $${k.budget}/gün bütçe, ${k.impressions.toLocaleString()} gösterim, $0 satış</div>`).join('')}
+      </div>`:''}
+
+      ${d.harvest&&d.harvest.length?`<div class="oto-bolum">
+        <h4>🌾 Hasat edilen kanıtlanmış kelimeler (${d.harvest.length})</h4>
+        <table class="tbl"><thead><tr><th>Kelime</th><th>Sipariş</th><th>Satış</th>
+          <th>ROAS</th><th>Yeni teklif</th></tr></thead><tbody>
+        ${d.harvest.slice(0,12).map(h=>`<tr><td>${esc(h.keyword)}</td>
+          <td>${h.orders}</td><td>$${h.sales}</td><td>${h.roas}x</td>
+          <td><b>$${h.bid}</b></td></tr>`).join('')}
+        </tbody></table>
+        ${d.harvest.length>12?`<p class="muted small">…ve ${d.harvest.length-12} kelime daha</p>`:''}
+      </div>`:''}`;
+    otoDlBtn.style.display = d.action_count ? '' : 'none';
+  }catch(e){ otoOut.innerHTML=`<p style="color:#ef4444">${esc(e.message||'Hata')}</p>`; }
+  finally{ otoBtn.disabled=false; }
+}
+async function otoIndir(){
+  const f=otoFile.files[0]; if(!f) return;
+  const fd=new FormData(); fd.append('file',f);
+  otoDlBtn.disabled=true;
+  try{
+    const r=await api(`/api/brands/${brandId}/autopilot/file?${_otoQuery()}`,{method:'POST',body:fd});
+    const b=await r.blob();
+    const cd=r.headers.get('Content-Disposition')||'';
+    const m=cd.match(/filename="([^"]+)"/);
+    const a=document.createElement('a');
+    a.href=URL.createObjectURL(b); a.download=m?m[1]:'otopilot.xlsx'; a.click();
+    URL.revokeObjectURL(a.href);
+    toast('Düzeltme dosyası indirildi — Bulk operations → Upload');
+  }catch(e){}
+  finally{ otoDlBtn.disabled=false; }
+}
+
 </script>
 
 <dialog id="doctorDlg" style="max-width:920px;width:94vw">
@@ -4123,6 +4382,30 @@ async function renderFaz(){
       <button onclick="faz1Dlg.close()">Kapat</button>
       <button class="primary" id="faz1Btn" onclick="openDoctorDlg()">Bulk dosyası ile devam et →</button>
     </span>
+  </div>
+</dialog>
+
+
+<dialog id="otoDlg" style="max-width:1020px;width:96vw">
+  <h3>⚡ Otopilot — tek dosya, tam analiz</h3>
+  <p class="muted" style="margin:6px 0 14px">
+    Amazon Ads → <b>Bulk operations</b> → Download ile indirdiğin dosyayı at.
+    Faz tespiti, hesap teşhisi, ölü kampanya avı, kelime hasadı, büyüme planı ve
+    listing önerisi <b>bir kerede</b> yapılır. Sonunda tek düzeltme dosyası çıkar.
+  </p>
+  <div class="row" style="gap:10px;align-items:flex-end;flex-wrap:wrap;margin-bottom:12px">
+    <label style="flex:1;min-width:230px">Bulk Operations dosyası
+      <input type="file" id="otoFile" accept=".xlsx"></label>
+    <label>Aylık hedef $<input type="number" id="otoHedef" value="5000" step="500" style="width:110px"></label>
+    <label>Rapor gün<input type="number" id="otoGun" value="60" style="width:85px"></label>
+    <label>Kabul ACOS %<input type="number" id="otoAcos" value="100" style="width:105px"></label>
+    <button class="primary" onclick="otoCalistir()" id="otoBtn">Çalıştır</button>
+  </div>
+  <div id="otoOut"></div>
+  <div class="row" style="justify-content:flex-end;gap:8px;margin-top:14px">
+    <button onclick="otoDlg.close()">Kapat</button>
+    <button class="primary" id="otoDlBtn" style="display:none" onclick="otoIndir()">
+      ⬇ Düzeltme dosyasını indir</button>
   </div>
 </dialog>
 
