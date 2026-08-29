@@ -34,6 +34,10 @@ Ayrı hat (yeni ürün lansmanı):
 | `insights.py` | 801 | Dashboard, KPI, sağlık skoru, SKAG/TOS/brand-defense, `campaign_advisor` |
 | `analysis.py` | 684 | Deterministik motor: harvest, negatif, bid, placement, bütçe |
 | `launch.py` | 547 | Yeni ürün lansman planı + lansman bulksheet'i |
+| `policy.py` | 120 | **Karar politikası**: CİRO BİRİNCİ ÖNCELİK — ne kapatılır, bütçe ne yönde |
+| `discovery.py` | 240 | **Kelime keşfi**: Amazon autocomplete + kendi kazanan kavramların, alaka kapısı |
+| `architecture.py` | 200 | **Kampanya mimarisi**: katman denetimi (AUTO/BROAD/PHRASE/EXACT) + çapraz negatifler |
+| `test_izolasyon.py` | 190 | **Marka ayrımı testi** — 11 kontrol, `.venv/bin/python test_izolasyon.py` |
 | `autopilot.py` | 260 | **Otopilot**: tek dosyadan tam analiz; `did` (araç yaptı) / `todo` (insan yapmalı) ayrımı |
 | `phases.py` | 230 | **Faz motoru (TEK KAYNAK)**: hangi fazdasın, neden, sıradaki iş, çıkış kriteri |
 | `growth.py` | 190 | **Hedef planlayıcı**: %30 marjlı büyüme planı + açığı kapatacak kaldıraçlar (CTR/CVR/AOV/hacim) |
@@ -161,6 +165,31 @@ Seller hesabında ASIN geçerli SKU değildir → Product Ad satırları reddedi
   yanlış negatif = liste askıya alınır).
 - **Projeksiyon %30 marjla yapılır** (`growth.SAFETY_MARGIN`). Hedefe tam oturan plan,
   %30 sapmada hedefi kaçırır.
+
+### CİRO BİRİNCİ ÖNCELİK (policy.py — keskin kural)
+
+Kullanıcının açık talimatı: kârsızlık kabul edilebilir, **ciro kaybı kabul edilemez.**
+
+- **Ciro üreten kampanya ACOS yüksek diye KAPATILMAZ** — teklifi ayarlanır. Kapatma
+  eşiği kabul edilen ACOS'un **4 katı**; altındaysa kampanya yaşar.
+- **Ciro üreten kampanyada bütçe ASLA düşürülmez** — bütçe daraltmak ciroyu doğrudan keser.
+- İki plan arasında **daha çok ciro getiren** kazanır; kârlılık eşitlik bozucudur.
+- **Sınır:** yapısal zarar kabul edilmez. Teklif tıklama başına ciroyu aşamaz —
+  o noktada harcanan dolar ciroyu büyütmez, sadece zararı büyütür.
+  "Ciro önceliği" = ciroyu koru, **israfı koru değil**.
+
+### Kampanya mimarisi (architecture.py)
+
+Her ürün için: **AUTO** (keşif) + **BROAD** (keşif) + **PHRASE** (ara) + **EXACT** (hasat).
+Katmanlar birbirini besler: keşif kelime bulur → kanıtlanan EXACT'e taşınır →
+taşınan kelime keşifte **negatif** olur. Negatif eklenmezse aynı sorgu için iki
+kampanyan yarışır; geçmişi olan keşif kampanyası kazanır, hasat kampanyası aç kalır.
+
+Çapraz negatif **yalnızca gerçek çakışmada** eklenir (terim o kampanyada tıklama almış).
+Körlemesine eklemek 1037 satır üretiyordu; gerçek çakışma 6.
+
+İsimlendirme: `{marka} | {ASIN} | {KATMAN}` — ASIN adda olduğu için ürün bazında
+takip her zaman mümkün, marka adı başta olduğu için markalar karışmaz.
 
 ### Faz modeli (phases.py — TEK KAYNAK)
 

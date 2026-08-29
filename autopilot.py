@@ -152,7 +152,7 @@ def run(bulk, targeting_rows=None, search_term_rows=None, campaign_rows=None,
     lst = listing_mod.suggest(st, current_title, brand_name) if st else None
 
     # ---- 6b) Mimari denetimi + katmanlar arasi negatifler -------------
-    mimari = architecture.audit(bulk, brand_name)
+    mimari = architecture.audit_layers(bulk, brand_name)
     capraz_neg = architecture.cross_negatives(
         bulk, [h["keyword"] for h in hasat], st)
 

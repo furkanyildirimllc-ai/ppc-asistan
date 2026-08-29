@@ -13,7 +13,7 @@ import benchmarks
 
 SAFETY_MARGIN = 0.30      # hedefin %30 uzerine planla
 SCALE_DECAY = 0.75        # butce 2x olunca ROAS ~%25 bozulur (olculdu)
-MIN_CLICKS_PER_DAY = 5
+MIN_CLICKS_PER_DAY = benchmarks.MIN_CLICKS_PER_DAY  # tek kaynak
 
 
 def _f(v):

@@ -788,10 +788,15 @@ def keyword_signals(keywords, search_suggestions=None, competitors=None,
     return out
 
 
-def keyword_bid(kw, base_bid, match_key, head_tokens=None, signals=None):
-    """Kelime bazli bid: kampanyanin taban bid'ini kelimenin niteligine gore
-    yukari/asagi oynatir. Tum kelimelere ayni bid vermek, talebi ve alakayi
-    yok saymak demektir.
+def new_keyword_bid(kw, base_bid, match_key, head_tokens=None, signals=None):
+    """YENI kelime (gecmisi YOK) icin teklif - sinyal tabanli.
+
+    Kanitlanmis kelime icin benchmarks.proven_keyword_bid() kullanilir.
+    Ayni ada sahip iki farkli mantik tehlikelidir: biri gecmisi olmayan
+    kelimeyi sinyalle, digeri gecmisi olani olculmus CVR ile fiyatlar.
+    """
+    """Taban bid'i kelimenin niteligine gore oynatir. Tum kelimelere ayni
+    bid vermek, talebi ve alakayi yok saymak demektir.
 
     Carpanlar (birlestirilir, sonuc 0.6x - 1.6x arasinda kirpilir):
       talep (autocomplete)      : 1.00 -> 1.30
@@ -1093,7 +1098,7 @@ def build_plan(product, competitors=None, use_ai=True, model=None,
         sig = keyword_signals(c["keywords"], search_suggestions, competitors, head_tok)
         c["keyword_signals"] = sig
         c["keyword_bids"] = {
-            kw: keyword_bid(kw, c["default_bid"], c["key"], head_tok, sig)
+            kw: new_keyword_bid(kw, c["default_bid"], c["key"], head_tok, sig)
             for kw in c["keywords"]
         }
 
@@ -1238,7 +1243,7 @@ SP_REQUIRED = {
 # Altinda kalirsa gunde birkac tiklama bile alamaz; Amazon kampanyayi
 # neredeyse hic yayinlamaz. Gercekte yasandi: $1 butce + $2.79 teklif =
 # gunde 0.4 tiklama -> kampanya olu dogar, harcama da satis da olmaz.
-MIN_CLICKS_PER_DAY = 5
+MIN_CLICKS_PER_DAY = benchmarks.MIN_CLICKS_PER_DAY  # tek kaynak
 
 
 def budget_health(budget, bid):

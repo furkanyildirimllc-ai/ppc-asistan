@@ -1923,7 +1923,7 @@ async def kampanya_mimarisi(brand_id: int, file: UploadFile):
             raise HTTPException(404, "Marka bulunamadi")
         st = _load_rows(c, brand_id, "search_term")
     b = dict(brand)
-    rapor = arch_mod.audit(bulk, b.get("name") or "")
+    rapor = arch_mod.audit_layers(bulk, b.get("name") or "")
     hasat = [k["term"] for k in listing_mod.winning_terms(st)] if st else []
     neg = arch_mod.cross_negatives(bulk, hasat, st)
     rapor["cross_negatives"] = neg

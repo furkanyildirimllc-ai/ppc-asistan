@@ -58,8 +58,13 @@ def campaign_name(brand, asin, layer):
     return f"{m} | {asin} | {layer}"
 
 
-def audit(bulk, brand_name=""):
-    """Her urun icin hangi katmanlar var, hangileri eksik?"""
+def audit_layers(bulk, brand_name=""):
+    """Her urun icin hangi katmanlar var, hangileri eksik?
+
+    Ad NOTU: verify.audit() HESAP SAGLIGINI denetler (olu butce, tavan
+    asimi, gecersiz kelime). Bu fonksiyon KAMPANYA YAPISINI denetler
+    (hangi katman eksik). Ayni adi tasimalari kafa karistiriyordu.
+    """
     g = lambda r, k: benchmarks_get(bulk, r, k)
     import bulk_doctor as BD
     g = lambda r, k: BD._get(bulk, r, k)
@@ -200,3 +205,7 @@ def cross_negatives(bulk, harvested_keywords, search_terms=None,
                         "campaign": ad, "keyword": kw,
                         "reason": "EXACT'e taşındı - keşifte tekrar yarışmasın"})
     return out
+
+
+# Geriye uyum
+audit = audit_layers

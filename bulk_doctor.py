@@ -26,7 +26,7 @@ SHEET = "Sponsored Products Campaigns"
 
 # Bir kampanya gunde en az bu kadar tiklama alabilmeli. Altindaysa
 # istatistik uretmeden once ayin sonu gelir - kampanya olu dogar.
-MIN_CLICKS_PER_DAY = 5
+MIN_CLICKS_PER_DAY = benchmarks.MIN_CLICKS_PER_DAY  # tek kaynak
 
 # Bu kadar tiklamadan az veriyle "kotu" karari verilmez.
 MIN_CLICKS_FOR_JUDGMENT = 15
@@ -36,7 +36,7 @@ ZERO_ORDER_CONFIDENCE = 0.80
 
 # Tek seferde teklif en fazla bu kadar dusurulur. Sert kesme kampanyayi
 # aciklarin tamamen disina atar ve veri akisi durur.
-MAX_BID_CUT = 0.50
+MAX_BID_CUT = policy.MAX_BID_CUT  # tek kaynak: policy.py
 
 MIN_BID = 0.20
 

@@ -66,6 +66,10 @@ LAUNCH_RAMP = 0.65
 #        ~15 tik -> +-%10, ~20 tik -> +-%9 dogruluk. UCUZ.
 #   CVR: her tiklama 0/1 bir denemedir; siparis nadir olaydir.
 #        %10 CVR'da 20 tik -> +-%67 (ise yaramaz), 100 tik -> +-%30. PAHALI.
+# Bir kampanya gunde en az bu kadar tiklama alabilmeli; altindaysa
+# istatistik birikmeden ay biter - kampanya olu dogar. TEK KAYNAK.
+MIN_CLICKS_PER_DAY = 5
+
 MIN_CLICKS_CPC = 15          # bu tiklamadan sonra olculmus CPC'ye guvenilir
 MIN_CLICKS_CPC_BLEND = 6     # altinda kismen, bunun da altinda hic
 MIN_CLICKS_CVR = 100         # CVR icin gercekten cok veri gerekir
@@ -241,9 +245,11 @@ def shrunk_cvr(orders, clicks, prior_cvr, k=CVR_SHRINKAGE_K):
     return (o + k * p) / (c + k)
 
 
-def keyword_bid(orders, clicks, sales, prior_cvr, target_acos=1.00,
+def proven_keyword_bid(orders, clicks, sales, prior_cvr, target_acos=1.00,
                 market_cpc=None, max_multiple=3.0):
-    """Kanitlanmis bir kelime icin savunulabilir teklif.
+    """KANITLANMIS kelime (gecmisi VAR) icin savunulabilir teklif.
+
+    Gecmisi olmayan yeni kelime icin launch.new_keyword_bid() kullanilir.
 
     Ham CVR yerine shrunk CVR kullanir; boylece 1-2 tiklik sansli terimler
     fahis teklif almaz, gercek kazananlar ise pazari karsilayacak teklif alir.
@@ -678,3 +684,8 @@ def resolve(rows=None, ba_rows=None, brand_id=None, brand_name=None,
         "calibration_note": ("Tum sayilar YALNIZCA bu markanin verisinden; "
                             "baska marka verisi kullanilmaz."),
     }
+
+
+# Geriye uyum: eski ad kanitlanmis-kelime mantigina isaret eder.
+# Yeni kodda acik adi kullan (proven_keyword_bid).
+keyword_bid = proven_keyword_bid
