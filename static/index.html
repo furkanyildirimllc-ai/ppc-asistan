@@ -656,6 +656,30 @@ dialog{max-height:88vh;overflow:auto}
   header h1 span:not(.ver){display:none}
 }
 
+
+/* ---- Faz seridi ---- */
+#fazPanel{margin:0 0 18px}
+.faz-kart{border:1px solid var(--border,rgba(255,255,255,.12));border-radius:14px;
+  padding:18px 20px;background:rgba(255,255,255,.02)}
+.faz-yol{display:flex;gap:6px;margin:14px 0 4px}
+.faz-adim{flex:1;padding:9px 10px;border-radius:9px;text-align:center;font-size:12px;
+  border:1px solid rgba(255,255,255,.10);background:rgba(255,255,255,.03);opacity:.45}
+.faz-adim.gecildi{opacity:.75;border-color:rgba(34,197,94,.35);background:rgba(34,197,94,.10)}
+.faz-adim.simdi{opacity:1;border-color:rgba(96,165,250,.65);background:rgba(96,165,250,.16);
+  box-shadow:0 0 0 1px rgba(96,165,250,.25)}
+.faz-adim b{display:block;font-size:13px;margin-bottom:2px}
+.faz-adim i{font-style:normal;opacity:.7;font-size:11px}
+.faz-cubuk{height:6px;border-radius:999px;background:rgba(255,255,255,.08);overflow:hidden;margin:12px 0 6px}
+.faz-cubuk div{height:100%;background:linear-gradient(90deg,#3b82f6,#22c55e);transition:width .4s}
+.faz-liste{list-style:none;padding:0;margin:12px 0 0}
+.faz-liste li{display:flex;gap:10px;align-items:flex-start;padding:7px 0;
+  border-top:1px solid rgba(255,255,255,.06)}
+.faz-liste li:first-child{border-top:0}
+.faz-liste .kutu{width:18px;flex:0 0 18px;text-align:center;font-size:13px}
+.faz-liste .tamam{color:#22c55e}.faz-liste .bekle{color:#f59e0b}.faz-liste .elle{color:#64748b}
+.faz-metrik{display:flex;gap:22px;flex-wrap:wrap;margin-top:12px;font-size:12.5px}
+.faz-metrik b{display:block;font-size:17px;margin-top:2px}
+
 </style>
 </head>
 <body>
@@ -900,6 +924,7 @@ dialog{max-height:88vh;overflow:auto}
   <div id="uploadInfo" class="small muted" style="margin-bottom:8px"></div>
 
   <!-- FAZ 0 SONUC PANELI: kesif kampanyasi calistiysa gercek CPC'yi gosterir -->
+  <div id="fazPanel" style="display:none"></div>
   <div id="faz0Panel" style="display:none"></div>
 
   <!-- Raporu olmayan yeni urun icin giris noktalari -->
@@ -1201,7 +1226,67 @@ dialog{max-height:88vh;overflow:auto}
 
 <div id="toast"></div>
 
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js">
+// ---- Faz seridi: nerede oldugun, NEDEN orada oldugun, siradaki is -------
+// Faz karari phases.assess()'ten gelir - arayuzde AYRI kural yoktur.
+async function renderFaz(){
+  const box=document.getElementById('fazPanel');
+  if(!box) return;
+  if(!brandId){ box.style.display='none'; return; }
+  try{
+    const d=await(await api(`/api/brands/${brandId}/phase`)).json();
+    const m=d.metrics, t=d.thresholds;
+    const adimlar=[
+      {n:0,ad:'Keşif',aciklama:'CPC ölç'},
+      {n:1,ad:'Doğrulama',aciklama:'CVR ölç'},
+      {n:2,ad:'Hasat',aciklama:'kazananlara yığ'},
+      {n:3,ad:'Büyüme',aciklama:'ölçekle'}];
+    box.style.display='';
+    box.innerHTML=`<div class="faz-kart">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:16px;flex-wrap:wrap">
+        <div>
+          <div class="tag">FAZ ${d.phase} — ${esc(d.name.toUpperCase())}</div>
+          <div style="font-size:15px;margin-top:6px"><b>${esc(d.goal)}</b></div>
+          <div class="muted" style="margin-top:4px;max-width:640px">${esc(d.why)}</div>
+        </div>
+        <div class="faz-metrik">
+          <span>Tıklama<b>${m.clicks.toLocaleString()}</b></span>
+          <span>CPC<b>${m.cpc!=null?'$'+m.cpc:'—'}</b></span>
+          <span>CVR<b>${m.cvr_pct!=null?'%'+m.cvr_pct:'—'}</b></span>
+          <span>ACOS<b>${m.acos_pct!=null?'%'+m.acos_pct:'—'}</b></span>
+          <span>Kazanan terim<b>${m.winners}</b></span>
+          ${m.winner_roas?`<span>Kazanan ROAS<b>${m.winner_roas}x</b></span>`:''}
+        </div>
+      </div>
+
+      <div class="faz-yol">
+        ${adimlar.map(a=>`<div class="faz-adim ${a.n<d.phase?'gecildi':a.n===d.phase?'simdi':''}">
+          <b>Faz ${a.n} · ${a.ad}</b><i>${a.aciklama}</i></div>`).join('')}
+      </div>
+
+      <div class="faz-cubuk"><div style="width:${Math.round(d.progress*100)}%"></div></div>
+      <div class="muted small">Sonraki faza geçiş: <b>${esc(d.exit_criteria)}</b>
+        — ilerleme %${Math.round(d.progress*100)}</div>
+
+      ${d.warnings&&d.warnings.length?`<div style="margin-top:12px;padding:10px 12px;
+        border-radius:9px;background:rgba(245,158,11,.13);font-size:12.5px">
+        ⚠ ${d.warnings.map(esc).join('<br>⚠ ')}
+        <button style="margin-left:8px;padding:3px 9px;font-size:11.5px"
+          onclick="openBrandDialog(true)">Ayarları aç</button></div>`:''}
+
+      <ul class="faz-liste">
+        ${(d.checklist||[]).map(i=>{
+          const s=i.tamam===true?['tamam','✓']:i.tamam===false?['bekle','○']:['elle','·'];
+          return `<li><span class="kutu ${s[0]}">${s[1]}</span>
+            <span><b>${esc(i.is)}</b>
+            <span class="muted small" style="display:block">${esc(i.not||'')}</span></span></li>`;
+        }).join('')}
+      </ul>
+    </div>`;
+  }catch(e){ box.style.display='none'; }
+}
+
+</script>
 <script>
 const $=id=>document.getElementById(id);
 
@@ -2637,6 +2722,7 @@ async function uploadFiles(files){
                      loadOpportunities()]);
   loadToday();
   renderFaz0();          // yeni rapor geldi -> Faz 0 sonucu guncellensin
+  renderFaz();           // faz seridi de yeni veriyle guncellensin
   toast(`✅ Analiz tamamlandı → ${b.name}`);
 }
 
@@ -2788,7 +2874,7 @@ async function renderFaz0(){
   box.style.display='block';
   box.innerHTML=`
     <div class="card" style="border-left:4px solid ${renk};margin-bottom:10px">
-      <div class="tag" style="color:${renk}">${ikon} FAZ 0 — CPC KEŞFİ</div>
+      <div class="tag" style="color:${renk}">${ikon} ÜRÜN BAZINDA ÖLÇÜM</div>
       <div style="font-size:14px;font-weight:600;margin:4px 0 8px">${d.headline}</div>
       <div style="display:flex;gap:18px;flex-wrap:wrap;margin-bottom:8px">
         ${rakam('Gösterim', (d.impressions||0).toLocaleString('tr'))}
@@ -2804,7 +2890,7 @@ async function renderFaz0(){
       ${(d.products&&d.products.length>1)?`
       <div style="margin-top:12px;border-top:1px solid var(--line,#334155);padding-top:10px">
         <div class="muted" style="font-size:11px;margin-bottom:6px">
-          <b>${d.products.length} ürün ayrı ayrı ölçüldü</b> — Faz 1'de her ürün KENDİ CPC'siyle hesaplanır
+          <b>${d.products.length} ürün ayrı ayrı ölçüldü</b> — her ürün KENDİ CPC'siyle hesaplanır
         </div>
         <table style="width:100%;border-collapse:collapse;font-size:12px">
           <tr style="color:#94a3b8;font-size:10px;text-align:left">
@@ -2820,7 +2906,7 @@ async function renderFaz0(){
       </div>`:''}
       ${d.status==='basarili'?`<div style="margin-top:10px">
         <button class="primary" style="width:auto;padding:8px 16px" onclick="openLaunchDlg()">
-          🚀 Faz 1 planını gerçek CPC ile kur</button></div>`:''}
+          🚀 Planı gerçek CPC ile kur</button></div>`:''}
     </div>`;
 }
 
@@ -3809,14 +3895,13 @@ async function fazRozetiGuncelle(){
   el.style.display='';
   el.className='faz-rozet faz-yok'; el.textContent='Faz belirleniyor…';
   try{
-    // Faz karari autofill ucundan gelir: satir sayisi degil OLCULEBILIR TIK.
-    const d=await(await api(`/api/brands/${brandId}/autofill`)).json();
-    const f=d.phase;
-    el.className='faz-rozet '+(f==='1'?'faz-1':f==='0.5'?'faz-0':'faz-0');
-    el.textContent = f==='1' ? 'Faz 1 · ölçekleme'
-                   : f==='0.5' ? 'Faz 0.5 · kısmi veri'
-                   : 'Faz 0 · keşif';
-    el.title = d.phase_note || '';
+    // TEK KAYNAK: /phase ucu. Rozet ile faz seridi ASLA celismemeli -
+    // onceden rozet autofill'den, serit /phase'den okuyordu ve ayni marka
+    // icin biri "Faz 0" digeri "Faz 2" diyebiliyordu.
+    const d=await(await api(`/api/brands/${brandId}/phase`)).json();
+    el.className='faz-rozet '+(d.phase>=2?'faz-1':'faz-0');
+    el.textContent = `Faz ${d.phase} · ${d.name.toLowerCase()}`;
+    el.title = d.why || '';
   }catch(e){ el.className='faz-rozet faz-yok'; el.textContent='Faz —'; el.title=''; }
   menuDurumGuncelle();
 }
@@ -3829,6 +3914,7 @@ async function selectBrand(v){
     return await _selectBrandOrijinal(v);
   } finally {
     try{ await fazRozetiGuncelle(); }catch(e){ console.warn('faz rozeti:',e); }
+    try{ await renderFaz(); }catch(e){ console.warn('faz seridi:',e); }
   }
 }
 document.addEventListener('DOMContentLoaded', menuDurumGuncelle);
@@ -3875,6 +3961,66 @@ async function openFaz1(){
           `<li><code>${esc(x.asin)}</code> — ${esc(x.missing.join(', '))}</li>`).join('')}</ul></div>`:''}`;
     faz1Not.textContent = d.note;
   }catch(e){ faz1Out.innerHTML=`<p style="color:#ef4444">${esc(e.message||'Hata')}</p>`; }
+}
+
+
+// ---- Faz seridi: nerede oldugun, NEDEN orada oldugun, siradaki is -------
+// Faz karari phases.assess()'ten gelir - arayuzde AYRI kural yoktur.
+async function renderFaz(){
+  const box=document.getElementById('fazPanel');
+  if(!box) return;
+  if(!brandId){ box.style.display='none'; return; }
+  try{
+    const d=await(await api(`/api/brands/${brandId}/phase`)).json();
+    const m=d.metrics, t=d.thresholds;
+    const adimlar=[
+      {n:0,ad:'Keşif',aciklama:'CPC ölç'},
+      {n:1,ad:'Doğrulama',aciklama:'CVR ölç'},
+      {n:2,ad:'Hasat',aciklama:'kazananlara yığ'},
+      {n:3,ad:'Büyüme',aciklama:'ölçekle'}];
+    box.style.display='';
+    box.innerHTML=`<div class="faz-kart">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:16px;flex-wrap:wrap">
+        <div>
+          <div class="tag">FAZ ${d.phase} — ${esc(d.name.toUpperCase())}</div>
+          <div style="font-size:15px;margin-top:6px"><b>${esc(d.goal)}</b></div>
+          <div class="muted" style="margin-top:4px;max-width:640px">${esc(d.why)}</div>
+        </div>
+        <div class="faz-metrik">
+          <span>Tıklama<b>${m.clicks.toLocaleString()}</b></span>
+          <span>CPC<b>${m.cpc!=null?'$'+m.cpc:'—'}</b></span>
+          <span>CVR<b>${m.cvr_pct!=null?'%'+m.cvr_pct:'—'}</b></span>
+          <span>ACOS<b>${m.acos_pct!=null?'%'+m.acos_pct:'—'}</b></span>
+          <span>Kazanan terim<b>${m.winners}</b></span>
+          ${m.winner_roas?`<span>Kazanan ROAS<b>${m.winner_roas}x</b></span>`:''}
+        </div>
+      </div>
+
+      <div class="faz-yol">
+        ${adimlar.map(a=>`<div class="faz-adim ${a.n<d.phase?'gecildi':a.n===d.phase?'simdi':''}">
+          <b>Faz ${a.n} · ${a.ad}</b><i>${a.aciklama}</i></div>`).join('')}
+      </div>
+
+      <div class="faz-cubuk"><div style="width:${Math.round(d.progress*100)}%"></div></div>
+      <div class="muted small">Sonraki faza geçiş: <b>${esc(d.exit_criteria)}</b>
+        — ilerleme %${Math.round(d.progress*100)}</div>
+
+      ${d.warnings&&d.warnings.length?`<div style="margin-top:12px;padding:10px 12px;
+        border-radius:9px;background:rgba(245,158,11,.13);font-size:12.5px">
+        ⚠ ${d.warnings.map(esc).join('<br>⚠ ')}
+        <button style="margin-left:8px;padding:3px 9px;font-size:11.5px"
+          onclick="openBrandDialog(true)">Ayarları aç</button></div>`:''}
+
+      <ul class="faz-liste">
+        ${(d.checklist||[]).map(i=>{
+          const s=i.tamam===true?['tamam','✓']:i.tamam===false?['bekle','○']:['elle','·'];
+          return `<li><span class="kutu ${s[0]}">${s[1]}</span>
+            <span><b>${esc(i.is)}</b>
+            <span class="muted small" style="display:block">${esc(i.not||'')}</span></span></li>`;
+        }).join('')}
+      </ul>
+    </div>`;
+  }catch(e){ box.style.display='none'; }
 }
 
 </script>

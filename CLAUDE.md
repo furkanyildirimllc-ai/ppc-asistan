@@ -34,6 +34,7 @@ Ayrı hat (yeni ürün lansmanı):
 | `insights.py` | 801 | Dashboard, KPI, sağlık skoru, SKAG/TOS/brand-defense, `campaign_advisor` |
 | `analysis.py` | 684 | Deterministik motor: harvest, negatif, bid, placement, bütçe |
 | `launch.py` | 547 | Yeni ürün lansman planı + lansman bulksheet'i |
+| `phases.py` | 230 | **Faz motoru (TEK KAYNAK)**: hangi fazdasın, neden, sıradaki iş, çıkış kriteri |
 | `growth.py` | 190 | **Hedef planlayıcı**: %30 marjlı büyüme planı + açığı kapatacak kaldıraçlar (CTR/CVR/AOV/hacim) |
 | `listing.py` | 220 | **Listing optimizasyonu**: reklam verisinden başlık/bullet/arka plan önerisi, rakip marka koruması |
 | `verify.py` | 210 | **Yükleme sonrası denetim**: hesabın son hali kurallara uyuyor mu (yazılana değil, olana bakar) |
@@ -63,6 +64,7 @@ Export: `.../export`, `.../export-bulksheet`, `.../bulk-readiness`, `.../campaig
 Ürün: `GET/POST .../products`, `PUT/DELETE /api/products/{id}`
 Lansman: `POST /api/launch/analyze`, `POST /api/launch/bulksheet`
 Rekabet: `GET /api/brands/{id}/competitiveness` (teklif pazarı karşılıyor mu)
+Faz: `GET /api/brands/{id}/phase` (faz + neden + yapılacaklar) · `.../autofill` (ürünleri otomatik doldur)
 Büyüme: `POST /api/brands/{id}/growth-plan` (%30 marjlı hedef planı)
 Listing: `GET /api/brands/{id}/listing-plan` (başlık/arka plan önerisi)
 Doktor: `POST /api/brands/{id}/bulk-doctor` (teşhis), `.../bulk-doctor/file` (düzeltme dosyası), `.../bulk-doctor/verify` (yükleme sonrası denetim)
@@ -157,6 +159,25 @@ Seller hesabında ASIN geçerli SKU değildir → Product Ad satırları reddedi
   yanlış negatif = liste askıya alınır).
 - **Projeksiyon %30 marjla yapılır** (`growth.SAFETY_MARGIN`). Hedefe tam oturan plan,
   %30 sapmada hedefi kaçırır.
+
+### Faz modeli (phases.py — TEK KAYNAK)
+
+Faz sınırlarını **istatistik** belirler, takvim değil. "2 hafta geçti, faz atlayalım"
+yanlıştır; "CPC'yi ölçecek kadar tıklama biriktim" doğrudur.
+
+| Faz | Amaç | Çıkış koşulu |
+|---|---|---|
+| 0 Keşif | Tıklama başına ne ödediğini ölç | ≥15 tık (CPC ±%9) |
+| 1 Doğrulama | Hangi kelimenin dönüştüğünü bul | ≥100 tık **ve** ≥1 kazanan terim |
+| 2 Hasat | Parayı kazananlara yığ, israfı kes | ACOS ≤ hedef **ve** ≥5 kazanan |
+| 3 Büyüme | Kârlı yapıyı büyüt | — |
+
+- **Faz 3 kârlılık iddiasıdır.** Hedef ACOS bilinmiyorsa en fazla Faz 2'de kalınır —
+  "bilmiyoruz" demek "kârlıyız" demekten doğrudur.
+- **Faz mantığı başka hiçbir yerde hesaplanmaz.** Önceden `discovery-status`,
+  `product-status` ve `autofill` ayrı kurallarla karar veriyordu; aynı marka bir
+  ekranda Faz 0, diğerinde Faz 1 görünüyordu. Yeni faz kuralı gerekiyorsa
+  `phases.assess()` içine yazılır, kopyalanmaz.
 
 ### Kural yazmak ≠ kural uygulamak
 

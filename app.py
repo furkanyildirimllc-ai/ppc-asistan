@@ -25,6 +25,7 @@ import bulksheet
 import launch as launch_mod
 import benchmarks
 import bulk_doctor
+import phases as phases_mod
 import verify as verify_mod
 import growth as growth_mod
 import listing as listing_mod
@@ -1799,6 +1800,39 @@ async def buyume_plani(brand_id: int, file: UploadFile,
     return pl
 
 
+@app.get("/api/brands/{brand_id}/phase")
+def faz_durumu(brand_id: int):
+    """Markanin fazi, nedeni, siradaki isi ve yapilacaklar listesi.
+
+    TEK KAYNAK: faz mantigi eskiden discovery-status / product-status /
+    autofill uclerinde AYRI AYRI hesaplaniyordu; ayni marka bir ekranda
+    Faz 0, digerinde Faz 1 gorunebiliyordu. Artik yalnizca phases.assess()
+    karar verir; diger ucler de buradan okur."""
+    with db() as c:
+        brand = c.execute("SELECT * FROM brands WHERE id=?", (brand_id,)).fetchone()
+        if brand is None:
+            raise HTTPException(404, "Marka bulunamadi")
+        tg = _load_rows(c, brand_id, "targeting")
+        st = _load_rows(c, brand_id, "search_term")
+        cp = _load_rows(c, brand_id, "campaign")
+    b = dict(brand)
+    be = None
+    fiyat = _sayi(b.get("sell_price"))
+    if fiyat > 0:
+        be = launch_mod.break_even(
+            fiyat, _sayi(b.get("cogs")),
+            _sayi(b.get("amazon_fee_pct")) or 0.15,
+            _sayi(b.get("fba_fee"))).get("break_even_acos_pct")
+    hedef = _sayi(b.get("target_acos"))
+    d = phases_mod.assess(
+        tg, st, cp,
+        target_acos_pct=(hedef * 100 if 0 < hedef <= 1 else hedef or None),
+        break_even_acos_pct=be)
+    d["brand"] = b.get("name")
+    d["checklist"] = phases_mod.checklist(d)
+    return d
+
+
 @app.get("/api/brands/{brand_id}/autofill")
 def otomatik_doldur(brand_id: int):
     """Faz 1 icin URUN BILGILERINI KENDISI DOLDURUR.
@@ -1873,18 +1907,21 @@ def otomatik_doldur(brand_id: int):
             "ready": not kayip,
         })
 
-    # FAZ KARARI SATIR SAYISINA DEGIL OLCULEBILIR TIKLAMAYA BAGLIDIR.
-    # 2 satirlik targeting raporu "veri var" demek degildir; CPC bile
-    # olculemez. Faz 1 = olceklenecek kadar olculmus veri var demektir.
-    toplam_tik = sum(float(r.get("clicks") or 0) for r in tg)
-    if toplam_tik >= benchmarks.MIN_CLICKS_CVR:
-        faz, faz_not = "1", f"{toplam_tik:.0f} tık ölçüldü - ölçekleme aşaması"
-    elif toplam_tik >= benchmarks.MIN_CLICKS_CPC:
-        faz, faz_not = ("0.5", f"{toplam_tik:.0f} tık - CPC ölçüldü ama CVR için "
-                        f"{benchmarks.MIN_CLICKS_CVR} tık gerekir")
-    else:
-        faz, faz_not = ("0", f"{toplam_tik:.0f} tık - keşif aşaması, "
-                        f"önce CPC ölçülmeli")
+    # FAZ TEK KAYNAKTAN: phases.assess(). Burada ayri kural YOK.
+    # Ayni girdiyle cagrilir ki /phase ucu ile CELISMESIN.
+    _be = None
+    _fiyat = _sayi(b.get("sell_price"))
+    if _fiyat > 0:
+        _be = launch_mod.break_even(
+            _fiyat, _sayi(b.get("cogs")),
+            _sayi(b.get("amazon_fee_pct")) or 0.15,
+            _sayi(b.get("fba_fee"))).get("break_even_acos_pct")
+    _h = _sayi(b.get("target_acos"))
+    fz = phases_mod.assess(
+        tg, st, target_acos_pct=(_h * 100 if 0 < _h <= 1 else _h or None),
+        break_even_acos_pct=_be)
+    faz, faz_not = str(fz["phase"]), fz["why"]
+    toplam_tik = fz["metrics"]["clicks"]
     return {
         "brand": b.get("name"), "phase": faz, "phase_note": faz_not,
         "measured_clicks": round(toplam_tik),
