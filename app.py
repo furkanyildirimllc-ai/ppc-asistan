@@ -26,6 +26,7 @@ import launch as launch_mod
 import benchmarks
 import bulk_doctor
 import autopilot as autopilot_mod
+import discovery as discovery_mod
 import phases as phases_mod
 import verify as verify_mod
 import growth as growth_mod
@@ -1899,6 +1900,79 @@ async def otopilot_dosya(brand_id: int, file: UploadFile,
         headers={"Content-Disposition": f'attachment; filename="{ad}-OTOPILOT.xlsx"',
                  "X-Changes": json.dumps(sayac),
                  "Access-Control-Expose-Headers": "X-Changes"})
+
+
+@app.get("/api/brands/{brand_id}/discover-keywords")
+def kelime_kesfi(brand_id: int, asin: str = "", max_new: int = 25,
+                 max_queries: int = 24):
+    """Yeni kelime bul: Amazon autocomplete + kendi kazanan temalarin.
+
+    Kaynak sirasi guvenilirlige gore: once KENDI verinden kazanan
+    kavramlar cikarilir, sonra Amazon'un oneri motoruyla genisletilir.
+    Alakasizlar ELENIR (farkli urun tipi, genel kelime tuzagi).
+    """
+    with db() as c:
+        brand = c.execute("SELECT * FROM brands WHERE id=?", (brand_id,)).fetchone()
+        if brand is None:
+            raise HTTPException(404, "Marka bulunamadi")
+        st = _load_rows(c, brand_id, "search_term")
+        tg = _load_rows(c, brand_id, "targeting")
+        kat = _load_rows(c, brand_id, "ba_catalog")
+    if not st:
+        raise HTTPException(400, "Arama terimi raporu yok - once yukle. "
+                                 "Kesif, KENDI kazanan kelimelerinden beslenir.")
+    b = dict(brand)
+
+    if asin:
+        st = [r for r in st if benchmarks.asin_of_row(r) == asin.upper()] or st
+    # KATEGORI SOZLUGU: hangi kelimeler bu markanin urununu tanimlar?
+    #
+    # HATA GECMISI: TEK bir urunun basligi tum markanin sozlugu sanilmisti.
+    # Natural'da "Leave-In Scalp Lotion" basligi alindi ve "shampoo" ozgul
+    # kategoride olmadigi icin "best men's hair growth shampoo" gibi TAM
+    # ALAKALI kelimeler elendi. Marka geneli kesifte sozluk TUM urunlerin
+    # basliklarinin BIRLESIMI olmali; tek urun kesfinde o urunun basligi.
+    if asin:
+        secili = [str(r.get("title") or "") for r in kat
+                  if str(r.get("asin") or "").upper() == asin.upper()]
+        basliklar = secili or [str(r.get("title") or "") for r in kat if r.get("title")]
+    else:
+        basliklar = [str(r.get("title") or "") for r in kat if r.get("title")]
+    baslik = basliklar[0] if basliklar else ""
+
+    kategori = sorted({w for t in basliklar
+                       for w in re.findall(r"[a-z]+", t.lower()) if len(w) > 3})
+
+    kazanan = listing_mod.winning_terms(st)
+    temalar = listing_mod.keyword_themes(st)["winning"][:12]
+    cekirdek = discovery_mod.seeds_from_winners(kazanan, temalar, kategori, limit=6)
+    if not cekirdek:
+        raise HTTPException(400, "Cekirdek kavram uretilemedi - henuz satis "
+                                 "ureten arama terimi yok.")
+
+    adaylar = discovery_mod.expand(cekirdek, max_queries=max_queries)
+    mevcut = ([str(r.get("targeting") or "").lower() for r in tg] +
+              [k["term"] for k in kazanan])
+    puanli = discovery_mod.score(adaylar, temalar, mevcut,
+                                 urun_basligi=baslik,
+                                 kategori_kelimeleri=kategori)
+    bench = benchmarks.resolve(rows=tg, brand_name=b.get("name")) if tg else None
+    pazar = ((bench or {}).get("cpc", {}).get("exact")
+             or (bench or {}).get("account", {}).get("cpc") or 1.50)
+    testler = discovery_mod.suggest_tests(puanli, pazar, max_new=max_new)
+    elenen = getattr(discovery_mod.score, "last_filtered", 0)
+    zaten = getattr(discovery_mod.score, "last_skipped_existing", 0)
+    return {
+        "brand": b.get("name"), "asin": asin or None, "title": baslik or None,
+        "seeds": cekirdek, "raw_candidates": len(adaylar),
+        "relevant": len(puanli), "filtered_irrelevant": elenen,
+        "already_targeting": zaten,
+        "category_words": kategori[:25],
+        "tests": testler, "market_cpc": round(pazar, 2),
+        "note": ("Yeni kelimelerin geçmişi yok - teklif ölçüm için pazar "
+                 "CPC'sinin %15 altında başlar. Amaç satış değil, kelimenin "
+                 "dönüşüp dönüşmediğini öğrenmek."),
+    }
 
 
 @app.get("/api/brands/{brand_id}/phase")

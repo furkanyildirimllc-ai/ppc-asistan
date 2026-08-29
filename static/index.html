@@ -720,6 +720,7 @@ dialog{max-height:88vh;overflow:auto}
         <button onclick="openFaz1()"><b>Faz 1 — Ölçekleme</b><i>Ürünlerin otomatik doldurulur</i></button>
         <button onclick="openBuyumeDlg()"><b>Büyüme Planı</b><i>Hedefe giden yol, %30 marjla</i></button>
         <button onclick="openRekabetDlg()"><b>Rekabet Gücü</b><i>Teklifim gösterim alabilir mi?</i></button>
+        <button onclick="openKesifDlg()"><b>Kelime Keşfi</b><i>Amazon'dan yeni kelime bul ve test et</i></button>
         <button onclick="openListingDlg()"><b>Listing Planı</b><i>Başlık ve arka plan kelimeleri</i></button>
         <button id="mAi" onclick="runAI()"><b>AI Strateji</b><i>Yapay zeka analizi</i></button>
       </div>
@@ -1425,6 +1426,43 @@ async function otoIndir(){
     toast('Düzeltme dosyası indirildi — Bulk operations → Upload');
   }catch(e){}
   finally{ otoDlBtn.disabled=false; }
+}
+
+
+// ---- Kelime Kesfi ------------------------------------------------------
+function openKesifDlg(){
+  if(!brandId){ toast('Önce marka seç'); return; }
+  kesOut.innerHTML=''; kesifDlg.showModal();
+}
+async function kesYukle(){
+  kesBtn.disabled=true;
+  kesOut.innerHTML='<p class="muted">Amazon öneri motoru sorgulanıyor…</p>';
+  try{
+    const r=await api(`/api/brands/${brandId}/discover-keywords?max_new=${kesSayi.value||20}`);
+    const d=await r.json();
+    kesOut.innerHTML=`
+      <div class="row" style="gap:18px;flex-wrap:wrap;margin-bottom:10px">
+        <div><b>${d.raw_candidates}</b> ham aday</div>
+        <div><b style="color:#22c55e">${d.relevant}</b> alakalı</div>
+        <div class="muted">${d.filtered_irrelevant} alakasız elendi</div>
+        <div class="muted">${d.already_targeting} zaten hedefliyorsun</div>
+        <div class="muted">pazar CPC $${d.market_cpc}</div>
+      </div>
+      <p class="muted small">Çekirdek kavramlar: <code>${d.seeds.map(esc).join(' · ')}</code></p>
+      ${d.tests.length?`<table class="tbl"><thead><tr><th>Yeni kelime</th><th>Puan</th>
+        <th>Test teklifi</th><th>Not</th></tr></thead><tbody>
+        ${d.tests.map(t=>`<tr>
+          <td>${esc(t.keyword)}${t.competitor_brand
+            ?' <span class="etki etki-risk">rakip marka</span>':''}</td>
+          <td>${t.score}</td><td><b>$${t.test_bid}</b></td>
+          <td class="muted small">${t.competitor_brand
+            ?'Reklamda hedefle, listeye yazma':'yeni — ölçüm için'}</td></tr>`).join('')}
+      </tbody></table>
+      <p class="muted small" style="margin-top:10px">${esc(d.note)}</p>`
+      :`<p class="muted">Yeni alakalı kelime bulunamadı. Bu iyi bir işaret olabilir —
+        kazanan kavramlarının çevresi zaten hedefleniyor olabilir.</p>`}`;
+  }catch(e){ kesOut.innerHTML=`<p style="color:#ef4444">${esc(e.message||'Hata')}</p>`; }
+  finally{ kesBtn.disabled=false; }
 }
 
 </script>
@@ -4282,6 +4320,43 @@ async function otoIndir(){
   finally{ otoDlBtn.disabled=false; }
 }
 
+
+// ---- Kelime Kesfi ------------------------------------------------------
+function openKesifDlg(){
+  if(!brandId){ toast('Önce marka seç'); return; }
+  kesOut.innerHTML=''; kesifDlg.showModal();
+}
+async function kesYukle(){
+  kesBtn.disabled=true;
+  kesOut.innerHTML='<p class="muted">Amazon öneri motoru sorgulanıyor…</p>';
+  try{
+    const r=await api(`/api/brands/${brandId}/discover-keywords?max_new=${kesSayi.value||20}`);
+    const d=await r.json();
+    kesOut.innerHTML=`
+      <div class="row" style="gap:18px;flex-wrap:wrap;margin-bottom:10px">
+        <div><b>${d.raw_candidates}</b> ham aday</div>
+        <div><b style="color:#22c55e">${d.relevant}</b> alakalı</div>
+        <div class="muted">${d.filtered_irrelevant} alakasız elendi</div>
+        <div class="muted">${d.already_targeting} zaten hedefliyorsun</div>
+        <div class="muted">pazar CPC $${d.market_cpc}</div>
+      </div>
+      <p class="muted small">Çekirdek kavramlar: <code>${d.seeds.map(esc).join(' · ')}</code></p>
+      ${d.tests.length?`<table class="tbl"><thead><tr><th>Yeni kelime</th><th>Puan</th>
+        <th>Test teklifi</th><th>Not</th></tr></thead><tbody>
+        ${d.tests.map(t=>`<tr>
+          <td>${esc(t.keyword)}${t.competitor_brand
+            ?' <span class="etki etki-risk">rakip marka</span>':''}</td>
+          <td>${t.score}</td><td><b>$${t.test_bid}</b></td>
+          <td class="muted small">${t.competitor_brand
+            ?'Reklamda hedefle, listeye yazma':'yeni — ölçüm için'}</td></tr>`).join('')}
+      </tbody></table>
+      <p class="muted small" style="margin-top:10px">${esc(d.note)}</p>`
+      :`<p class="muted">Yeni alakalı kelime bulunamadı. Bu iyi bir işaret olabilir —
+        kazanan kavramlarının çevresi zaten hedefleniyor olabilir.</p>`}`;
+  }catch(e){ kesOut.innerHTML=`<p style="color:#ef4444">${esc(e.message||'Hata')}</p>`; }
+  finally{ kesBtn.disabled=false; }
+}
+
 </script>
 
 <dialog id="doctorDlg" style="max-width:920px;width:94vw">
@@ -4407,6 +4482,24 @@ async function otoIndir(){
     <button class="primary" id="otoDlBtn" style="display:none" onclick="otoIndir()">
       ⬇ Düzeltme dosyasını indir</button>
   </div>
+</dialog>
+
+
+<dialog id="kesifDlg" style="max-width:900px;width:94vw">
+  <h3>🔍 Kelime Keşfi — sürekli yeni kelime test et</h3>
+  <p class="muted" style="margin:6px 0 14px">
+    Önce <b>senin kazanan kelimelerinden</b> kavram çıkarılır, sonra Amazon'un
+    kendi öneri motoruyla genişletilir. Farklı ürün tipleri ve alakasızlar elenir.
+    Yeni kelimenin geçmişi olmadığı için teklif <b>ölçüm modunda</b> başlar.
+  </p>
+  <div class="row" style="gap:10px;align-items:flex-end;margin-bottom:12px">
+    <label>Kaç yeni kelime<input type="number" id="kesSayi" value="20" min="5" max="50" style="width:120px"></label>
+    <button onclick="kesYukle()" id="kesBtn">Keşfet</button>
+    <span class="muted small">Amazon'a istek atar, 10-20 saniye sürebilir</span>
+  </div>
+  <div id="kesOut"></div>
+  <div class="row" style="justify-content:flex-end;margin-top:14px">
+    <button onclick="kesifDlg.close()">Kapat</button></div>
 </dialog>
 
 </body>
