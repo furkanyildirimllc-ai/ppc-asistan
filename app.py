@@ -26,6 +26,7 @@ import launch as launch_mod
 import benchmarks
 import bulk_doctor
 import autopilot as autopilot_mod
+import architecture as arch_mod
 import discovery as discovery_mod
 import phases as phases_mod
 import verify as verify_mod
@@ -1900,6 +1901,35 @@ async def otopilot_dosya(brand_id: int, file: UploadFile,
         headers={"Content-Disposition": f'attachment; filename="{ad}-OTOPILOT.xlsx"',
                  "X-Changes": json.dumps(sayac),
                  "Access-Control-Expose-Headers": "X-Changes"})
+
+
+@app.post("/api/brands/{brand_id}/architecture")
+async def kampanya_mimarisi(brand_id: int, file: UploadFile):
+    """Kampanya yapisini denetle: her urunde hangi katman var/eksik?
+
+    Standart yapi: AUTO (kesif) + BROAD (kesif) + PHRASE (ara) +
+    EXACT (hasat). Katmanlar birbirini besler: kesif kelime bulur,
+    kanitlanan EXACT'e tasinir, tasinan kelime kesifte NEGATIF olur -
+    yoksa ayni sorgu icin iki kampanyan yarisir.
+    """
+    ham = await file.read()
+    try:
+        bulk = bulk_doctor.read_bulk(ham)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    with db() as c:
+        brand = c.execute("SELECT * FROM brands WHERE id=?", (brand_id,)).fetchone()
+        if brand is None:
+            raise HTTPException(404, "Marka bulunamadi")
+        st = _load_rows(c, brand_id, "search_term")
+    b = dict(brand)
+    rapor = arch_mod.audit(bulk, b.get("name") or "")
+    hasat = [k["term"] for k in listing_mod.winning_terms(st)] if st else []
+    neg = arch_mod.cross_negatives(bulk, hasat, st)
+    rapor["cross_negatives"] = neg
+    rapor["layers"] = {k: v["aciklama"] for k, v in arch_mod.KATMANLAR.items()}
+    rapor["brand"] = b.get("name")
+    return rapor
 
 
 @app.get("/api/brands/{brand_id}/discover-keywords")

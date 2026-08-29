@@ -15,6 +15,7 @@ Boylece "arac ne yapti, bana ne kaldi" sorusu her zaman cevapli olur.
 import math
 from collections import defaultdict
 
+import architecture
 import benchmarks
 import bulk_doctor as BD
 import growth
@@ -150,6 +151,11 @@ def run(bulk, targeting_rows=None, search_term_rows=None, campaign_rows=None,
     # ---- 6) Listing -------------------------------------------------
     lst = listing_mod.suggest(st, current_title, brand_name) if st else None
 
+    # ---- 6b) Mimari denetimi + katmanlar arasi negatifler -------------
+    mimari = architecture.audit(bulk, brand_name)
+    capraz_neg = architecture.cross_negatives(
+        bulk, [h["keyword"] for h in hasat], st)
+
     # ---- 7) Aksiyonlar: arac YAPAR ----------------------------------
     islemler = list(teshis["actions"])
     dokunulan = {a["campaign_id"] for a in islemler}
@@ -192,6 +198,21 @@ def run(bulk, targeting_rows=None, search_term_rows=None, campaign_rows=None,
         yaptim.append({"is": f"{len(teklif)} kampanyanın teklifi ayarlandı",
                        "detay": "ekonomik tavan ve hedef ACOS'a göre",
                        "nasil": "düzeltme dosyasında"})
+    if capraz_neg:
+        yaptim.append({
+            "is": f"{len(capraz_neg)} çapraz negatif eklendi",
+            "detay": ("EXACT'e taşınan kelimeler keşif kampanyalarında "
+                      "bloklandı - aynı sorgu için iki kampanyan yarışmasın"),
+            "nasil": "düzeltme dosyasında"})
+    eksik_katman = [u for u in mimari["products"] if u["missing_recommended"]]
+    if eksik_katman:
+        yapamam_mimari = ", ".join(
+            f"{u['asin']} ({'+'.join(u['missing_recommended'])})"
+            for u in eksik_katman[:4])
+        yaptim.append({
+            "is": f"{len(eksik_katman)} üründe eksik katman tespit edildi",
+            "detay": yapamam_mimari,
+            "nasil": "Lansman → Yeni Ürün ile eksik katmanları kur"})
     if hasat:
         yaptim.append({"is": f"{len(hasat)} kanıtlanmış kelime hasat edildi",
                        "detay": (f"toplam ${sum(h['sales'] for h in hasat):.0f} satış "
@@ -254,6 +275,8 @@ def run(bulk, targeting_rows=None, search_term_rows=None, campaign_rows=None,
                       "budget_limited": kullanim["budget_limited"],
                       "demand_limited": kullanim["demand_limited"]},
         "layers": katmanlar,
+        "architecture": mimari,
+        "cross_negatives": capraz_neg,
         "dead_layers": olu_katman,
         "harvest": hasat[:60],
         "growth": plan,
