@@ -111,14 +111,27 @@ def dead_keywords(targets):
 
 def bid_conflicts(targets):
     """Ayni kelime birden fazla kampanyada aktif."""
+    # Rapor satirlarinda her alan garanti DEGILDIR - seyrek/kismi
+    # yuklemelerde cpc/sales/orders eksik gelebilir. Eksik alanda cokmek
+    # yerine 0 kabul edilir; bir markanin eksik verisi tum dashboard'u
+    # dusurmemeli.
+    def _s(d, k, v=0.0):
+        try:
+            return float(d.get(k) or v)
+        except (TypeError, ValueError, AttributeError):
+            return v
+
     by_term = defaultdict(list)
     for t in targets:
-        if t["clicks"] < 1:
+        if _s(t, "clicks") < 1:
             continue
-        by_term[t["targeting"].lower()].append({
-            "campaign": t["campaign"], "match_type": t["match_type"],
-            "cpc": round(t["cpc"], 2), "sales": round(t["sales"], 2),
-            "orders": int(t["orders"]),
+        anahtar = str(t.get("targeting") or "").lower()
+        if not anahtar:
+            continue
+        by_term[anahtar].append({
+            "campaign": t.get("campaign"), "match_type": t.get("match_type"),
+            "cpc": round(_s(t, "cpc"), 2), "sales": round(_s(t, "sales"), 2),
+            "orders": int(_s(t, "orders")),
         })
     conflicts = [{"term": k, "instances": v}
                  for k, v in by_term.items() if len(v) > 1]

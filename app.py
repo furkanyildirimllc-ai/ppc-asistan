@@ -1799,6 +1799,107 @@ async def buyume_plani(brand_id: int, file: UploadFile,
     return pl
 
 
+@app.get("/api/brands/{brand_id}/autofill")
+def otomatik_doldur(brand_id: int):
+    """Faz 1 icin URUN BILGILERINI KENDISI DOLDURUR.
+
+    Kullanici artik baslik/ASIN/fiyat/SKU yazmaz - hepsi yuklenen
+    raporlardan cikarilir:
+      ASIN + SKU + performans  -> advertised_product raporu
+      baslik + fiyat + puan    -> ba_catalog (Brand Analytics)
+      olculmus CPC/CVR         -> targeting raporu
+      kanitlanmis kelimeler    -> search_term raporu
+
+    Eksik kalan alan olursa NE OLDUGUNU soyler; sessizce bos birakmaz.
+    """
+    with db() as c:
+        brand = c.execute("SELECT * FROM brands WHERE id=?", (brand_id,)).fetchone()
+        if brand is None:
+            raise HTTPException(404, "Marka bulunamadi")
+        ap = _load_rows(c, brand_id, "advertised_product")
+        kat = _load_rows(c, brand_id, "ba_catalog")
+        tg = _load_rows(c, brand_id, "targeting")
+        st = _load_rows(c, brand_id, "search_term")
+    b = dict(brand)
+
+    katalog = {}
+    for r in kat:
+        a = str(r.get("asin") or "").upper()
+        if len(a) == 10:
+            katalog[a] = r
+
+    urunler = {}
+    for r in ap:
+        a = str(r.get("asin") or "").upper()
+        if len(a) != 10:
+            continue
+        u = urunler.setdefault(a, {
+            "asin": a, "sku": r.get("sku") or r.get("advertised_sku"),
+            "clicks": 0.0, "spend": 0.0, "orders": 0.0, "sales": 0.0})
+        for k, f in (("clicks", "clicks"), ("spend", "spend"),
+                     ("orders", "orders"), ("sales", "sales")):
+            u[k] += float(r.get(f) or 0)
+        if not u["sku"]:
+            u["sku"] = r.get("sku") or r.get("advertised_sku")
+
+    bench = benchmarks.resolve(rows=tg, brand_id=brand_id,
+                               brand_name=b.get("name")) if tg else None
+    out, eksikler = [], []
+    for a, u in sorted(urunler.items(), key=lambda x: -x[1]["sales"]):
+        k = katalog.get(a) or {}
+        aov = (u["sales"] / u["orders"]) if u["orders"] else None
+        fiyat = k.get("price") or aov or _sayi(b.get("sell_price")) or None
+        cvr = (u["orders"] / u["clicks"]) if u["clicks"] else None
+        cpc = (u["spend"] / u["clicks"]) if u["clicks"] else None
+        kayip = []
+        if not u["sku"]:
+            kayip.append("SKU (Advertised Product raporu gerekli)")
+        if not k.get("title"):
+            kayip.append("baslik (Brand Analytics katalog raporu gerekli)")
+        if not fiyat:
+            kayip.append("fiyat")
+        if kayip:
+            eksikler.append({"asin": a, "missing": kayip})
+        out.append({
+            "asin": a, "sku": u["sku"], "title": k.get("title"),
+            "price": round(fiyat, 2) if fiyat else None,
+            "rating": k.get("rating"), "reviews": k.get("reviews"),
+            "clicks": round(u["clicks"]), "orders": round(u["orders"]),
+            "spend": round(u["spend"], 2), "sales": round(u["sales"], 2),
+            "measured_cvr_pct": round(cvr * 100, 2) if cvr else None,
+            "measured_cpc": round(cpc, 2) if cpc else None,
+            "acos_pct": round(u["spend"] / u["sales"] * 100, 1) if u["sales"] else None,
+            "missing": kayip,
+            "ready": not kayip,
+        })
+
+    # FAZ KARARI SATIR SAYISINA DEGIL OLCULEBILIR TIKLAMAYA BAGLIDIR.
+    # 2 satirlik targeting raporu "veri var" demek degildir; CPC bile
+    # olculemez. Faz 1 = olceklenecek kadar olculmus veri var demektir.
+    toplam_tik = sum(float(r.get("clicks") or 0) for r in tg)
+    if toplam_tik >= benchmarks.MIN_CLICKS_CVR:
+        faz, faz_not = "1", f"{toplam_tik:.0f} tık ölçüldü - ölçekleme aşaması"
+    elif toplam_tik >= benchmarks.MIN_CLICKS_CPC:
+        faz, faz_not = ("0.5", f"{toplam_tik:.0f} tık - CPC ölçüldü ama CVR için "
+                        f"{benchmarks.MIN_CLICKS_CVR} tık gerekir")
+    else:
+        faz, faz_not = ("0", f"{toplam_tik:.0f} tık - keşif aşaması, "
+                        f"önce CPC ölçülmeli")
+    return {
+        "brand": b.get("name"), "phase": faz, "phase_note": faz_not,
+        "measured_clicks": round(toplam_tik),
+        "products": out,
+        "ready_count": sum(1 for x in out if x["ready"]),
+        "incomplete": eksikler,
+        "benchmarks": ({"cpc": bench["cpc"], "cvr": bench["cvr"],
+                        "account": bench["account"]} if bench else None),
+        "note": ("Ürün bilgileri raporlardan dolduruldu - elle giriş gerekmez."
+                 if out else
+                 "Ürün bulunamadı. Advertised Product raporunu yükle - "
+                 "SKU taşıyan tek rapor odur."),
+    }
+
+
 @app.get("/api/brands/{brand_id}/listing-plan")
 def listing_plani(brand_id: int, asin: str = "", title: str = ""):
     """Reklam verisinden baslik/bullet/arka plan onerisi.

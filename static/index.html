@@ -53,8 +53,9 @@
     -webkit-backdrop-filter: blur(24px);
     position: sticky; top: 0; z-index: 100;
     flex-wrap: nowrap;
-    overflow-x: auto;
-    scrollbar-width: none;
+    /* overflow-x:auto KALDIRILDI - acilir menuyu kirpiyordu. Menuler
+       gruplandiktan sonra yatay kaydirmaya gerek kalmadi. */
+    overflow: visible;
     box-shadow: 0 4px 30px rgba(0, 0, 0, 0.4);
   }
   header::-webkit-scrollbar { display: none; }
@@ -615,32 +616,100 @@
 ::-webkit-scrollbar-track { background: rgba(0,0,0,0.1); border-radius: 4px; }
 ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; transition: 0.2s; }
 ::-webkit-scrollbar-thumb:hover { background: var(--accent); }
+
+/* ---- Ust menu: gruplu, kaymayan ---- */
+header{position:sticky;top:0;z-index:60;flex-wrap:nowrap;gap:10px;
+  /* overflow:auto 17 butonlu donemden kalmaydi ve acilir menuyu KIRPIYORDU.
+     Artik 4 gruplu menu var, yatay kaydirmaya gerek yok. */
+  overflow:visible}
+header h1{white-space:nowrap;margin-right:4px}
+#anaMenu{gap:2px;flex:1}
+.menu{position:relative}
+.menu-bas{background:transparent;border:1px solid transparent;color:var(--fg,#e2e8f0);
+  padding:8px 12px;border-radius:8px;cursor:pointer;white-space:nowrap;font-size:13.5px}
+.menu-bas:hover,.menu.acik .menu-bas{background:rgba(255,255,255,.07);
+  border-color:rgba(255,255,255,.12)}
+.menu-bas .ok{opacity:.5;font-size:10px;margin-left:2px}
+/* Liste akista yer KAPLAMAZ - absolute. Boylece acilinca sayfa kaymaz. */
+.menu-liste{display:none;position:absolute;top:calc(100% + 6px);left:0;min-width:250px;
+  background:#131a2a;border:1px solid rgba(255,255,255,.14);border-radius:10px;
+  padding:6px;box-shadow:0 12px 32px rgba(0,0,0,.5);z-index:70}
+.menu-liste.sag{left:auto;right:0}
+.menu.acik .menu-liste{display:block}
+.menu-liste button{display:block;width:100%;text-align:left;background:transparent;
+  border:0;padding:9px 11px;border-radius:7px;cursor:pointer;color:inherit}
+.menu-liste button:hover{background:rgba(96,165,250,.16)}
+.menu-liste button b{display:block;font-size:13.5px;font-weight:600}
+.menu-liste button i{display:block;font-size:11.5px;opacity:.62;font-style:normal;margin-top:2px}
+.menu-liste button[disabled]{opacity:.35;cursor:not-allowed}
+.menu-liste button[disabled]:hover{background:transparent}
+.faz-rozet{padding:5px 11px;border-radius:999px;font-size:12px;font-weight:600;
+  border:1px solid rgba(255,255,255,.16);white-space:nowrap}
+.faz-0{background:rgba(245,158,11,.16);color:#fbbf24}
+.faz-1{background:rgba(34,197,94,.16);color:#4ade80}
+.faz-yok{background:rgba(148,163,184,.14);color:#94a3b8}
+#eylemGrubu{margin-left:auto;gap:8px}
+/* Dialog icerigi uzun oldugunda sayfa degil DIALOG kaysin */
+dialog{max-height:88vh;overflow:auto}
+@media(max-width:1100px){
+  header{flex-wrap:wrap}
+  header h1 span:not(.ver){display:none}
+}
+
 </style>
 </head>
 <body>
 <header>
   <div class="h-group">
-    <h1>Performans <span>Analiz Uzmanı</span> <span class="ver">v2.0 · faz motoru</span></h1>
+    <h1>Performans <span>Analiz Uzmanı</span></h1>
     <select id="brandSel" onchange="selectBrand(this.value)"></select>
-    <button onclick="openBrandDialog()">+ Marka</button>
-    <button onclick="openBrandDialog(true)" id="editBtn" style="display:none">⚙ Ayarlar</button>
-    <button onclick="openLaunchDlg()" title="Sıfır geçmişli yeni ürün için kampanya kur">🚀 Yeni Ürün Launch</button>
-    <button onclick="openBatchDlg()" title="6-8 ürünü tek seferde planla, tek dosya indir">📦 Toplu Lansman</button>
-    <button onclick="openBuyumeDlg()" title="Hedefe giden plan — %30 güvenlik marjıyla">📈 Büyüme Planı</button>
-    <button onclick="openListingDlg()" title="Reklam verisinden başlık/bullet önerisi">📝 Listing Planı</button>
-    <button onclick="openRekabetDlg()" title="Teklifim pazarı karşılıyor mu? Gösterim alabilir miyim?">🎯 Rekabet Gücü</button>
-    <button onclick="openDoctorDlg()" title="Amazon Bulk Operations dosyanı yükle, düzeltme dosyası al">🩺 Kampanya Doktoru</button>
-    <button onclick="openExtDlg()" title="Amazon sayfasından tek tıkla ürün çeken Chrome uzantısı">🧩 Chrome Uzantısı</button>
-    <button onclick="helpDlg.showModal()">📖 Rehber</button>
+    <span id="fazRozet" class="faz-rozet" style="display:none"></span>
   </div>
-  <div class="h-group">
-    <div id="mgrBadge" class="mgr-badge" style="display:none" title="Denetçi Müdür — her AI çıktısını kontrol eder">🛡 Müdür: Standby</div>
-    <button id="histBtn" style="display:none" onclick="openHistory()">⟲ Geçmiş</button>
-    <button id="aiBtn" style="display:none" onclick="runAI()">🤖 AI Strateji</button>
-    <button id="applyBtn" style="display:none" onclick="openApplyDlg()"
-      title="Onayladığın önerileri Amazon'da nasıl uygularsın">📋 Uygulama Adımları</button>
-    <button class="primary" id="bulkPrimary" style="display:none" onclick="openBulkWizard()" title="Adım adım Amazon'a yükle">📦 Amazon'a Yükle</button>
-    <button id="exportBtn" style="display:none" onclick="exportFile()" title="Manuel referans için sade Excel">⬇ Excel (manuel)</button>
+
+  <nav class="h-group" id="anaMenu">
+    <div class="menu">
+      <button class="menu-bas" data-menu="m-analiz">Analiz <span class="ok">▾</span></button>
+      <div class="menu-liste" id="m-analiz">
+        <button onclick="openFaz1()"><b>Faz 1 — Ölçekleme</b><i>Ürünlerin otomatik doldurulur</i></button>
+        <button onclick="openBuyumeDlg()"><b>Büyüme Planı</b><i>Hedefe giden yol, %30 marjla</i></button>
+        <button onclick="openRekabetDlg()"><b>Rekabet Gücü</b><i>Teklifim gösterim alabilir mi?</i></button>
+        <button onclick="openListingDlg()"><b>Listing Planı</b><i>Başlık ve arka plan kelimeleri</i></button>
+        <button id="mAi" onclick="runAI()"><b>AI Strateji</b><i>Yapay zeka analizi</i></button>
+      </div>
+    </div>
+
+    <div class="menu">
+      <button class="menu-bas" data-menu="m-hesap">Hesap Bakımı <span class="ok">▾</span></button>
+      <div class="menu-liste" id="m-hesap">
+        <button onclick="openDoctorDlg()"><b>Kampanya Doktoru</b><i>Tara, düzelt, doğrula</i></button>
+        <button id="mHist" onclick="openHistory()"><b>Geçmiş</b><i>Yapılan değişiklikler</i></button>
+        <button id="mApply" onclick="openApplyDlg()"><b>Uygulama Adımları</b><i>Amazon'da nasıl uygularım</i></button>
+      </div>
+    </div>
+
+    <div class="menu">
+      <button class="menu-bas" data-menu="m-lansman">Lansman <span class="ok">▾</span></button>
+      <div class="menu-liste" id="m-lansman">
+        <button onclick="openLaunchDlg()"><b>Yeni Ürün</b><i>Sıfır geçmişli ürün için kurulum</i></button>
+        <button onclick="openBatchDlg()"><b>Toplu Lansman</b><i>6-8 ürün, tek dosya</i></button>
+      </div>
+    </div>
+
+    <div class="menu">
+      <button class="menu-bas" data-menu="m-ayar">⚙ <span class="ok">▾</span></button>
+      <div class="menu-liste sag" id="m-ayar">
+        <button onclick="openBrandDialog()"><b>Marka Ekle</b><i>Yeni marka hesabı</i></button>
+        <button id="mEdit" onclick="openBrandDialog(true)"><b>Marka Ayarları</b><i>Fiyat, maliyet, hedef ACOS</i></button>
+        <button onclick="openExtDlg()"><b>Chrome Uzantısı</b><i>Amazon'dan otomatik veri çek</i></button>
+        <button onclick="helpDlg.showModal()"><b>Rehber</b><i>Nasıl kullanılır</i></button>
+      </div>
+    </div>
+  </nav>
+
+  <div class="h-group" id="eylemGrubu">
+    <div id="mgrBadge" class="mgr-badge" style="display:none" title="Denetçi Müdür — her AI çıktısını kontrol eder">🛡 Müdür</div>
+    <button class="primary" id="bulkPrimary" style="display:none" onclick="openBulkWizard()" title="Adım adım Amazon'a yükle">Amazon'a Yükle</button>
+    <button id="exportBtn" style="display:none" onclick="exportFile()" title="Manuel referans için sade Excel">⬇ Excel</button>
   </div>
 </header>
 
@@ -1132,252 +1201,7 @@
 
 <div id="toast"></div>
 
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js">
-// ---- Kampanya Doktoru -------------------------------------------------
-// Bulk Operations dosyasindan canli hesabi teshis eder ve Operation=Update
-// dosyasi uretir. Yeni kampanya ACMAZ - mukerrer ad hatasi vermez.
-function openDoctorDlg(){
-  if(!currentBrand){ toast('Önce marka seç'); return; }
-  docOut.innerHTML=''; docDlBtn.style.display='none';
-  doctorDlg.showModal();
-}
-function _docForm(){
-  const f=docFile.files[0];
-  if(!f){ toast('Bulk Operations dosyasını seç'); return null; }
-  const fd=new FormData(); fd.append('file',f);
-  return {fd, acos: docAcos.value ? Number(docAcos.value) : null};
-}
-async function docScan(){
-  const g=_docForm(); if(!g) return;
-  docScanBtn.disabled=true; docOut.innerHTML='<p class="muted">Taranıyor…</p>';
-  try{
-    const q=g.acos ? `?target_acos=${g.acos}` : '';
-    const r=await api(`/api/brands/${currentBrand}/bulk-doctor${q}`,
-                      {method:'POST',body:g.fd});
-    const d=await r.json();
-    const u=d.utilization;
-    const sev=x=>x==='kritik'?'#ef4444':x==='uyari'?'#f59e0b':'#64748b';
-    docOut.innerHTML=`
-      <div class="row" style="gap:18px;flex-wrap:wrap;margin-bottom:10px">
-        <div><b>${d.campaigns_live}</b> aktif kampanya</div>
-        <div>bütçe kullanımı <b>%${Math.round(u.utilization*100)}</b></div>
-        <div>bütçe kısıtlı <b>${u.budget_limited}</b> · talep kısıtlı <b>${u.demand_limited}</b></div>
-        <div>hedef ACOS <b>%${d.target_acos_pct}</b></div>
-        <div class="muted">ölçülen CVR %${d.measured_cvr_pct} (${Math.round(d.cvr_clicks)} tık)</div>
-      </div>
-      ${u.utilization<0.5?`<p style="color:#f59e0b;margin:4px 0 10px">
-        ⚠ Kullanım %${Math.round(u.utilization*100)} — bütçe artırmak harcamayı
-        artırmaz. Hacim için <b>teklif</b> yükseltilmeli.</p>`:''}
-      <table class="tbl"><thead><tr><th>Kampanya</th><th>Teklif</th>
-        <th>Bütçe</th><th>Sebep</th></tr></thead><tbody>
-      ${d.actions.map(a=>`<tr>
-        <td style="max-width:300px">${esc(a.campaign)}</td>
-        <td>${a.new_bid&&Math.abs(a.new_bid-a.bid)>0.01
-              ?`$${a.bid.toFixed(2)} → <b>$${a.new_bid.toFixed(2)}</b>`:'—'}</td>
-        <td>${Math.abs(a.new_budget-a.budget)>0.5
-              ?`$${a.budget.toFixed(0)} → <b>$${a.new_budget.toFixed(0)}</b>`:'—'}</td>
-        <td style="color:${sev(a.severity)}">${esc(a.reason)}</td></tr>`).join('')}
-      </tbody></table>
-      ${d.untouched.length?`<details style="margin-top:10px">
-        <summary class="muted">${d.untouched.length} kampanyaya bilerek dokunulmadı</summary>
-        <ul class="muted">${d.untouched.map(n=>
-          `<li>${esc(n.campaign)} — ${esc(n.note)}</li>`).join('')}</ul></details>`:''}`;
-    docDlBtn.style.display = d.actions.length ? '' : 'none';
-  }catch(e){ docOut.innerHTML=`<p style="color:#ef4444">${esc(e.message||'Hata')}</p>`; }
-  finally{ docScanBtn.disabled=false; }
-}
-// Yukleme SONRASI dogrulama. Tarama "ne yapmali" der, dogrulama
-// "yaptigimiz oldu mu" der. Ikisi farkli sorulardir.
-async function docVerify(){
-  const g=_docForm(); if(!g) return;
-  docVerifyBtn.disabled=true; docOut.innerHTML='<p class="muted">Doğrulanıyor…</p>';
-  try{
-    const r=await api(`/api/brands/${currentBrand}/bulk-doctor/verify`,
-                      {method:'POST',body:g.fd});
-    const d=await r.json();
-    const renk=x=>x==='kritik'?'#ef4444':x==='uyari'?'#f59e0b':'#64748b';
-    docOut.innerHTML=`
-      <div style="padding:10px;border-radius:8px;margin-bottom:10px;
-           background:${d.clean?'#064e3b':'#7f1d1d'};color:#fff">
-        <b style="font-size:16px">${d.clean?'✓ TEMİZ':'✗ '+d.critical+' KRİTİK SORUN'}</b>
-        ${d.warnings?` · ${d.warnings} uyarı`:''}
-      </div>
-      <div class="row" style="gap:18px;flex-wrap:wrap;margin-bottom:10px">
-        <div><b>${d.campaigns_live}</b>/${d.campaigns_total} aktif kampanya</div>
-        <div>$${d.daily_budget.toFixed(0)}/gün bütçe</div>
-        <div>kullanım <b>%${Math.round(d.utilization*100)}</b></div>
-        <div>bütçe kısıtlı ${d.budget_limited} · talep kısıtlı ${d.demand_limited}</div>
-      </div>
-      ${d.ceilings?`<p class="muted">Ekonomik tavan (%${d.acos_ceiling_pct} ACOS):
-        ${Object.entries(d.ceilings).map(([k,v])=>`${k} $${v}`).join(' · ')}</p>`:''}
-      ${d.findings.length?`<table class="tbl"><thead><tr><th>Önem</th><th>Tür</th>
-        <th>Kampanya</th><th>Detay</th></tr></thead><tbody>
-        ${d.findings.map(f=>`<tr>
-          <td style="color:${renk(f.severity)}"><b>${f.severity}</b></td>
-          <td>${esc(f.type)}</td>
-          <td style="max-width:260px">${esc(f.campaign)}</td>
-          <td>${esc(f.detail)}</td></tr>`).join('')}
-        </tbody></table>`:'<p class="muted">Hiçbir sorun bulunamadı.</p>'}`;
-    docDlBtn.style.display='none';
-  }catch(e){ docOut.innerHTML=`<p style="color:#ef4444">${esc(e.message||'Hata')}</p>`; }
-  finally{ docVerifyBtn.disabled=false; }
-}
-
-async function docDownload(){
-  const g=_docForm(); if(!g) return;
-  docDlBtn.disabled=true;
-  try{
-    const q=g.acos ? `?target_acos=${g.acos}` : '';
-    const r=await api(`/api/brands/${currentBrand}/bulk-doctor/file${q}`,
-                      {method:'POST',body:g.fd});
-    const b=await r.blob();
-    const cd=r.headers.get('Content-Disposition')||'';
-    const m=cd.match(/filename="([^"]+)"/);
-    const a=document.createElement('a');
-    a.href=URL.createObjectURL(b); a.download=m?m[1]:'duzeltme.xlsx';
-    a.click(); URL.revokeObjectURL(a.href);
-    toast('Düzeltme dosyası indirildi');
-  }catch(e){ /* api() zaten toast atti */ }
-  finally{ docDlBtn.disabled=false; }
-}
-
-
-// ---- Rekabet Gucu ------------------------------------------------------
-// Kullanicinin en buyuk endisesi: "teklif dusuk kalir, gosterim gelmez".
-// Bu panel onu TAHMIN degil OLCUM olarak gosterir.
-function openRekabetDlg(){
-  if(!currentBrand){ toast('Önce marka seç'); return; }
-  rekOut.innerHTML=''; rekabetDlg.showModal(); rekYukle();
-}
-async function rekYukle(){
-  const a=Number(rekAcos.value||100)/100;
-  rekBtn.disabled=true; rekOut.innerHTML='<p class="muted">Hesaplanıyor…</p>';
-  try{
-    const r=await api(`/api/brands/${currentBrand}/competitiveness?acos_ceiling=${a}`);
-    const d=await r.json();
-    const renk=s=>s==='rahat'?'#22c55e':s==='sinirda'?'#f59e0b':'#ef4444';
-    const etiket=s=>s==='rahat'?'RAHAT':s==='sinirda'?'SINIRDA':'YETMEZ';
-    rekOut.innerHTML=`
-      <div style="padding:10px;border-radius:8px;margin-bottom:12px;
-           background:${d.uncompetitive?'#7f1d1d':'#064e3b'};color:#fff">
-        ${esc(d.verdict)}
-      </div>
-      <table class="tbl"><thead><tr>
-        <th>Match</th><th>Tık başına ciro</th><th>Max teklif</th>
-        <th>Pazar CPC</th><th>Durum</th><th>Rekabet için gereken ACOS</th>
-      </tr></thead><tbody>
-      ${d.rows.map(x=>`<tr>
-        <td><b>${esc(x.match)}</b></td>
-        <td>$${x.revenue_per_click.toFixed(2)}</td>
-        <td>$${x.ceiling.toFixed(2)}</td>
-        <td>$${x.market_cpc.toFixed(2)}</td>
-        <td style="color:${renk(x.status)}"><b>${etiket(x.status)}</b>
-            <span class="muted">(${x.ratio}x)</span></td>
-        <td>${x.acos_to_compete_pct!=null
-              ?`<b style="color:${x.acos_to_compete_pct>d.acos_ceiling_pct?'#f59e0b':'#22c55e'}">
-                 %${x.acos_to_compete_pct}</b>`:'—'}</td>
-      </tr>`).join('')}
-      </tbody></table>
-      <p class="muted" style="margin-top:10px">
-        <b>Nasıl okunur:</b> "Rekabet için gereken ACOS" senin kabul ettiğinden yüksekse,
-        o trafiği almak zarar demektir. Seçeneklerin: (1) daha yüksek ACOS'u bilerek kabul et,
-        (2) sepeti büyüt (paket/çoklu adet), (3) dönüşümü artır (liste, fiyat, yorum),
-        (4) o match type'tan çekil, kârlı olanlara yüklen.
-      </p>`;
-  }catch(e){ rekOut.innerHTML=`<p style="color:#ef4444">${esc(e.message||'Hata')}</p>`; }
-  finally{ rekBtn.disabled=false; }
-}
-
-
-// ---- Buyume Plani ------------------------------------------------------
-function openBuyumeDlg(){
-  if(!currentBrand){ toast('Önce marka seç'); return; }
-  buyOut.innerHTML=''; buyumeDlg.showModal();
-}
-async function buyYukle(){
-  const f=buyFile.files[0];
-  if(!f){ toast('Bulk Operations dosyasını seç'); return; }
-  const fd=new FormData(); fd.append('file',f);
-  buyBtn.disabled=true; buyOut.innerHTML='<p class="muted">Hesaplanıyor…</p>';
-  try{
-    const q=`monthly_target=${buyHedef.value}&days=${buyGun.value}&accepted_acos=${buyAcos.value}`;
-    const r=await api(`/api/brands/${currentBrand}/growth-plan?${q}`,{method:'POST',body:fd});
-    const d=await r.json(); const fn=d.funnel;
-    buyOut.innerHTML=`
-      <div style="padding:12px;border-radius:8px;margin-bottom:12px;
-           background:${d.reaches_target?'#064e3b':'#78350f'};color:#fff">
-        <b style="font-size:15px">${d.reaches_target
-          ? '✓ Reklam ölçeklemesi hedefi karşılıyor'
-          : `⚠ Reklam ölçeklemesi yetmiyor — açık $${d.gap_monthly.toLocaleString()}/ay`}</b><br>
-        <span style="opacity:.9">hedef $${d.monthly_target.toLocaleString()} →
-        %${d.margin_pct} marjla $${d.target_with_margin.toLocaleString()} ·
-        projeksiyon $${d.projected_monthly_sales.toLocaleString()}/ay ·
-        ACOS %${d.projected_acos_pct ?? '—'}</span>
-      </div>
-      <p class="muted">Huni: ${fn.impressions.toLocaleString()} gösterim →
-        ${fn.clicks} tık (CTR %${fn.ctr_pct}) → ${fn.orders} sipariş
-        (CVR %${fn.cvr_pct}) → $${fn.sales.toLocaleString()} (AOV $${fn.aov})</p>
-      <h4 style="margin:14px 0 6px">Ölçeklenecek kampanyalar</h4>
-      <table class="tbl"><thead><tr><th>Kampanya</th><th>ROAS</th><th>Kısıt</th>
-        <th>Aksiyon</th><th>Beklenen/ay</th></tr></thead><tbody>
-      ${d.allocations.map(a=>`<tr>
-        <td style="max-width:260px">${esc(a.name)}</td>
-        <td><b>${a.roas}x</b></td>
-        <td><span style="color:${a.limit==='butce'?'#22c55e':'#f59e0b'}">${esc(a.limit)}</span></td>
-        <td>${esc(a.action)}</td>
-        <td><b>$${a.projected_monthly_sales.toLocaleString()}</b></td></tr>`).join('')}
-      </tbody></table>
-      ${d.levers.length?`<h4 style="margin:16px 0 6px">Açığı kapatacak kaldıraçlar</h4>
-      <table class="tbl"><thead><tr><th>Kaldıraç</th><th>Şimdi</th><th>Gereken</th>
-        <th>Nasıl</th><th>Maliyet</th></tr></thead><tbody>
-      ${d.levers.map(l=>`<tr${l.lever.includes('ÜÇÜ')?' style="background:rgba(34,197,94,.12)"':''}>
-        <td><b>${esc(l.lever)}</b></td><td>${esc(l.current)}</td><td><b>${esc(l.needed)}</b></td>
-        <td>${esc(l.how)}</td><td class="muted">${esc(l.cost)}</td></tr>`).join('')}
-      </tbody></table>`:''}`;
-  }catch(e){ buyOut.innerHTML=`<p style="color:#ef4444">${esc(e.message||'Hata')}</p>`; }
-  finally{ buyBtn.disabled=false; }
-}
-
-// ---- Listing Plani -----------------------------------------------------
-function openListingDlg(){
-  if(!currentBrand){ toast('Önce marka seç'); return; }
-  lisOut.innerHTML=''; listingDlg.showModal();
-}
-async function lisYukle(){
-  lisBtn.disabled=true; lisOut.innerHTML='<p class="muted">Analiz ediliyor…</p>';
-  try{
-    const r=await api(`/api/brands/${currentBrand}/listing-plan?title=`+
-                      encodeURIComponent(lisTitle.value||''));
-    const d=await r.json(); const bk=d.backend_keywords;
-    lisOut.innerHTML=`
-      <h4 style="margin:10px 0 6px">Başlığa ekle — satış üretiyor ama başlıkta yok</h4>
-      ${d.missing_from_title.length?`<table class="tbl"><thead><tr><th>Tema</th>
-        <th>Terim</th><th>Satış</th><th>ROAS</th></tr></thead><tbody>
-      ${d.missing_from_title.map(t=>`<tr><td><b>${esc(t.theme)}</b></td>
-        <td>${t.terms}</td><td>$${t.sales}</td><td>${t.roas}x</td></tr>`).join('')}
-      </tbody></table>
-      <p style="margin-top:8px"><b>İlk 80 karaktere koy</b> (mobilde sadece bu görünür):
-        <code>${d.title_priority.map(esc).join(' · ')}</code></p>`
-      :'<p class="muted">Başlık zaten satış üreten temaları içeriyor.</p>'}
-      ${d.remove_from_title.length?`<h4 style="margin:14px 0 6px">Başlıktan çıkar — para yakıyor</h4>
-        <ul>${d.remove_from_title.map(t=>
-          `<li><b>${esc(t.theme)}</b> — $${t.spend} harcandı, 0 satış</li>`).join('')}</ul>`:''}
-      ${d.competitor_brands.length?`<div style="padding:10px;border-radius:8px;
-        background:#7f1d1d;color:#fff;margin:14px 0">
-        <b>⚠ Rakip marka uyarısı</b><br>${esc(d.competitor_warning)}<br>
-        <span style="opacity:.9">${d.competitor_brands.map(t=>
-          `${esc(t.theme)} ($${t.sales}, ${t.roas}x)`).join(' · ')}</span></div>`:''}
-      <h4 style="margin:14px 0 6px">Arka plan arama terimleri
-        <span class="muted">(${bk.bytes}/${bk.limit} byte)</span></h4>
-      <code style="display:block;padding:10px;background:rgba(128,128,128,.12);
-        border-radius:6px;word-break:break-word">${esc(bk.keywords.join(' '))}</code>
-      <p class="muted" style="margin-top:8px">Başlıkta zaten olan kelimeler buraya
-        yazılmaz — 249 byte'lık alan israf olur.</p>`;
-  }catch(e){ lisOut.innerHTML=`<p style="color:#ef4444">${esc(e.message||'Hata')}</p>`; }
-  finally{ lisBtn.disabled=false; }
-}
-
-</script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 <script>
 const $=id=>document.getElementById(id);
 
@@ -1524,7 +1348,7 @@ function clearBrandView(){
   const cm=$('chatMsgs');if(cm)cm.innerHTML='';
 }
 
-async function selectBrand(id){
+async function _selectBrandOrijinal(id){
   brandId=id?Number(id):null;
   const gen=++brandGen;
   clearBrandView();
@@ -3706,6 +3530,353 @@ function renderAI(data){
 }
 
 loadBrands();
+
+// ==== Panel fonksiyonlari (Chart.js etiketinden tasindi) ====
+// ---- Kampanya Doktoru -------------------------------------------------
+// Bulk Operations dosyasindan canli hesabi teshis eder ve Operation=Update
+// dosyasi uretir. Yeni kampanya ACMAZ - mukerrer ad hatasi vermez.
+function openDoctorDlg(){
+  if(!brandId){ toast('Önce marka seç'); return; }
+  docOut.innerHTML=''; docDlBtn.style.display='none';
+  doctorDlg.showModal();
+}
+function _docForm(){
+  const f=docFile.files[0];
+  if(!f){ toast('Bulk Operations dosyasını seç'); return null; }
+  const fd=new FormData(); fd.append('file',f);
+  return {fd, acos: docAcos.value ? Number(docAcos.value) : null};
+}
+async function docScan(){
+  const g=_docForm(); if(!g) return;
+  docScanBtn.disabled=true; docOut.innerHTML='<p class="muted">Taranıyor…</p>';
+  try{
+    const q=g.acos ? `?target_acos=${g.acos}` : '';
+    const r=await api(`/api/brands/${brandId}/bulk-doctor${q}`,
+                      {method:'POST',body:g.fd});
+    const d=await r.json();
+    const u=d.utilization;
+    const sev=x=>x==='kritik'?'#ef4444':x==='uyari'?'#f59e0b':'#64748b';
+    docOut.innerHTML=`
+      <div class="row" style="gap:18px;flex-wrap:wrap;margin-bottom:10px">
+        <div><b>${d.campaigns_live}</b> aktif kampanya</div>
+        <div>bütçe kullanımı <b>%${Math.round(u.utilization*100)}</b></div>
+        <div>bütçe kısıtlı <b>${u.budget_limited}</b> · talep kısıtlı <b>${u.demand_limited}</b></div>
+        <div>hedef ACOS <b>%${d.target_acos_pct}</b></div>
+        <div class="muted">ölçülen CVR %${d.measured_cvr_pct} (${Math.round(d.cvr_clicks)} tık)</div>
+      </div>
+      ${u.utilization<0.5?`<p style="color:#f59e0b;margin:4px 0 10px">
+        ⚠ Kullanım %${Math.round(u.utilization*100)} — bütçe artırmak harcamayı
+        artırmaz. Hacim için <b>teklif</b> yükseltilmeli.</p>`:''}
+      <table class="tbl"><thead><tr><th>Kampanya</th><th>Teklif</th>
+        <th>Bütçe</th><th>Sebep</th></tr></thead><tbody>
+      ${d.actions.map(a=>`<tr>
+        <td style="max-width:300px">${esc(a.campaign)}</td>
+        <td>${a.new_bid&&Math.abs(a.new_bid-a.bid)>0.01
+              ?`$${a.bid.toFixed(2)} → <b>$${a.new_bid.toFixed(2)}</b>`:'—'}</td>
+        <td>${Math.abs(a.new_budget-a.budget)>0.5
+              ?`$${a.budget.toFixed(0)} → <b>$${a.new_budget.toFixed(0)}</b>`:'—'}</td>
+        <td style="color:${sev(a.severity)}">${esc(a.reason)}</td></tr>`).join('')}
+      </tbody></table>
+      ${d.untouched.length?`<details style="margin-top:10px">
+        <summary class="muted">${d.untouched.length} kampanyaya bilerek dokunulmadı</summary>
+        <ul class="muted">${d.untouched.map(n=>
+          `<li>${esc(n.campaign)} — ${esc(n.note)}</li>`).join('')}</ul></details>`:''}`;
+    docDlBtn.style.display = d.actions.length ? '' : 'none';
+  }catch(e){ docOut.innerHTML=`<p style="color:#ef4444">${esc(e.message||'Hata')}</p>`; }
+  finally{ docScanBtn.disabled=false; }
+}
+// Yukleme SONRASI dogrulama. Tarama "ne yapmali" der, dogrulama
+// "yaptigimiz oldu mu" der. Ikisi farkli sorulardir.
+async function docVerify(){
+  const g=_docForm(); if(!g) return;
+  docVerifyBtn.disabled=true; docOut.innerHTML='<p class="muted">Doğrulanıyor…</p>';
+  try{
+    const r=await api(`/api/brands/${brandId}/bulk-doctor/verify`,
+                      {method:'POST',body:g.fd});
+    const d=await r.json();
+    const renk=x=>x==='kritik'?'#ef4444':x==='uyari'?'#f59e0b':'#64748b';
+    docOut.innerHTML=`
+      <div style="padding:10px;border-radius:8px;margin-bottom:10px;
+           background:${d.clean?'#064e3b':'#7f1d1d'};color:#fff">
+        <b style="font-size:16px">${d.clean?'✓ TEMİZ':'✗ '+d.critical+' KRİTİK SORUN'}</b>
+        ${d.warnings?` · ${d.warnings} uyarı`:''}
+      </div>
+      <div class="row" style="gap:18px;flex-wrap:wrap;margin-bottom:10px">
+        <div><b>${d.campaigns_live}</b>/${d.campaigns_total} aktif kampanya</div>
+        <div>$${d.daily_budget.toFixed(0)}/gün bütçe</div>
+        <div>kullanım <b>%${Math.round(d.utilization*100)}</b></div>
+        <div>bütçe kısıtlı ${d.budget_limited} · talep kısıtlı ${d.demand_limited}</div>
+      </div>
+      ${d.ceilings?`<p class="muted">Ekonomik tavan (%${d.acos_ceiling_pct} ACOS):
+        ${Object.entries(d.ceilings).map(([k,v])=>`${k} $${v}`).join(' · ')}</p>`:''}
+      ${d.findings.length?`<table class="tbl"><thead><tr><th>Önem</th><th>Tür</th>
+        <th>Kampanya</th><th>Detay</th></tr></thead><tbody>
+        ${d.findings.map(f=>`<tr>
+          <td style="color:${renk(f.severity)}"><b>${f.severity}</b></td>
+          <td>${esc(f.type)}</td>
+          <td style="max-width:260px">${esc(f.campaign)}</td>
+          <td>${esc(f.detail)}</td></tr>`).join('')}
+        </tbody></table>`:'<p class="muted">Hiçbir sorun bulunamadı.</p>'}`;
+    docDlBtn.style.display='none';
+  }catch(e){ docOut.innerHTML=`<p style="color:#ef4444">${esc(e.message||'Hata')}</p>`; }
+  finally{ docVerifyBtn.disabled=false; }
+}
+
+async function docDownload(){
+  const g=_docForm(); if(!g) return;
+  docDlBtn.disabled=true;
+  try{
+    const q=g.acos ? `?target_acos=${g.acos}` : '';
+    const r=await api(`/api/brands/${brandId}/bulk-doctor/file${q}`,
+                      {method:'POST',body:g.fd});
+    const b=await r.blob();
+    const cd=r.headers.get('Content-Disposition')||'';
+    const m=cd.match(/filename="([^"]+)"/);
+    const a=document.createElement('a');
+    a.href=URL.createObjectURL(b); a.download=m?m[1]:'duzeltme.xlsx';
+    a.click(); URL.revokeObjectURL(a.href);
+    toast('Düzeltme dosyası indirildi');
+  }catch(e){ /* api() zaten toast atti */ }
+  finally{ docDlBtn.disabled=false; }
+}
+
+
+// ---- Rekabet Gucu ------------------------------------------------------
+// Kullanicinin en buyuk endisesi: "teklif dusuk kalir, gosterim gelmez".
+// Bu panel onu TAHMIN degil OLCUM olarak gosterir.
+function openRekabetDlg(){
+  if(!brandId){ toast('Önce marka seç'); return; }
+  rekOut.innerHTML=''; rekabetDlg.showModal(); rekYukle();
+}
+async function rekYukle(){
+  const a=Number(rekAcos.value||100)/100;
+  rekBtn.disabled=true; rekOut.innerHTML='<p class="muted">Hesaplanıyor…</p>';
+  try{
+    const r=await api(`/api/brands/${brandId}/competitiveness?acos_ceiling=${a}`);
+    const d=await r.json();
+    const renk=s=>s==='rahat'?'#22c55e':s==='sinirda'?'#f59e0b':'#ef4444';
+    const etiket=s=>s==='rahat'?'RAHAT':s==='sinirda'?'SINIRDA':'YETMEZ';
+    rekOut.innerHTML=`
+      <div style="padding:10px;border-radius:8px;margin-bottom:12px;
+           background:${d.uncompetitive?'#7f1d1d':'#064e3b'};color:#fff">
+        ${esc(d.verdict)}
+      </div>
+      <table class="tbl"><thead><tr>
+        <th>Match</th><th>Tık başına ciro</th><th>Max teklif</th>
+        <th>Pazar CPC</th><th>Durum</th><th>Rekabet için gereken ACOS</th>
+      </tr></thead><tbody>
+      ${d.rows.map(x=>`<tr>
+        <td><b>${esc(x.match)}</b></td>
+        <td>$${x.revenue_per_click.toFixed(2)}</td>
+        <td>$${x.ceiling.toFixed(2)}</td>
+        <td>$${x.market_cpc.toFixed(2)}</td>
+        <td style="color:${renk(x.status)}"><b>${etiket(x.status)}</b>
+            <span class="muted">(${x.ratio}x)</span></td>
+        <td>${x.acos_to_compete_pct!=null
+              ?`<b style="color:${x.acos_to_compete_pct>d.acos_ceiling_pct?'#f59e0b':'#22c55e'}">
+                 %${x.acos_to_compete_pct}</b>`:'—'}</td>
+      </tr>`).join('')}
+      </tbody></table>
+      <p class="muted" style="margin-top:10px">
+        <b>Nasıl okunur:</b> "Rekabet için gereken ACOS" senin kabul ettiğinden yüksekse,
+        o trafiği almak zarar demektir. Seçeneklerin: (1) daha yüksek ACOS'u bilerek kabul et,
+        (2) sepeti büyüt (paket/çoklu adet), (3) dönüşümü artır (liste, fiyat, yorum),
+        (4) o match type'tan çekil, kârlı olanlara yüklen.
+      </p>`;
+  }catch(e){ rekOut.innerHTML=`<p style="color:#ef4444">${esc(e.message||'Hata')}</p>`; }
+  finally{ rekBtn.disabled=false; }
+}
+
+
+// ---- Buyume Plani ------------------------------------------------------
+function openBuyumeDlg(){
+  if(!brandId){ toast('Önce marka seç'); return; }
+  buyOut.innerHTML=''; buyumeDlg.showModal();
+}
+async function buyYukle(){
+  const f=buyFile.files[0];
+  if(!f){ toast('Bulk Operations dosyasını seç'); return; }
+  const fd=new FormData(); fd.append('file',f);
+  buyBtn.disabled=true; buyOut.innerHTML='<p class="muted">Hesaplanıyor…</p>';
+  try{
+    const q=`monthly_target=${buyHedef.value}&days=${buyGun.value}&accepted_acos=${buyAcos.value}`;
+    const r=await api(`/api/brands/${brandId}/growth-plan?${q}`,{method:'POST',body:fd});
+    const d=await r.json(); const fn=d.funnel;
+    buyOut.innerHTML=`
+      <div style="padding:12px;border-radius:8px;margin-bottom:12px;
+           background:${d.reaches_target?'#064e3b':'#78350f'};color:#fff">
+        <b style="font-size:15px">${d.reaches_target
+          ? '✓ Reklam ölçeklemesi hedefi karşılıyor'
+          : `⚠ Reklam ölçeklemesi yetmiyor — açık $${d.gap_monthly.toLocaleString()}/ay`}</b><br>
+        <span style="opacity:.9">hedef $${d.monthly_target.toLocaleString()} →
+        %${d.margin_pct} marjla $${d.target_with_margin.toLocaleString()} ·
+        projeksiyon $${d.projected_monthly_sales.toLocaleString()}/ay ·
+        ACOS %${d.projected_acos_pct ?? '—'}</span>
+      </div>
+      <p class="muted">Huni: ${fn.impressions.toLocaleString()} gösterim →
+        ${fn.clicks} tık (CTR %${fn.ctr_pct}) → ${fn.orders} sipariş
+        (CVR %${fn.cvr_pct}) → $${fn.sales.toLocaleString()} (AOV $${fn.aov})</p>
+      <h4 style="margin:14px 0 6px">Ölçeklenecek kampanyalar</h4>
+      <table class="tbl"><thead><tr><th>Kampanya</th><th>ROAS</th><th>Kısıt</th>
+        <th>Aksiyon</th><th>Beklenen/ay</th></tr></thead><tbody>
+      ${d.allocations.map(a=>`<tr>
+        <td style="max-width:260px">${esc(a.name)}</td>
+        <td><b>${a.roas}x</b></td>
+        <td><span style="color:${a.limit==='butce'?'#22c55e':'#f59e0b'}">${esc(a.limit)}</span></td>
+        <td>${esc(a.action)}</td>
+        <td><b>$${a.projected_monthly_sales.toLocaleString()}</b></td></tr>`).join('')}
+      </tbody></table>
+      ${d.levers.length?`<h4 style="margin:16px 0 6px">Açığı kapatacak kaldıraçlar</h4>
+      <table class="tbl"><thead><tr><th>Kaldıraç</th><th>Şimdi</th><th>Gereken</th>
+        <th>Nasıl</th><th>Maliyet</th></tr></thead><tbody>
+      ${d.levers.map(l=>`<tr${l.lever.includes('ÜÇÜ')?' style="background:rgba(34,197,94,.12)"':''}>
+        <td><b>${esc(l.lever)}</b></td><td>${esc(l.current)}</td><td><b>${esc(l.needed)}</b></td>
+        <td>${esc(l.how)}</td><td class="muted">${esc(l.cost)}</td></tr>`).join('')}
+      </tbody></table>`:''}`;
+  }catch(e){ buyOut.innerHTML=`<p style="color:#ef4444">${esc(e.message||'Hata')}</p>`; }
+  finally{ buyBtn.disabled=false; }
+}
+
+// ---- Listing Plani -----------------------------------------------------
+function openListingDlg(){
+  if(!brandId){ toast('Önce marka seç'); return; }
+  lisOut.innerHTML=''; listingDlg.showModal();
+}
+async function lisYukle(){
+  lisBtn.disabled=true; lisOut.innerHTML='<p class="muted">Analiz ediliyor…</p>';
+  try{
+    const r=await api(`/api/brands/${brandId}/listing-plan?title=`+
+                      encodeURIComponent(lisTitle.value||''));
+    const d=await r.json(); const bk=d.backend_keywords;
+    lisOut.innerHTML=`
+      <h4 style="margin:10px 0 6px">Başlığa ekle — satış üretiyor ama başlıkta yok</h4>
+      ${d.missing_from_title.length?`<table class="tbl"><thead><tr><th>Tema</th>
+        <th>Terim</th><th>Satış</th><th>ROAS</th></tr></thead><tbody>
+      ${d.missing_from_title.map(t=>`<tr><td><b>${esc(t.theme)}</b></td>
+        <td>${t.terms}</td><td>$${t.sales}</td><td>${t.roas}x</td></tr>`).join('')}
+      </tbody></table>
+      <p style="margin-top:8px"><b>İlk 80 karaktere koy</b> (mobilde sadece bu görünür):
+        <code>${d.title_priority.map(esc).join(' · ')}</code></p>`
+      :'<p class="muted">Başlık zaten satış üreten temaları içeriyor.</p>'}
+      ${d.remove_from_title.length?`<h4 style="margin:14px 0 6px">Başlıktan çıkar — para yakıyor</h4>
+        <ul>${d.remove_from_title.map(t=>
+          `<li><b>${esc(t.theme)}</b> — $${t.spend} harcandı, 0 satış</li>`).join('')}</ul>`:''}
+      ${d.competitor_brands.length?`<div style="padding:10px;border-radius:8px;
+        background:#7f1d1d;color:#fff;margin:14px 0">
+        <b>⚠ Rakip marka uyarısı</b><br>${esc(d.competitor_warning)}<br>
+        <span style="opacity:.9">${d.competitor_brands.map(t=>
+          `${esc(t.theme)} ($${t.sales}, ${t.roas}x)`).join(' · ')}</span></div>`:''}
+      <h4 style="margin:14px 0 6px">Arka plan arama terimleri
+        <span class="muted">(${bk.bytes}/${bk.limit} byte)</span></h4>
+      <code style="display:block;padding:10px;background:rgba(128,128,128,.12);
+        border-radius:6px;word-break:break-word">${esc(bk.keywords.join(' '))}</code>
+      <p class="muted" style="margin-top:8px">Başlıkta zaten olan kelimeler buraya
+        yazılmaz — 249 byte'lık alan israf olur.</p>`;
+  }catch(e){ lisOut.innerHTML=`<p style="color:#ef4444">${esc(e.message||'Hata')}</p>`; }
+  finally{ lisBtn.disabled=false; }
+}
+
+
+// ---- Ust menu davranisi ------------------------------------------------
+// Menu listesi absolute konumlanir; acilip kapanmasi sayfayi KAYDIRMAZ.
+document.addEventListener('click', e=>{
+  const bas=e.target.closest('.menu-bas');
+  document.querySelectorAll('.menu.acik').forEach(m=>{
+    if(!bas || m!==bas.closest('.menu')) m.classList.remove('acik');
+  });
+  if(bas){ bas.closest('.menu').classList.toggle('acik'); e.preventDefault(); return; }
+  if(e.target.closest('.menu-liste button'))
+    document.querySelectorAll('.menu.acik').forEach(m=>m.classList.remove('acik'));
+});
+document.addEventListener('keydown', e=>{
+  if(e.key==='Escape') document.querySelectorAll('.menu.acik').forEach(m=>m.classList.remove('acik'));
+});
+
+// Marka secilmeden calismayacak menu ogeleri kapali gorunur - tiklayip
+// "once marka sec" uyarisi almaktansa neden kapali oldugunu gormek iyidir.
+function menuDurumGuncelle(){
+  const v=!!(typeof brandId!=='undefined' && brandId);
+  ['mAi','mHist','mApply','mEdit'].forEach(id=>{
+    const b=document.getElementById(id); if(!b) return;
+    b.disabled=!v; b.title=v?'':'Önce marka seç';
+  });
+}
+
+// Faz rozeti: kullanici hangi asamada oldugunu her an gorsun.
+async function fazRozetiGuncelle(){
+  const el=document.getElementById('fazRozet'); if(!el) return;
+  if(!brandId){ el.style.display='none'; return; }
+  el.style.display='';
+  el.className='faz-rozet faz-yok'; el.textContent='Faz belirleniyor…';
+  try{
+    // Faz karari autofill ucundan gelir: satir sayisi degil OLCULEBILIR TIK.
+    const d=await(await api(`/api/brands/${brandId}/autofill`)).json();
+    const f=d.phase;
+    el.className='faz-rozet '+(f==='1'?'faz-1':f==='0.5'?'faz-0':'faz-0');
+    el.textContent = f==='1' ? 'Faz 1 · ölçekleme'
+                   : f==='0.5' ? 'Faz 0.5 · kısmi veri'
+                   : 'Faz 0 · keşif';
+    el.title = d.phase_note || '';
+  }catch(e){ el.className='faz-rozet faz-yok'; el.textContent='Faz —'; el.title=''; }
+  menuDurumGuncelle();
+}
+
+
+async function selectBrand(v){
+  // Rozet GUNCELLENMELI - orijinal fonksiyon hata atsa bile. Onceden
+  // sadece basarili yolda cagriliyordu ve rozet hic gorunmuyordu.
+  try{
+    return await _selectBrandOrijinal(v);
+  } finally {
+    try{ await fazRozetiGuncelle(); }catch(e){ console.warn('faz rozeti:',e); }
+  }
+}
+document.addEventListener('DOMContentLoaded', menuDurumGuncelle);
+
+// ---- Faz 1: her sey otomatik dolar ------------------------------------
+// Kullanici baslik/ASIN/fiyat YAZMAZ. Raporlardan cikarilir; eksik varsa
+// hangi raporun gerektigi soylenir - sessiz bos alan birakilmaz.
+async function openFaz1(){
+  if(!brandId){ toast('Önce marka seç'); return; }
+  faz1Out.innerHTML='<p class="muted">Ürün bilgileri raporlardan okunuyor…</p>';
+  faz1Dlg.showModal();
+  try{
+    const d=await(await api(`/api/brands/${brandId}/autofill`)).json();
+    if(!d.products.length){
+      faz1Out.innerHTML=`<div style="padding:12px;border-radius:8px;background:#7f1d1d;color:#fff">
+        <b>Ürün bulunamadı</b><br>${esc(d.note)}</div>`;
+      return;
+    }
+    const b=d.benchmarks;
+    faz1Out.innerHTML=`
+      <div style="padding:10px;border-radius:8px;margin-bottom:12px;
+        background:${d.ready_count===d.products.length?'#064e3b':'#78350f'};color:#fff">
+        <b>${d.products.length} ürün bulundu, ${d.ready_count} tanesi hazır</b>
+        ${d.ready_count===d.products.length?' — elle giriş gerekmiyor':''}
+      </div>
+      ${b?`<p class="muted">Ölçülmüş referanslar: exact CPC $${b.cpc.exact??'—'} ·
+        CVR %${((b.cvr.exact||0)*100).toFixed(2)} · hesap AOV $${b.account?.aov??'—'}</p>`:''}
+      <table class="tbl"><thead><tr><th>ASIN</th><th>Ürün</th><th>SKU</th><th>Fiyat</th>
+        <th>CVR</th><th>CPC</th><th>ACOS</th><th>Durum</th></tr></thead><tbody>
+      ${d.products.map(p=>`<tr>
+        <td><code>${esc(p.asin)}</code></td>
+        <td style="max-width:250px">${esc(p.title||'—')}</td>
+        <td><code>${esc(p.sku||'—')}</code></td>
+        <td>${p.price?'$'+p.price:'—'}</td>
+        <td>${p.measured_cvr_pct!=null?'%'+p.measured_cvr_pct:'—'}</td>
+        <td>${p.measured_cpc!=null?'$'+p.measured_cpc:'—'}</td>
+        <td>${p.acos_pct!=null?'%'+p.acos_pct:'—'}</td>
+        <td>${p.ready?'<span style="color:#22c55e">hazır</span>'
+              :`<span style="color:#f59e0b" title="${esc(p.missing.join(', '))}">eksik</span>`}</td>
+      </tr>`).join('')}</tbody></table>
+      ${d.incomplete.length?`<div style="margin-top:10px;padding:10px;border-radius:8px;
+        background:rgba(245,158,11,.14)">
+        <b>Eksik bilgi</b><ul style="margin:6px 0 0">${d.incomplete.map(x=>
+          `<li><code>${esc(x.asin)}</code> — ${esc(x.missing.join(', '))}</li>`).join('')}</ul></div>`:''}`;
+    faz1Not.textContent = d.note;
+  }catch(e){ faz1Out.innerHTML=`<p style="color:#ef4444">${esc(e.message||'Hata')}</p>`; }
+}
+
 </script>
 
 <dialog id="doctorDlg" style="max-width:920px;width:94vw">
@@ -3789,6 +3960,24 @@ loadBrands();
   <div id="lisOut"></div>
   <div class="row" style="justify-content:flex-end;margin-top:14px">
     <button onclick="listingDlg.close()">Kapat</button></div>
+</dialog>
+
+
+<dialog id="faz1Dlg" style="max-width:1000px;width:96vw">
+  <h3>Faz 1 — Ölçekleme</h3>
+  <p class="muted" style="margin:6px 0 14px">
+    Ürün bilgilerini <b>elle girmene gerek yok</b>. Yüklediğin raporlardan
+    ASIN, SKU, başlık, fiyat ve ölçülmüş CVR/CPC kendiliğinden gelir.
+    Eksik bir şey varsa hangi raporun gerektiğini söylerim.
+  </p>
+  <div id="faz1Out"><p class="muted">Yükleniyor…</p></div>
+  <div class="row" style="justify-content:space-between;gap:8px;margin-top:16px">
+    <span class="muted small" id="faz1Not"></span>
+    <span style="display:flex;gap:8px">
+      <button onclick="faz1Dlg.close()">Kapat</button>
+      <button class="primary" id="faz1Btn" onclick="openDoctorDlg()">Bulk dosyası ile devam et →</button>
+    </span>
+  </div>
 </dialog>
 
 </body>
