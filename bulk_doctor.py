@@ -20,6 +20,7 @@ import math
 import openpyxl
 
 import benchmarks
+import policy
 
 SHEET = "Sponsored Products Campaigns"
 
@@ -103,7 +104,8 @@ def _get(bulk, row, key):
     return row[i] if i is not None and i < len(row) else None
 
 
-def diagnose(bulk, target_acos_pct, expected_cvr, fallback_bid=2.00):
+def diagnose(bulk, target_acos_pct, expected_cvr, fallback_bid=2.00,
+             days=30):
     """Her aktif kampanya icin ne yapilmasi gerektigini belirler.
 
     target_acos_pct: bu markada hedeflenen ACOS (break-even'a gore secilir)
@@ -149,10 +151,26 @@ def diagnose(bulk, target_acos_pct, expected_cvr, fallback_bid=2.00):
 
         yeni_bid, yeni_butce, sebep, agirlik = bid, butce, None, "bilgi"
 
+        # CIRO ONCELIGI: kapatma karari policy.should_close'a aittir.
+        # Ciro ureten kampanya ACOS yuksek diye kapatilmaz; teklifi ayarlanir.
+        guven = (benchmarks.zero_order_confidence(tik, expected_cvr)
+                 if (tik >= MIN_CLICKS_FOR_JUDGMENT and not satis) else None)
+        kapat, kapat_sebep = policy.should_close(
+            satis, harcama, tik, target_acos_pct, guven)
+
         if bid <= 0:
             yeni_bid = fallback_bid
             sebep = "teklif $0 - kampanya hic calisamaz"
             agirlik = "kritik"
+        elif kapat:
+            islemler.append({
+                "campaign_id": cid, "ad_group_id": g(ar, "Ad Group ID"),
+                "campaign": ad, "action": "pause",
+                "budget": butce, "new_budget": butce,
+                "bid": bid, "new_bid": bid,
+                "clicks": tik, "spend": harcama, "sales": satis,
+                "acos_pct": acos, "reason": kapat_sebep, "severity": "kritik"})
+            continue
         elif acos is not None and acos > target_acos_pct * 1.3:
             # Teklifi ACOS oraninda dus; ama tek seferde yaridan fazla kesme.
             oran = target_acos_pct / acos
@@ -161,16 +179,8 @@ def diagnose(bulk, target_acos_pct, expected_cvr, fallback_bid=2.00):
             sebep = f"ACOS %{acos:.0f} -> hedef %{target_acos_pct:.0f}"
             agirlik = "kritik" if acos > target_acos_pct * 2.5 else "uyari"
         elif tik >= MIN_CLICKS_FOR_JUDGMENT and not satis:
-            guven = zero_order_confidence(tik, expected_cvr)
-            if guven >= ZERO_ORDER_CONFIDENCE:
-                yeni_bid = max(round(bid * 0.6, 2), MIN_BID)
-                sebep = f"{tik:.0f} tik / 0 siparis (guven %{guven*100:.0f})"
-                agirlik = "uyari"
-            else:
-                # VERI YETERSIZ. Karar vermek yerine bekle. Erken kesmek
-                # sanssiz ama iyi bir kampanyayi olduruyor olabilir.
-                sebep = (f"{tik:.0f} tik / 0 siparis - veri yetersiz "
-                         f"(guven %{guven*100:.0f}), karar icin bekleniyor")
+            # policy.should_close "kapat" demediyse veri yetersiz demektir.
+            sebep = kapat_sebep
         elif gost == 0:
             sebep = "henuz gosterim yok - cok yeni, dokunulmuyor"
 
@@ -186,6 +196,15 @@ def diagnose(bulk, target_acos_pct, expected_cvr, fallback_bid=2.00):
         # oldugunu bilmeye gerek yok, $1 butce $2.79 teklifi zaten tasiyamaz.
         # ceil kullaniliyor: round() ile $2.67 x 5 = 13.35 -> 13 olup taban
         # yine saglanmiyordu (4.9 tik/gun).
+        # CIRO ONCELIGI: ciro ureten kampanyada butce ASLA dusurulmez.
+        gunluk_harcama = harcama / max(days, 1)
+        yon, yon_sebep = policy.budget_direction(
+            satis, (gunluk_harcama / butce if butce else 0),
+            target_acos_pct, acos)
+        if yon == "artir" and satis > 0:
+            yeni_butce = max(yeni_butce, math.ceil(butce * 1.5))
+            sebep = ((sebep + " + ") if sebep else "") + yon_sebep
+
         taban = math.ceil(yeni_bid * MIN_CLICKS_PER_DAY)
         if yeni_butce < taban:
             yeni_butce = taban
