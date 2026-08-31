@@ -166,6 +166,21 @@ Seller hesabında ASIN geçerli SKU değildir → Product Ad satırları reddedi
 - **Projeksiyon %30 marjla yapılır** (`growth.SAFETY_MARGIN`). Hedefe tam oturan plan,
   %30 sapmada hedefi kaçırır.
 
+### Marka silme CASCADE olmalı (yoksa yeni marka veri miras alır)
+
+`brands` tablosunda **AUTOINCREMENT yok** → SQLite silinen id'yi yeniden kullanır.
+`delete_brand` sadece `DELETE FROM brands` yaparsa `report_rows`/`uploads`/... satırları
+**öksüz kalır** ve o id'yi alan yeni marka onları **miras alır**.
+
+Gerçekte oldu: boş açılan "OLETTE" markası silinmiş bir test markasının verisini
+devraldı ve "CPC ölçüldü ($0.80)" dedi.
+
+İki yönlü koruma:
+1. `delete_brand` → `_marka_verisini_sil()` ile 7 tabloyu birden temizler
+2. `create_brand` → yeni id için kalmış öksüz veri varsa **önce siler**, sonra oluşturur
+
+`test_izolasyon.py` #9 ve #10 bunu kalıcı denetler.
+
 ### CİRO BİRİNCİ ÖNCELİK (policy.py — keskin kural)
 
 Kullanıcının açık talimatı: kârsızlık kabul edilebilir, **ciro kaybı kabul edilemez.**

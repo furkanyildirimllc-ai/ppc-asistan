@@ -351,9 +351,36 @@ def list_brands():
     return brands
 
 
+# Bir markaya bagli TUM tablolar. Marka silinince hepsi temizlenmeli.
+MARKA_TABLOLARI = ("report_rows", "uploads", "recommendations", "rec_history",
+                   "ai_strategies", "chat_messages", "products")
+
+
+def _marka_verisini_sil(c, brand_id):
+    """Markaya ait her satiri siler. Doner: {tablo: silinen_satir}."""
+    silinen = {}
+    for t in MARKA_TABLOLARI:
+        try:
+            n = c.execute(f"DELETE FROM {t} WHERE brand_id=?", (brand_id,)).rowcount
+            if n:
+                silinen[t] = n
+        except sqlite3.OperationalError:
+            continue
+    return silinen
+
+
 @app.post("/api/brands")
 def create_brand(body: BrandIn):
     with db() as c:
+        # YENI MARKA TEMIZ BASLAR.
+        # SQLite silinen id'yi yeniden kullanir; o id'ye ait oksuz veri
+        # kalmissa yeni marka onu miras alir. Once temizle, sonra olustur.
+        sonraki = (c.execute("SELECT COALESCE(MAX(id),0)+1 FROM brands")
+                   .fetchone()[0])
+        artik = _marka_verisini_sil(c, sonraki)
+        if artik:
+            print(f"[marka olusturma] id={sonraki} icin oksuz veri "
+                  f"temizlendi: {artik}")
         try:
             cur = c.execute(
                 "INSERT INTO brands(name,target_acos,min_clicks_neg,"
@@ -393,9 +420,19 @@ def update_brand(brand_id: int, body: BrandIn):
 
 @app.delete("/api/brands/{brand_id}")
 def delete_brand(brand_id: int):
+    """Markayi ve TUM verisini siler.
+
+    HATA GECMISI: burada yalnizca `DELETE FROM brands` vardi. Markanin
+    report_rows/uploads/... satirlari OKSUZ kaliyordu. brands tablosunda
+    AUTOINCREMENT olmadigi icin SQLite silinen id'yi YENIDEN KULLANIR;
+    kullanici yeni marka acinca eski markanin verisini MIRAS ALIYORDU.
+    Gercekte oldu: bos acilan "OLETTE" markasi silinmis bir test markasinin
+    verisini devraldi ve "CPC olculdu" dedi.
+    """
     with db() as c:
+        silinen = _marka_verisini_sil(c, brand_id)
         c.execute("DELETE FROM brands WHERE id=?", (brand_id,))
-    return {"ok": True}
+    return {"ok": True, "deleted": silinen}
 
 
 @app.get("/api/ads-api/status")

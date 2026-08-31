@@ -96,8 +96,11 @@ def main():
     for bid, d in veri.items():
         f = phases.assess(d["tg"], d["st"], d["cp"])
         fazlar[bid] = (f["phase"], f["metrics"]["clicks"], f["metrics"]["winners"])
-    kontrol("tıklama sayıları markaya özgü",
-            len({v[1] for v in fazlar.values()}) == len(fazlar),
+    # Bos markalarin hepsi 0 tik gosterir - bu DOGRU davranis, celiski degil.
+    # Yalnizca VERISI OLAN markalarin degerleri birbirinden ayrismalidir.
+    dolu = [v[1] for v in fazlar.values() if v[1] > 0]
+    kontrol("veri olan markaların tıklama sayıları birbirinden farklı",
+            len(set(dolu)) == len(dolu),
             str([v[1] for v in fazlar.values()]))
     kontrol("kazanan terim sayıları markaya özgü",
             len({v[2] for v in fazlar.values()}) >= len(fazlar) - 1,
@@ -159,6 +162,46 @@ def main():
     filtresiz = [q for q in sorgular if "brand_id" not in q.lower()]
     kontrol("report_rows sorgularının tamamı brand_id filtreli",
             not filtresiz, f"filtresiz: {filtresiz[:2]}")
+
+    # --- 9) OKSUZ VERI: silinmis markadan kalan satir var mi? ---
+    #
+    # HATA GECMISI: delete_brand yalnizca brands satirini siliyordu.
+    # report_rows/uploads/... oksuz kaliyordu ve SQLite silinen id'yi
+    # YENIDEN KULLANDIGI icin yeni acilan marka o veriyi MIRAS ALIYORDU.
+    # Gercekte oldu: bos acilan "OLETTE" markasi "CPC olculdu" dedi.
+    print("\n9) öksüz veri — silinmiş markadan kalan satır")
+    mevcut = {b for b, _ in markalar}
+    oksuz = {}
+    for t in ("report_rows", "uploads", "recommendations", "rec_history",
+              "ai_strategies", "chat_messages", "products"):
+        try:
+            for bid, n in c.execute(
+                    f"SELECT brand_id, COUNT(*) FROM {t} GROUP BY brand_id"):
+                if bid not in mevcut:
+                    oksuz[f"{t}:brand_{bid}"] = n
+        except sqlite3.OperationalError:
+            continue
+    kontrol("hiçbir tabloda öksüz satır yok", not oksuz, str(oksuz))
+
+    # --- 10) Bir markanin verisinde BASKA markanin kampanya adi var mi? ---
+    # KESIN KANIT: ayni satir iki markada birden var mi?
+    #
+    # Kampanya ADINDA baska markanin adinin gecmesi kirlenme DEGILDIR -
+    # kullanici Natural hesabinda "Sp-Stemcell-series" adli kampanya
+    # acabilir, bu onun tercihi. Gercek kirlenme, ayni verinin iki markada
+    # birden bulunmasidir.
+    print("\n10) çapraz kirlenme — aynı satır iki markada birden")
+    imza = {}
+    cakisan = []
+    for bid, d in veri.items():
+        for r in d["tg"] + d["st"]:
+            k = json.dumps(r, sort_keys=True)
+            if k in imza and imza[k] != bid:
+                cakisan.append(f"{veri[imza[k]]['ad']} ↔ {veri[bid]['ad']}")
+            else:
+                imza[k] = bid
+    kontrol("aynı veri satırı iki markada birden yok",
+            not cakisan, str(sorted(set(cakisan))[:3]))
 
     print(f"\n{'='*50}\nSONUC: {gecti} gecti, {kaldi} kaldi")
     return 0 if kaldi == 0 else 1
