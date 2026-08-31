@@ -2042,6 +2042,72 @@ def kelime_kesfi(brand_id: int, asin: str = "", max_new: int = 25,
     }
 
 
+@app.get("/api/brands/{brand_id}/starter")
+def marka_baslangic(brand_id: int):
+    """Sifir gecmisli marka: elimizde ne var, ne eksik, siradaki is ne?
+
+    Yeni markada REKLAM RAPORU YOKTUR - hicbir reklam raporu yuklenemez.
+    Tek gerekli dosya "Tum Listelemeler Raporu": SKU + ASIN + baslik + fiyat.
+    """
+    with db() as c:
+        brand = c.execute("SELECT * FROM brands WHERE id=?", (brand_id,)).fetchone()
+        if brand is None:
+            raise HTTPException(404, "Marka bulunamadi")
+        lst = _load_rows(c, brand_id, "listings")
+        tg = _load_rows(c, brand_id, "targeting")
+    b = dict(brand)
+    fiyat = _sayi(b.get("sell_price"))
+    cogs = _sayi(b.get("cogs"))
+
+    urunler = []
+    for r in lst:
+        p = _sayi(r.get("price"))
+        urunler.append({
+            "asin": r.get("asin"), "sku": r.get("sku"),
+            "title": r.get("title"), "price": round(p, 2),
+            "quantity": r.get("quantity"),
+            "ready": bool(r.get("asin") and r.get("sku") and p > 0),
+        })
+
+    eksikler = []
+    if not urunler:
+        eksikler.append({
+            "ne": "Tüm Listelemeler Raporu",
+            "nerede": "Seller Central → Envanter → Raporlar → Tüm Listelemeler Raporu",
+            "nicin": ("SKU olmadan reklam satırları Amazon tarafından reddedilir. "
+                      "Bu tek dosya SKU + ASIN + başlık + fiyatın hepsini taşır."),
+            "zorunlu": True})
+    if fiyat <= 0 and not urunler:
+        eksikler.append({
+            "ne": "Satış fiyatı",
+            "nerede": "⚙ → Marka Ayarları",
+            "nicin": "Fiyat olmadan ekonomik tavan ve teklif hesaplanamaz.",
+            "zorunlu": True})
+    if cogs <= 0:
+        eksikler.append({
+            "ne": "Ürün maliyeti (COGS)",
+            "nerede": "⚙ → Marka Ayarları",
+            "nicin": ("Break-even ACOS bundan hesaplanır. Girmezsen hedef ACOS "
+                      "varsayılan %30 kalır — kendi ekonomin değil."),
+            "zorunlu": False})
+
+    hazir = [u for u in urunler if u["ready"]]
+    return {
+        "brand": b.get("name"),
+        "has_ad_history": bool(tg),
+        "products": urunler,
+        "ready_count": len(hazir),
+        "missing": eksikler,
+        "can_launch": bool(hazir),
+        "next_action": ("Faz 0 keşif kampanyasını üret"
+                        if hazir else
+                        "Tüm Listelemeler Raporu'nu yükle"),
+        "note": ("Yeni markada reklam raporu bulunmaz. Tek gerekli dosya "
+                 "Tüm Listelemeler Raporu'dur; SKU, ASIN, başlık ve fiyatı "
+                 "birlikte taşır."),
+    }
+
+
 @app.get("/api/brands/{brand_id}/phase")
 def faz_durumu(brand_id: int):
     """Markanin fazi, nedeni, siradaki isi ve yapilacaklar listesi.

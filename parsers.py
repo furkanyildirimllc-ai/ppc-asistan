@@ -7,6 +7,13 @@ import openpyxl
 
 # Rapor tipini ayirt eden imza kolonlari
 SIGNATURES = [
+    # TUM LISTELEMELER RAPORU (Seller Central > Envanter > Raporlar)
+    # SIFIR reklam gecmisi olan marka icin TEK GEREKLI DOSYA. Icinde
+    # SKU + ASIN + baslik + fiyat + stok var; reklam raporu gerektirmez.
+    # Diger tum raporlar reklam calismis olmasini sart kosar - yeni markada
+    # hicbiri yoktur. Sekmeyle ayrilmis .txt olarak iner.
+    ("listings", {"seller-sku", "asin1"}),
+    ("listings", {"seller-sku", "item-name"}),
     ("bulk_ids", {"Entity", "Operation", "Campaign ID"}),
     # Advertised Product raporu: ASIN <-> SKU eslesmesini tasiyan TEK reklam
     # raporu. Diger raporlarda SKU yoktur; bulksheet icin SKU zorunludur.
@@ -27,6 +34,7 @@ SIGNATURES = [
 ]
 
 REPORT_LABELS = {
+    "listings": "Tum Listelemeler Raporu (SKU + ASIN + baslik + fiyat)",
     "search_term": "Search Term Raporu",
     "search_term_is": "Search Term Impression Share Raporu",
     "targeting": "Targeting Raporu",
@@ -105,9 +113,15 @@ def read_rows(filename, content: bytes):
     Portfolios sekmesi acik kalmis olabilir). Once aktif sekmeyi dene, taninmazsa
     diger sekmeleri sirayla tara ve ilk taninan sekmeyi kullan.
     """
-    if filename.lower().endswith(".csv"):
+    ad = filename.lower()
+    if ad.endswith((".csv", ".txt", ".tsv")):
         text = content.decode("utf-8-sig", errors="replace")
-        reader = csv.reader(io.StringIO(text))
+        # Amazon "Tum Listelemeler" raporunu SEKMEYLE ayrilmis .txt verir;
+        # reklam raporlari virgullu .csv. Ayiraci ilk satirdan tespit et -
+        # uzantiya guvenmek yanlis, kullanici dosyayi yeniden adlandirabilir.
+        ilk = text.split("\n", 1)[0]
+        ayirac = "\t" if ilk.count("\t") > ilk.count(",") else ","
+        reader = csv.reader(io.StringIO(text), delimiter=ayirac)
         rows = [r for r in reader if any(c.strip() for c in r)]
         if not rows:
             return [], [], {}
@@ -162,6 +176,39 @@ def detect_type(headers):
     return None
 
 
+def _sayi(v):
+    """Metni sayiya cevirir; olmuyorsa 0.0. Rapor alanlari bos gelebilir."""
+    try:
+        return float(str(v).replace("$", "").replace(",", "").strip() or 0)
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def _norm_listing(r):
+    """Tum Listelemeler satirini normalize eder.
+
+    Amazon bu raporu sekmeyle ayrilmis, kucuk harfli-tireli kolonlarla verir.
+    Bize lazim olan: SKU (reklam icin ZORUNLU), ASIN, baslik, fiyat, stok.
+    """
+    def al(*adlar):
+        for a in adlar:
+            for k in r:
+                if str(k).strip().lower() == a:
+                    return r[k]
+        return None
+
+    asin = str(al("asin1", "asin", "product-id") or "").strip().upper()
+    return {
+        "sku": str(al("seller-sku", "sku") or "").strip(),
+        "asin": asin if len(asin) == 10 else "",
+        "title": str(al("item-name", "title") or "").strip(),
+        "price": _sayi(al("price")),
+        "quantity": _sayi(al("quantity")),
+        "status": str(al("status") or "").strip().lower(),
+        "fulfillment": str(al("fulfillment-channel") or "").strip(),
+    }
+
+
 def parse(filename, content: bytes):
     """-> (report_type, normalized_rows)"""
     headers, rows, meta = read_rows(filename, content)
@@ -169,6 +216,21 @@ def parse(filename, content: bytes):
     if rtype is None:
         raise ValueError(
             f"Rapor tipi taninamadi. Kolonlar: {', '.join(headers[:8])}...")
+    if rtype == "listings":
+        # Yalnizca ASIN'i ve SKU'su olan AKTIF urunler ise yarar.
+        temiz = []
+        for r in rows:
+            n = _norm_listing(r)
+            if not n["asin"] or not n["sku"]:
+                continue
+            if n["status"] and "inactive" in n["status"]:
+                continue
+            temiz.append(n)
+        if not temiz:
+            raise ValueError(
+                "Listeleme raporunda kullanilabilir urun bulunamadi. "
+                "ASIN ve SKU tasiyan aktif urun gerekiyor.")
+        return rtype, temiz
     if rtype == "ba_search_query":
         # Ayni kolonlarla hem aylik hem ceyreklik dosya gelir. Ayri tiplerde
         # sakla ki biri digerinin ustune yazmasin (trend karsilastirmasi icin

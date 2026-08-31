@@ -759,6 +759,7 @@ ol.akis li>div{margin-top:2px}
       <div class="menu-liste sag" id="m-ayar">
         <button onclick="openBrandDialog()"><b>Marka Ekle</b><i>Yeni marka hesabı</i></button>
         <button id="mEdit" onclick="openBrandDialog(true)"><b>Marka Ayarları</b><i>Fiyat, maliyet, hedef ACOS</i></button>
+        <button onclick="openStarterDlg()"><b>Markayı Başlat</b><i>Yeni marka — tek dosyayla kurulum</i></button>
         <button onclick="openAkisDlg()"><b>Sıfırdan Marka Kurulumu</b><i>8 adımlık yol haritası</i></button>
         <button onclick="openExtDlg()"><b>Chrome Uzantısı</b><i>Amazon'dan otomatik veri çek</i></button>
         <button onclick="helpDlg.showModal()"><b>Rehber</b><i>Nasıl kullanılır</i></button>
@@ -1484,8 +1485,8 @@ async function kesYukle(){
 // Kullanici "simdi ne yapmaliyim" diye dusunmesin; her fazda tek bir
 // dogru sonraki adim vardir ve o buton one cikarilir.
 const FAZ_EYLEM = {
-  0: {etiket:'Keşif kampanyası kur', fn:'openLaunchDlg',
-      ipucu:'Küçük bütçeyle CPC ölçmek için'},
+  0: {etiket:'Markayı başlat', fn:'openStarterDlg',
+      ipucu:'Tek dosya yükle — ürünlerin gelsin, keşif kampanyası kurulsun'},
   1: {etiket:'Kampanya Doktoru ile tara', fn:'openDoctorDlg',
       ipucu:'Ölü bütçe ve yanlış teklifleri düzelt, veri birikmeye devam etsin'},
   2: {etiket:'Otopilot çalıştır', fn:'openOtoDlg',
@@ -1551,6 +1552,54 @@ async function akisCiz(){
         <div class="muted small">📍 ${esc(a.nerede)}</div></li>`;
     }).join('')}
     </ol>`;
+}
+
+
+// ---- Markayi Baslat: sifir gecmisli marka icin tek dosyalik kurulum ----
+async function openStarterDlg(){
+  if(!brandId){ toast('Önce marka seç'); return; }
+  starterOut.innerHTML='<p class="muted">Kontrol ediliyor…</p>';
+  starterBtn.style.display='none';
+  starterDlg.showModal();
+  await starterCiz();
+}
+async function starterCiz(){
+  try{
+    const d=await(await api(`/api/brands/${brandId}/starter`)).json();
+    starterOut.innerHTML=`
+      ${d.has_ad_history?`<div style="padding:10px 12px;border-radius:9px;
+        background:rgba(245,158,11,.14);margin-bottom:12px">
+        Bu markanın zaten reklam geçmişi var — <b>Otopilot</b> daha uygun.</div>`:''}
+      ${d.products.length?`
+        <h4 style="margin:6px 0 8px">${d.ready_count} ürün hazır</h4>
+        <table class="tbl"><thead><tr><th>ASIN</th><th>SKU</th><th>Fiyat</th>
+          <th>Ürün</th><th>Durum</th></tr></thead><tbody>
+        ${d.products.map(p=>`<tr>
+          <td><code>${esc(p.asin||'—')}</code></td>
+          <td><code>${esc(p.sku||'—')}</code></td>
+          <td>${p.price?'$'+p.price:'—'}</td>
+          <td style="max-width:280px">${esc(p.title||'—')}</td>
+          <td>${p.ready?'<span style="color:#22c55e">hazır</span>'
+                :'<span style="color:#f59e0b">eksik</span>'}</td></tr>`).join('')}
+        </tbody></table>`
+      :`<div style="border:2px dashed rgba(255,255,255,.18);border-radius:12px;
+          padding:22px;text-align:center">
+          <b>Henüz ürün yok</b><br>
+          <span class="muted">Tüm Listelemeler Raporu'nu ana ekrandan sürükle-bırak
+          ile yükle — ürünlerin buraya gelir.</span></div>`}
+
+      ${d.missing.length?`<h4 style="margin:16px 0 8px">Eksikler</h4>
+        <ul class="oto-liste oto-kalan">
+        ${d.missing.map(m=>`<li>
+          <b>${esc(m.ne)}</b>${m.zorunlu?' <span class="etki etki-cok">zorunlu</span>'
+            :' <span class="etki etki-orta">önerilen</span>'}
+          <span class="muted small" style="display:block;margin-top:3px">${esc(m.nicin)}</span>
+          <span class="muted small" style="display:block">📍 ${esc(m.nerede)}</span>
+        </li>`).join('')}</ul>`:''}
+
+      <p class="muted small" style="margin-top:12px">${esc(d.note)}</p>`;
+    starterBtn.style.display = d.can_launch ? '' : 'none';
+  }catch(e){ starterOut.innerHTML=`<p style="color:#ef4444">${esc(e.message||'Hata')}</p>`; }
 }
 
 </script>
@@ -4452,8 +4501,8 @@ async function kesYukle(){
 // Kullanici "simdi ne yapmaliyim" diye dusunmesin; her fazda tek bir
 // dogru sonraki adim vardir ve o buton one cikarilir.
 const FAZ_EYLEM = {
-  0: {etiket:'Keşif kampanyası kur', fn:'openLaunchDlg',
-      ipucu:'Küçük bütçeyle CPC ölçmek için'},
+  0: {etiket:'Markayı başlat', fn:'openStarterDlg',
+      ipucu:'Tek dosya yükle — ürünlerin gelsin, keşif kampanyası kurulsun'},
   1: {etiket:'Kampanya Doktoru ile tara', fn:'openDoctorDlg',
       ipucu:'Ölü bütçe ve yanlış teklifleri düzelt, veri birikmeye devam etsin'},
   2: {etiket:'Otopilot çalıştır', fn:'openOtoDlg',
@@ -4519,6 +4568,54 @@ async function akisCiz(){
         <div class="muted small">📍 ${esc(a.nerede)}</div></li>`;
     }).join('')}
     </ol>`;
+}
+
+
+// ---- Markayi Baslat: sifir gecmisli marka icin tek dosyalik kurulum ----
+async function openStarterDlg(){
+  if(!brandId){ toast('Önce marka seç'); return; }
+  starterOut.innerHTML='<p class="muted">Kontrol ediliyor…</p>';
+  starterBtn.style.display='none';
+  starterDlg.showModal();
+  await starterCiz();
+}
+async function starterCiz(){
+  try{
+    const d=await(await api(`/api/brands/${brandId}/starter`)).json();
+    starterOut.innerHTML=`
+      ${d.has_ad_history?`<div style="padding:10px 12px;border-radius:9px;
+        background:rgba(245,158,11,.14);margin-bottom:12px">
+        Bu markanın zaten reklam geçmişi var — <b>Otopilot</b> daha uygun.</div>`:''}
+      ${d.products.length?`
+        <h4 style="margin:6px 0 8px">${d.ready_count} ürün hazır</h4>
+        <table class="tbl"><thead><tr><th>ASIN</th><th>SKU</th><th>Fiyat</th>
+          <th>Ürün</th><th>Durum</th></tr></thead><tbody>
+        ${d.products.map(p=>`<tr>
+          <td><code>${esc(p.asin||'—')}</code></td>
+          <td><code>${esc(p.sku||'—')}</code></td>
+          <td>${p.price?'$'+p.price:'—'}</td>
+          <td style="max-width:280px">${esc(p.title||'—')}</td>
+          <td>${p.ready?'<span style="color:#22c55e">hazır</span>'
+                :'<span style="color:#f59e0b">eksik</span>'}</td></tr>`).join('')}
+        </tbody></table>`
+      :`<div style="border:2px dashed rgba(255,255,255,.18);border-radius:12px;
+          padding:22px;text-align:center">
+          <b>Henüz ürün yok</b><br>
+          <span class="muted">Tüm Listelemeler Raporu'nu ana ekrandan sürükle-bırak
+          ile yükle — ürünlerin buraya gelir.</span></div>`}
+
+      ${d.missing.length?`<h4 style="margin:16px 0 8px">Eksikler</h4>
+        <ul class="oto-liste oto-kalan">
+        ${d.missing.map(m=>`<li>
+          <b>${esc(m.ne)}</b>${m.zorunlu?' <span class="etki etki-cok">zorunlu</span>'
+            :' <span class="etki etki-orta">önerilen</span>'}
+          <span class="muted small" style="display:block;margin-top:3px">${esc(m.nicin)}</span>
+          <span class="muted small" style="display:block">📍 ${esc(m.nerede)}</span>
+        </li>`).join('')}</ul>`:''}
+
+      <p class="muted small" style="margin-top:12px">${esc(d.note)}</p>`;
+    starterBtn.style.display = d.can_launch ? '' : 'none';
+  }catch(e){ starterOut.innerHTML=`<p style="color:#ef4444">${esc(e.message||'Hata')}</p>`; }
 }
 
 </script>
@@ -4676,6 +4773,28 @@ async function akisCiz(){
   <div id="akisOut"></div>
   <div class="row" style="justify-content:flex-end;margin-top:14px">
     <button onclick="akisDlg.close()">Kapat</button></div>
+</dialog>
+
+
+<dialog id="starterDlg" style="max-width:900px;width:94vw">
+  <h3>🚀 Markayı Başlat — tek dosya yeter</h3>
+  <p class="muted" style="margin:6px 0 12px">
+    Yeni markada <b>reklam raporu bulunmaz</b> — hiç reklam çalışmadığı için.
+    Tek gerekli dosya <b>Tüm Listelemeler Raporu</b>: SKU, ASIN, başlık ve fiyatın
+    hepsini birlikte taşır.
+  </p>
+  <div style="padding:11px 13px;border-radius:9px;background:rgba(96,165,250,.12);
+       margin-bottom:14px;font-size:13px">
+    <b>Nereden indirilir:</b> Seller Central → <b>Envanter</b> → <b>Raporlar</b> →
+    <b>Tüm Listelemeler Raporu</b> (All Listings Report) → İndir.<br>
+    <span class="muted">Sekmeyle ayrılmış <code>.txt</code> olarak iner — olduğu gibi yükle.</span>
+  </div>
+  <div id="starterOut"><p class="muted">Yükleniyor…</p></div>
+  <div class="row" style="justify-content:flex-end;gap:8px;margin-top:14px">
+    <button onclick="starterDlg.close()">Kapat</button>
+    <button class="primary" id="starterBtn" style="display:none"
+      onclick="starterDlg.close();openLaunchDlg()">Keşif kampanyasını kur →</button>
+  </div>
 </dialog>
 
 </body>

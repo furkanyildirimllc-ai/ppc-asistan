@@ -70,6 +70,7 @@ Export: `.../export`, `.../export-bulksheet`, `.../bulk-readiness`, `.../campaig
 Lansman: `POST /api/launch/analyze`, `POST /api/launch/bulksheet`
 Rekabet: `GET /api/brands/{id}/competitiveness` (teklif pazarı karşılıyor mu)
 Otopilot: `POST /api/brands/{id}/autopilot` (tam analiz) · `.../autopilot/file` (tek düzeltme dosyası)
+Başlangıç: `GET /api/brands/{id}/starter` (sıfır geçmişli marka — ne var, ne eksik)
 Faz: `GET /api/brands/{id}/phase` (faz + neden + yapılacaklar) · `.../autofill` (ürünleri otomatik doldur)
 Büyüme: `POST /api/brands/{id}/growth-plan` (%30 marjlı hedef planı)
 Listing: `GET /api/brands/{id}/listing-plan` (başlık/arka plan önerisi)
@@ -165,6 +166,19 @@ Seller hesabında ASIN geçerli SKU değildir → Product Ad satırları reddedi
   yanlış negatif = liste askıya alınır).
 - **Projeksiyon %30 marjla yapılır** (`growth.SAFETY_MARGIN`). Hedefe tam oturan plan,
   %30 sapmada hedefi kaçırır.
+
+### Sıfır geçmişli marka: tek dosya yeter
+
+Yeni markada **reklam raporu bulunmaz** — hiç reklam çalışmadığı için `targeting`,
+`search_term`, `campaign`, `advertised_product` raporlarının hiçbiri indirilemez.
+
+Tek gerekli dosya **Tüm Listelemeler Raporu** (Seller Central → Envanter → Raporlar →
+All Listings Report). SKU + ASIN + başlık + fiyatı birlikte taşır ve reklam geçmişi
+gerektirmez. Sekmeyle ayrılmış `.txt` olarak iner — `parsers.read_rows()` ayıracı
+ilk satırdan tespit eder (uzantıya güvenmez, kullanıcı dosyayı yeniden adlandırabilir).
+
+`report_type = "listings"`. **SKU olmadan Product Ad satırları Amazon tarafından
+reddedilir** — bu yüzden SKU taşıyan bir kaynak zorunludur.
 
 ### Marka silme CASCADE olmalı (yoksa yeni marka veri miras alır)
 
