@@ -237,6 +237,24 @@ def diagnose(bulk, target_acos_pct, expected_cvr, fallback_bid=2.00,
                                   if _get(bulk, r, "State") == "enabled")}
 
 
+def keyword_bids_for(bulk, campaign_id):
+    """Bir kampanyadaki KELIME SEVIYESI teklif satirlari.
+
+    KRITIK: Amazon'da kelime teklifi (Keyword.Bid) ad group varsayilanini
+    EZER. Yalnizca "Ad Group Default Bid" guncellemek, kelimelerin kendi
+    teklifi varsa HICBIR SEY YAPMAZ.
+
+    Gercekte oldu: HASAT kampanyalarinda ad group teklifi $5.64'e
+    cikarildi ama kelimeler $3.00'da kaldi; kampanyalar gosterim alamadi
+    ve 2 ayda $0 harcadi.
+    """
+    g = lambda r, k: _get(bulk, r, k)
+    return [r for r in bulk["rows"]
+            if g(r, "Entity") == "Keyword"
+            and g(r, "Campaign ID") == campaign_id
+            and g(r, "State") == "enabled"]
+
+
 def build_update(bulk, islemler):
     """Duzeltme dosyasini uretir. Kolon yapisi KAYNAK DOSYAYLA AYNIDIR -
     Amazon eslestirmeyi kolon adina gore yapar, boylece uyumsuzluk olmaz."""
@@ -270,7 +288,7 @@ def build_update(bulk, islemler):
                 r[idx[k]] = v
         return r
 
-    sayac = {"butce": 0, "teklif": 0, "kapatma": 0}
+    sayac = {"butce": 0, "teklif": 0, "kapatma": 0, "kelime_teklifi": 0}
     for i in islemler:
         if i["action"] == "pause":
             ws.append(satir(kam.get(i["campaign_id"]), **{"State": "paused"}))
