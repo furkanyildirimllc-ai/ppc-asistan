@@ -203,7 +203,10 @@ def _norm_listing(r):
         "asin": asin if len(asin) == 10 else "",
         "title": str(al("item-name", "title") or "").strip(),
         "price": _sayi(al("price")),
-        "quantity": _sayi(al("quantity")),
+        # FBA urunlerde bu alan BOS gelir - stok Amazon deposundadir ve bu
+        # raporda gorunmez. Bosu 0 yapmak "stok yok" yanilgisi uretir.
+        "quantity": (_sayi(al("quantity"))
+                     if str(al("quantity") or "").strip() != "" else None),
         "status": str(al("status") or "").strip().lower(),
         "fulfillment": str(al("fulfillment-channel") or "").strip(),
     }
