@@ -31,6 +31,10 @@ SIGNATURES = [
     ("ba_search_query", {"Search Query", "Search Query Volume"}),
     ("ba_catalog", {"ASIN Title", "Impressions: Impressions"}),
     ("ba_market_basket", {"#1 Purchase Combination: ASIN"}),
+    # Brand Analytics "Top Search Terms": her sorguda EN COK TIKLANAN
+    # markalar ve urunler + tiklama paylari. Rakip istihbaratinin en
+    # dogrudan kaynagi - kimin kazandigini ACIKCA soyler.
+    ("ba_top_terms", {"Search Frequency Rank", "Top Clicked Brand #1"}),
 ]
 
 REPORT_LABELS = {
@@ -46,6 +50,7 @@ REPORT_LABELS = {
     "ba_search_query_month": "Brand Analytics - Arama Terimi Performansi (Ay)",
     "ba_catalog": "Brand Analytics - Katalog Performansi",
     "ba_market_basket": "Brand Analytics - Sepet Analizi",
+    "ba_top_terms": "Brand Analytics - En Cok Aranan Terimler (rakip istihbarati)",
 }
 
 ASIN_RE = re.compile(r"^b0[a-z0-9]{8}$", re.IGNORECASE)
@@ -212,6 +217,85 @@ def _norm_listing(r):
     }
 
 
+def _yuzde(v):
+    """'6.230%' -> 0.0623. Amazon bu raporda yuzdeleri metin olarak verir."""
+    t = str(v or "").replace("%", "").replace(",", ".").strip()
+    try:
+        return round(float(t) / 100.0, 5)
+    except (TypeError, ValueError):
+        return None
+
+
+def _norm_top_terms(r, meta=None):
+    """Top Search Terms satiri: bir sorguda kim kazaniyor?
+
+    frequency_rank : dusuk = cok araniyor (1 = en cok aranan)
+    brands         : en cok tiklanan 3 marka - RAKIPLER
+    products       : ASIN + tiklama payi - kim ne kadar aliyor
+    """
+    def al(*adlar):
+        for a in adlar:
+            for k in r:
+                if str(k).strip().lower() == a.lower():
+                    return r[k]
+        return None
+
+    urunler = []
+    for i in (1, 2, 3):
+        a = str(al(f"Top Clicked Product #{i}: ASIN") or "").strip().upper()
+        if len(a) != 10:
+            continue
+        urunler.append({
+            "asin": a,
+            "title": str(al(f"Top Clicked Product #{i}: Product Title") or "")[:160],
+            "click_share": _num(al(f"Top Clicked Product #{i}: Click Share")),
+            "conversion_share": _num(
+                al(f"Top Clicked Product #{i}: Conversion Share")),
+        })
+    markalar = [str(al(f"Top Clicked Brand{s} #{i}") or "").strip()
+                for i, s in ((1, ""), (2, "s"), (3, "s"))]
+    return {
+        "term": str(al("Search Term") or "").strip().lower(),
+        "frequency_rank": _num(al("Search Frequency Rank")),
+        "brands": [b for b in markalar if b],
+        "categories": [str(al(f"Top Clicked Category #{i}") or "").strip()
+                       for i in (1, 2, 3)],
+        "products": urunler,
+        "period": (meta or {}).get("Reporting Range", ""),
+    }
+
+
+def _norm_search_term_is(r):
+    """Search Term Impression Share satiri.
+
+    Iki kritik alan:
+      rank  : o sorguda kacinci sirada gorunuyorsun (1 = en ust)
+      share : gorunebilecegin gosterimlerin yuzde kacini aldin
+    Ikisi birlikte "bu kelimede buyume alanim var mi" sorusunu cevaplar.
+    """
+    def al(*adlar):
+        for a in adlar:
+            for k in r:
+                if str(k).strip().lower().rstrip() == a:
+                    return r[k]
+        return None
+
+    return {
+        "term": str(al("customer search term") or "").strip().lower(),
+        "targeting": str(al("targeting") or "").strip(),
+        "match_type": str(al("match type") or "").strip().upper(),
+        "campaign": str(al("campaign name") or "").strip(),
+        "ad_group": str(al("ad group name") or "").strip(),
+        "rank": _num(al("search term impression rank")),
+        "impression_share": _yuzde(al("search term impression share")),
+        "impressions": _num(al("impressions")),
+        "clicks": _num(al("clicks")),
+        "spend": _num(al("spend")),
+        "orders": _num(al("7 day total orders (#)", "7 day total orders")),
+        "sales": _num(al("7 day total sales", "7 day total sales ")),
+    }
+
+
 def parse(filename, content: bytes):
     """-> (report_type, normalized_rows)"""
     headers, rows, meta = read_rows(filename, content)
@@ -244,8 +328,19 @@ def parse(filename, content: bytes):
         return rtype, [_norm_ba_query(r, meta) for r in rows if r.get("Search Query")]
     if rtype == "ba_catalog":
         return rtype, [_norm_ba_catalog(r, meta) for r in rows if r.get("ASIN")]
+    if rtype == "ba_top_terms":
+        return rtype, [_norm_top_terms(r, meta) for r in rows
+                       if r.get("Search Term")]
     if rtype == "ba_market_basket":
         return rtype, [_norm_ba_basket(r) for r in rows if r.get("ASIN")]
+    if rtype == "search_term_is":
+        # HATA GECMISI: bu tip icin DAL YOKTU - dosya taniniyordu ama
+        # `return rtype, []` ile bos donuyordu. Kullanici "0 satir" gordu.
+        # Bu rapor gosterim PAYINI tasir: bir sorguda kac kez gorunebilecekken
+        # kac kez gorunmussun. "Kelime kazaniyor ama daha fazla alabilir miyim"
+        # sorusunun TEK cevabi burasi.
+        return rtype, [_norm_search_term_is(r) for r in rows
+                       if r.get("Customer Search Term")]
     if rtype == "search_term":
         return rtype, [_norm_search_term(r) for r in rows]
     if rtype == "targeting":
