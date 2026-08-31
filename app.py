@@ -27,6 +27,7 @@ import benchmarks
 import bulk_doctor
 import autopilot as autopilot_mod
 import architecture as arch_mod
+import competitors as comp_mod
 import discovery as discovery_mod
 import phases as phases_mod
 import verify as verify_mod
@@ -1971,7 +1972,7 @@ async def kampanya_mimarisi(brand_id: int, file: UploadFile):
 
 @app.get("/api/brands/{brand_id}/discover-keywords")
 def kelime_kesfi(brand_id: int, asin: str = "", max_new: int = 25,
-                 max_queries: int = 24):
+                 max_queries: int = 24, category: str = "", seeds: str = ""):
     """Yeni kelime bul: Amazon autocomplete + kendi kazanan temalarin.
 
     Kaynak sirasi guvenilirlige gore: once KENDI verinden kazanan
@@ -1985,9 +1986,16 @@ def kelime_kesfi(brand_id: int, asin: str = "", max_new: int = 25,
         st = _load_rows(c, brand_id, "search_term")
         tg = _load_rows(c, brand_id, "targeting")
         kat = _load_rows(c, brand_id, "ba_catalog")
-    if not st:
-        raise HTTPException(400, "Arama terimi raporu yok - once yukle. "
-                                 "Kesif, KENDI kazanan kelimelerinden beslenir.")
+    # Kesif iki modda calisir:
+    #   OLGUN marka -> kendi kazanan kelimelerinden cekirdek uretir
+    #   YENI marka  -> arama terimi raporu YOKTUR; cekirdegi ve kategoriyi
+    #                  disaridan alir (uzantinin cektigi baslik + breadcrumb)
+    disaridan = [x.strip() for x in (seeds or "").split(",") if x.strip()]
+    if not st and not disaridan:
+        raise HTTPException(400,
+            "Arama terimi raporu yok. Yeni markada `seeds` (çekirdek kavram) "
+            "ve `category` gönder — Chrome uzantısı ürün sayfasından ikisini "
+            "de çeker.")
     b = dict(brand)
 
     if asin:
@@ -2009,10 +2017,19 @@ def kelime_kesfi(brand_id: int, asin: str = "", max_new: int = 25,
 
     kategori = sorted({w for t in basliklar
                        for w in re.findall(r"[a-z]+", t.lower()) if len(w) > 3})
+    # Uzantidan gelen kategori kirintisi (breadcrumb) eklenir. Yeni markada
+    # ba_catalog olmadigi icin bu TEK alaka kaynagidir.
+    if category:
+        kategori = sorted(set(kategori) |
+                          {w for w in re.findall(r"[a-z]+", category.lower())
+                           if len(w) > 3})
 
     kazanan = listing_mod.winning_terms(st)
     temalar = listing_mod.keyword_themes(st)["winning"][:12]
     cekirdek = discovery_mod.seeds_from_winners(kazanan, temalar, kategori, limit=6)
+    if disaridan:
+        # Disaridan gelen cekirdekler ONCE gelir - yeni markada tek kaynak.
+        cekirdek = disaridan[:6] + [x for x in cekirdek if x not in disaridan]
     if not cekirdek:
         raise HTTPException(400, "Cekirdek kavram uretilemedi - henuz satis "
                                  "ureten arama terimi yok.")
@@ -2039,6 +2056,50 @@ def kelime_kesfi(brand_id: int, asin: str = "", max_new: int = 25,
         "note": ("Yeni kelimelerin geçmişi yok - teklif ölçüm için pazar "
                  "CPC'sinin %15 altında başlar. Amaç satış değil, kelimenin "
                  "dönüşüp dönüşmediğini öğrenmek."),
+    }
+
+
+@app.get("/api/brands/{brand_id}/competitors")
+def rakip_kesfi(brand_id: int, accepted_acos: float = 100.0):
+    """Rakipleri KENDI raporlarindan bulur - performansla birlikte.
+
+    Amazon sunucu tarafi kazimayi engeller (503). Ama gerek de yok:
+    arama terimi raporunda ASIN olarak gecen sorgular, ASIN hedefleme
+    satirlari ve Brand Analytics market basket zaten rakipleri tasir -
+    ustelik hangisinin sana SATIS getirdigi bilgisiyle. Kazinan bir
+    listede bu bilgi YOKTUR.
+    """
+    with db() as c:
+        brand = c.execute("SELECT * FROM brands WHERE id=?", (brand_id,)).fetchone()
+        if brand is None:
+            raise HTTPException(404, "Marka bulunamadi")
+        st = _load_rows(c, brand_id, "search_term")
+        tg = _load_rows(c, brand_id, "targeting")
+        mb = _load_rows(c, brand_id, "ba_market_basket")
+        ap = _load_rows(c, brand_id, "advertised_product")
+        lst = _load_rows(c, brand_id, "listings")
+    if not (st or tg or mb):
+        raise HTTPException(400,
+            "Rakip cikarmak icin rapor yok. Search Term ya da Targeting "
+            "raporunu yukle - rakipler oradan cikar.")
+    # Kendi ASIN'lerini HER kaynaktan topla: advertised_product, listings,
+    # ve kampanya adlari. Biri eksikse digeri yakalar - kendi urunumuzu
+    # rakip diye onermek kendi kendine rekabet demektir.
+    kendi = ([r.get("asin") for r in ap] + [r.get("asin") for r in lst])
+    kendi += list(comp_mod.own_asins_from([ap, lst, tg, st]))
+    rk = comp_mod.from_reports(st, tg, mb, kendi)
+    grup = comp_mod.classify(rk, accepted_acos)
+    return {
+        "brand": dict(brand).get("name"),
+        "total": len(rk),
+        "target": grup["target"][:40],
+        "watch": grup["watch"][:40],
+        "exclude": grup["exclude"][:40],
+        "info": grup["info"][:20],
+        "counts": {k: len(v) for k, v in grup.items()},
+        "note": ("Rakipler kendi reklam raporlarından çıkarıldı — her birinin "
+                 "sana kaç tık ve kaç dolar satış getirdiği biliniyor. "
+                 "Kazınan bir listede bu bilgi bulunmaz."),
     }
 
 

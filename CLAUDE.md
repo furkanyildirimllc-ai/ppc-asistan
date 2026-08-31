@@ -35,6 +35,7 @@ Ayrı hat (yeni ürün lansmanı):
 | `analysis.py` | 684 | Deterministik motor: harvest, negatif, bid, placement, bütçe |
 | `launch.py` | 547 | Yeni ürün lansman planı + lansman bulksheet'i |
 | `policy.py` | 120 | **Karar politikası**: CİRO BİRİNCİ ÖNCELİK — ne kapatılır, bütçe ne yönde |
+| `competitors.py` | 130 | **Rakip keşfi**: kendi raporlarından, performansla — kazımaya gerek yok |
 | `discovery.py` | 240 | **Kelime keşfi**: Amazon autocomplete + kendi kazanan kavramların, alaka kapısı |
 | `architecture.py` | 200 | **Kampanya mimarisi**: katman denetimi (AUTO/BROAD/PHRASE/EXACT) + çapraz negatifler |
 | `test_izolasyon.py` | 190 | **Marka ayrımı testi** — 11 kontrol, `.venv/bin/python test_izolasyon.py` |
@@ -68,6 +69,7 @@ Analiz: `.../insights`, `.../today`, `.../opportunities`, `POST .../opportunitie
 Export: `.../export`, `.../export-bulksheet`, `.../bulk-readiness`, `.../campaign-ad-groups`
 Ürün: `GET/POST .../products`, `PUT/DELETE /api/products/{id}`
 Lansman: `POST /api/launch/analyze`, `POST /api/launch/bulksheet`
+Rakipler: `GET /api/brands/{id}/competitors` (kendi raporlarından, hedefle/izle/dışla)
 Rekabet: `GET /api/brands/{id}/competitiveness` (teklif pazarı karşılıyor mu)
 Otopilot: `POST /api/brands/{id}/autopilot` (tam analiz) · `.../autopilot/file` (tek düzeltme dosyası)
 Başlangıç: `GET /api/brands/{id}/starter` (sıfır geçmişli marka — ne var, ne eksik)
@@ -166,6 +168,31 @@ Seller hesabında ASIN geçerli SKU değildir → Product Ad satırları reddedi
   yanlış negatif = liste askıya alınır).
 - **Projeksiyon %30 marjla yapılır** (`growth.SAFETY_MARGIN`). Hedefe tam oturan plan,
   %30 sapmada hedefi kaçırır.
+
+### Amazon kazıma: sunucudan ÇALIŞMAZ, tarayıcıdan çalışır
+
+- `https://www.amazon.com/s?k=...` sunucudan **503** döner — Amazon veri merkezi
+  IP'lerini engeller. Kazıma denemesi kod eklemeye değmez.
+- **Keepa** anahtarı `.env`'de var ama abonelik pasif (**402 Payment Required**).
+- **Çalışanlar:** ① Chrome uzantısı (kullanıcının tarayıcı oturumuyla, engellenmez)
+  ② `completion.amazon.com` autocomplete (ücretsiz, resmî, engellenmiyor)
+  ③ **Kendi raporların** — en değerlisi.
+
+**Rakip bulmak için kazımaya gerek yok.** Arama terimi raporunda ASIN olarak geçen
+sorgular + ASIN hedefleme satırları + Brand Analytics market basket zaten rakipleri
+taşır — üstelik her birinin **kaç tık ve kaç dolar satış getirdiği** bilgisiyle.
+Kazınan listede bu bilgi yoktur. `competitors.from_reports()`.
+
+Kendi ASIN'leri **her kaynaktan** toplanır (advertised_product, listings, kampanya
+adları) — biri eksikse diğeri yakalar; kendi ürününü rakip önermek kendi kendine
+rekabettir.
+
+### Çoğul/tekil eşleşmesi (keşif filtresi)
+
+Kategori kırıntısı **çoğul** gelir ("Serums", "Moisturizers"), arama sorguları
+**tekildir** ("serum"). Kelime kelime karşılaştırınca hiçbiri eşleşmiyordu ve tüm
+adaylar eleniyordu — yeni markada keşif tamamen çalışmaz haldeydi (33 aday → 0).
+`discovery._tekil()` iki tarafı da normalleştirir.
 
 ### Sıfır geçmişli marka: tek dosya yeter
 

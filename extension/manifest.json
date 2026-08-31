@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "PPC Launch Pro",
-  "version": "2.0.0",
-  "description": "Profesyonel Amazon PPC Launch Asistanı - Rakip analizi, keyword keşfi, kampanya planı",
+  "name": "Performans Analiz Uzmanı",
+  "version": "2.1.0",
+  "description": "Amazon ürün sayfasından başlık, ASIN, fiyat, kategori ve rakipleri tek tıkla çeker; Performans Analiz Uzmanı'na gönderir.",
   "permissions": ["activeTab", "scripting", "storage", "downloads"],
   "host_permissions": [
     "https://www.amazon.com/*",
@@ -30,7 +30,7 @@
     "https://ppc-asistan.onrender.com/*"
   ],
   "action": {
-    "default_title": "PPC Launch Pro",
+    "default_title": "Performans Analiz Uzmanı",
     "default_popup": "popup.html",
     "default_icon": {
       "16": "icons/icon16.png",

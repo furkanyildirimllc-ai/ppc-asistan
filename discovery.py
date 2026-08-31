@@ -128,9 +128,31 @@ def expand(seeds, max_queries=40, marketplace="ATVPDKIKX0DER"):
     return sonuc
 
 
-def _kelime_kumesi(metin):
-    return {w for w in re.findall(r"[a-z0-9']+", str(metin or "").lower())
-            if w not in STOP and len(w) > 2}
+def _tekil(w):
+    """Kaba tekillestirme: kategori "serums" der, musteri "serum" arar.
+
+    HATA GECMISI: kategori kirintisi cogul gelir ("Serums", "Moisturizers"),
+    arama sorgulari tekildir ("serum"). Kelime kelime karsilastirinca
+    HICBIRI eslesmiyordu ve TUM adaylar aleniyordu - yeni markada kesif
+    tamamen calismaz haldeydi (33 aday -> 0 sonuc).
+    """
+    w = str(w or "").lower()
+    if len(w) > 4 and w.endswith("ies"):
+        return w[:-3] + "y"
+    if len(w) > 4 and w.endswith("es") and w[-3] in "sxzh":
+        return w[:-2]
+    if len(w) > 3 and w.endswith("s") and not w.endswith("ss"):
+        return w[:-1]
+    return w
+
+
+def _kelime_kumesi(metin, tekillestir=True):
+    kelimeler = {w for w in re.findall(r"[a-z0-9']+", str(metin or "").lower())
+                 if w not in STOP and len(w) > 2}
+    if not tekillestir:
+        return kelimeler
+    # Hem orijinali hem tekilini tut - eslesme iki yonde de calissin
+    return kelimeler | {_tekil(w) for w in kelimeler}
 
 
 def seeds_from_winners(kazanan_terimler, kazanan_temalar,
@@ -210,6 +232,7 @@ def score(adaylar, kazanan_temalar, mevcut_kelimeler, negatifler=None,
     # Kategori kelimeleri: urunun NE OLDUGUNU tanimlar (serum, sampuan,
     # krem...). Aday bunlardan en az birini tasimazsa alakasizdir.
     kategori = {str(w).lower() for w in (kategori_kelimeleri or [])}
+    kategori |= {_tekil(w) for w in kategori}
     if not kategori:
         kategori = baslik_kelimeleri
     elenen_alakasiz = 0
@@ -238,13 +261,14 @@ def score(adaylar, kazanan_temalar, mevcut_kelimeler, negatifler=None,
         # "mens" temasi 33x ROAS diye "mens underwear" onerilmez.
         #
         # 1) Farkli urun tipi sinyali varsa dogrudan elenir.
-        if kelimeler & FARKLI_URUN:
+        if kelimeler & (FARKLI_URUN | {_tekil(w) for w in FARKLI_URUN}):
             elenen_alakasiz += 1
             continue
         # 2) Aday, kategoriden OZGUL bir kelime tasimali. Genel kelime
         #    ("hair", "men") tek basina yetmez - "hair clippers" da
         #    "hair" tasir ama sac bakim urunu degildir.
-        ozgul_kategori = kategori - GENEL_KELIMELER
+        genel = GENEL_KELIMELER | {_tekil(w) for w in GENEL_KELIMELER}
+        ozgul_kategori = kategori - genel
         if ozgul_kategori and not (kelimeler & ozgul_kategori):
             elenen_alakasiz += 1
             continue

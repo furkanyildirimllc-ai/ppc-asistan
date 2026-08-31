@@ -147,8 +147,38 @@ function scrapeProductDeep() {
     badges,
     listing_quality,
     competitors: scrapeCompetitorsDeep(),
+    category: scrapeCategory(),
+    seller: txt("#sellerProfileTriggerId") || txt("#merchant-info a") || "",
     url: location.href
   };
+}
+
+// Kategori kirinti yolu (breadcrumb). Kesif motoru bunu ALAKA KAPISI olarak
+// kullanir: "hair" gecen her sorgu sac bakim urunu degildir ("hair clippers"),
+// ama kategori kelimeleri urunun NE OLDUGUNU soyler. Yeni markada arama
+// terimi raporu olmadigi icin bu tek alaka kaynagidir.
+function scrapeCategory() {
+  const yollar = [
+    "#wayfinding-breadcrumbs_feature_div",
+    "#nav-subnav",
+    "#dp-container .a-breadcrumb"
+  ];
+  for (const sel of yollar) {
+    const el = document.querySelector(sel);
+    if (!el) continue;
+    const parcalar = [...el.querySelectorAll("a")]
+      .map(a => a.textContent.trim())
+      .filter(t => t && t.length > 1 && t.length < 40);
+    if (parcalar.length) {
+      return {
+        path: parcalar,
+        // Kesif filtresi icin duz kelime listesi
+        words: [...new Set(parcalar.join(" ").toLowerCase()
+          .match(/[a-z]{4,}/g) || [])]
+      };
+    }
+  }
+  return { path: [], words: [] };
 }
 
 // === COMPETITOR DEEP SCRAPER ===
